@@ -35,10 +35,10 @@ jobs:
       with:
         nix_path: nixpkgs=channel:nixos-unstable
 
-    # Run our go tests within the context of the dev shell from the flake. This
-    # will ensure we have all our dependencies.
+    # Cross-compile the binary. We always use static building for this
+    # because its the only way to access the headers.
     - name: Test Build
-      run: nix develop -c zig build -Dtarget=${{ matrix.target }}
+      run: nix develop -c zig build -Dstatic=true -Dtarget=${{ matrix.target }}
 
   test:
     strategy:
@@ -57,7 +57,9 @@ jobs:
       with:
         nix_path: nixpkgs=channel:nixos-unstable
 
-    # Run our go tests within the context of the dev shell from the flake. This
-    # will ensure we have all our dependencies.
     - name: test
       run: nix develop -c zig build test
+
+    - name: Test Dynamic Build
+      run: nix develop -c zig build -Dstatic=false
+
