@@ -38,7 +38,7 @@ jobs:
     # Cross-compile the binary. We always use static building for this
     # because its the only way to access the headers.
     - name: Test Build
-      run: nix develop -c zig build -Dstatic=true -Dtarget=${{ matrix.target }}
+      run: nix develop -c zig build -fstage1 -Dstatic=true -Dtarget=${{ matrix.target }}
 
   test:
     strategy:
@@ -58,8 +58,8 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
 
     - name: test
-      run: nix develop -c zig build test
+      run: nix develop -c zig build test -fstage1
 
     - name: Test Dynamic Build
-      run: nix develop -c zig build -Dstatic=false
+      run: nix develop -c zig build -fstage1 -Dstatic=false
 
