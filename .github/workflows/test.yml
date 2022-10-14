@@ -40,6 +40,9 @@ jobs:
     - name: Test Build
       run: nix develop -c zig build -fstage1 -Dstatic=true -Dtarget=${{ matrix.target }}
 
+    - name: Test Build stage2
+      run: nix develop -c zig build -Dstatic=true -Dtarget=${{ matrix.target }}
+
   test:
     strategy:
       matrix:
@@ -59,6 +62,9 @@ jobs:
 
     - name: test
       run: nix develop -c zig build test -fstage1
+
+    - name: test stage2
+      run: nix develop -c zig build test
 
     - name: Test Dynamic Build
       run: nix develop -c zig build -fstage1 -Dstatic=false
