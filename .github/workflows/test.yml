@@ -58,9 +58,6 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
 
     - name: test
-      run: nix develop -c zig build test -fstage1
-
-    - name: test stage2
       run: nix develop -c zig build test
 
     - name: Test Dynamic Build
