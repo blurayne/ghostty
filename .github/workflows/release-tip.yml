@@ -4,6 +4,8 @@ on:
     types: [completed]
     branches: [main]
 
+  workflow_dispatch: {}
+
 name: Release Tip
 
 jobs:
