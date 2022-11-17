@@ -62,4 +62,5 @@ jobs:
         name: "Ghostty Tip (\"Nightly\")"
         prerelease: true
         tag_name: tip
+        target_commitish: ${{ github.sha }}
         files: ghostty-macos-universal.zip
