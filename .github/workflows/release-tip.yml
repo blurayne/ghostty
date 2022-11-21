@@ -59,8 +59,29 @@ jobs:
         path: zig-out/
         retention-days: 5
 
+    - name: Zip Unsigned App
+      run: nix develop -c sh -c 'cd zig-out && zip -9 -r ../ghostty-macos-universal-unsigned.zip Ghostty.app'
+
+    # Update Release
+    - name: Release Unsigned
+      uses: softprops/action-gh-release@v1
+      with:
+        name: "Ghostty Tip (\"Nightly\")"
+        prerelease: true
+        tag_name: tip
+        target_commitish: ${{ github.sha }}
+        files: ghostty-macos-universal-unsigned.zip
+
+    # Update the Release Tag
+    - name: Tip Tag
+      uses: rickstaa/action-create-tag@v1
+      with:
+        tag: "tip"
+        message: "Latest Continuous Release"
+        force_push_tag: true
+
   sign-and-release:
-    runs-on: macos-12.0
+    runs-on: macos-11.0
     needs: build-macos
     steps:
     - name: Checkout code
@@ -112,13 +133,3 @@ jobs:
         tag_name: tip
         target_commitish: ${{ github.sha }}
         files: ghostty-macos-universal.zip
-
-    # Update the Release Tag
-    - name: Tip Tag
-      uses: rickstaa/action-create-tag@v1
-      with:
-        tag: "tip"
-        message: "Latest Continuous Release"
-        force_push_tag: true
-
-
