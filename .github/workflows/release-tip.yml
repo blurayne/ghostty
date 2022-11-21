@@ -81,7 +81,7 @@ jobs:
         force_push_tag: true
 
   sign-and-release:
-    runs-on: macos-11.0
+    runs-on: macos-12.0
     needs: build-macos
     steps:
     - name: Checkout code
