@@ -95,8 +95,9 @@ jobs:
         name: app-bundle
         path: zig-out
 
-    - name: Display structure of downloaded files
-      run: ls -R zig-out
+    - name: Fix Permissions
+      run: |
+        chmod +x zig-out/Ghostty.app/Contents/MacOS/ghostty
 
     - name: Codesign app bundle
       # Extract the secrets we defined earlier as environment variables
