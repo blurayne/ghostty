@@ -93,9 +93,10 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: app-bundle
+        path: zig-out
 
     - name: Display structure of downloaded files
-      run: ls -R
+      run: ls -R zig-out
 
     - name: Codesign app bundle
       # Extract the secrets we defined earlier as environment variables
