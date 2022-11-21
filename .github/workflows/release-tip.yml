@@ -51,9 +51,57 @@ jobs:
         # Ensure the app is universal
         cp zig-out/bin/ghostty-universal zig-out/Ghostty.app/Contents/MacOS/ghostty
 
+    # Upload the App bundle so we can sign it later on macOS
+    - name: Store App Bundle Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: app-bundle
+        path: zig-out/
+        retention-days: 5
+
+  sign-and-release:
+    runs-on: macos-12.0
+    needs: build-macos
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+        fetch-depth: 0
+
+    - uses: actions/download-artifact@v3
+      with:
+        name: app-bundle
+
+    - name: Display structure of downloaded files
+      run: ls -R
+
+    - name: Codesign app bundle
+      # Extract the secrets we defined earlier as environment variables
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PWD: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
+        MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+        MACOS_CI_KEYCHAIN_PWD: ${{ secrets.PROD_MACOS_CI_KEYCHAIN_PWD }}
+      run: |
+        # Turn our base64-encoded certificate back to a regular .p12 file
+        echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+
+        # We need to create a new keychain, otherwise using the certificate will prompt
+        # with a UI dialog asking for the certificate password, which we can't
+        # use in a headless CI environment
+        security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+
+        # We finally codesign our app bundle, specifying the Hardened runtime option
+        /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime zig-out/Ghostty.app -v
+
     # Zip up the app
     - name: Zip App
-      run: nix develop -c sh -c 'cd zig-out && zip -9 -r ../ghostty-macos-universal.zip Ghostty.app'
+      run: cd zig-out && zip -9 -r ../ghostty-macos-universal.zip Ghostty.app
 
     # Update Release
     - name: Release
@@ -72,3 +120,5 @@ jobs:
         tag: "tip"
         message: "Latest Continuous Release"
         force_push_tag: true
+
+
