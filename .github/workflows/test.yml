@@ -63,3 +63,6 @@ jobs:
     - name: Test Dynamic Build
       run: nix develop -c zig build -Dstatic=false
 
+    - name: Test Wasm Build
+      run: nix develop -c zig build wasm
+
