@@ -23,7 +23,7 @@ jobs:
         fetch-depth: 0
 
     # Install Nix and use that so our environment matches exactly.
-    - uses: cachix/install-nix-action@v18
+    - uses: cachix/install-nix-action@v19
       with:
         nix_path: nixpkgs=channel:nixos-unstable
 
