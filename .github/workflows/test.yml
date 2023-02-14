@@ -53,6 +53,26 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
+    - name: Install Signing Certificates
+      env:
+        MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
+        MACOS_CERTIFICATE_PWD: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
+        MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+        MACOS_CI_KEYCHAIN_PWD: ${{ secrets.PROD_MACOS_CI_KEYCHAIN_PWD }}
+      run: |
+        # Turn our base64-encoded certificate back to a regular .p12 file
+        echo $MACOS_CERTIFICATE | base64 --decode > certificate.p12
+
+        # We need to create a new keychain, otherwise using the certificate will prompt
+        # with a UI dialog asking for the certificate password, which we can't
+        # use in a headless CI environment
+        security create-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security set-keychain-settings -lut 21600 build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+        security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
+
     # Install Nix and use that to run our tests so our environment matches exactly.
     - uses: cachix/install-nix-action@v19
       with:
@@ -66,12 +86,8 @@ jobs:
     # The native app is built with native XCode tooling. This also does
     # codesigning. IMPORTANT: this must NOT run in a Nix environment.
     # Nix breaks xcodebuild so this has to be run outside.
-    - uses: mxcl/xcodebuild@v1
-      with:
-        code-sign-certificate: ${{ secrets.PROD_MACOS_CERTIFICATE }}
-        code-sign-certificate-passphrase: ${{ secrets.PROD_MACOS_CERTIFICATE_PWD }}
-        working-directory: macos
-        action: build
+    - name: Build Ghostty.app
+      run: cd macos && xcodebuild
 
   test:
     strategy:
