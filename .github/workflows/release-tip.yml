@@ -31,11 +31,11 @@ jobs:
     # because its the only way to access the headers.
     - name: Build aarch64
       run: |
-        nix develop -c zig build -Dcpu=baseline -Dstatic=true -Dtarget=aarch64-macos -Drelease-fast
+        nix develop -c zig build -Dcpu=baseline -Dstatic=true -Dtarget=aarch64-macos -Doptimize=ReleaseFast
         mv zig-out/bin/ghostty zig-out/bin/ghostty-aarch64-macos
     - name: Build x86_64
       run: |
-        nix develop -c zig build -Dcpu=baseline -Dstatic=true -Dtarget=x86_64-macos -Drelease-fast
+        nix develop -c zig build -Dcpu=baseline -Dstatic=true -Dtarget=x86_64-macos -Doptimize=ReleaseFast
         mv zig-out/bin/ghostty zig-out/bin/ghostty-x86_64-macos
 
     - name: Create Universal Binary
