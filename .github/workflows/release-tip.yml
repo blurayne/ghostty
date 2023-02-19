@@ -11,7 +11,7 @@ name: Release Tip
 jobs:
   build-macos:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: macos-12
     env:
       # Needed for macos SDK
       AGREE: "true"
@@ -22,45 +22,24 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
-    # Install Nix and use that so our environment matches exactly.
+    # Install Nix and use that to run our tests so our environment matches exactly.
     - uses: cachix/install-nix-action@v19
       with:
         nix_path: nixpkgs=channel:nixos-unstable
 
-    # Cross-compile the binary. We always use static building for this
-    # because its the only way to access the headers.
-    - name: Build aarch64
-      run: |
-        nix develop -c zig build -Dcpu=baseline -Dstatic=true -Dtarget=aarch64-macos -Doptimize=ReleaseFast
-        mv zig-out/bin/ghostty zig-out/bin/ghostty-aarch64-macos
-    - name: Build x86_64
-      run: |
-        nix develop -c zig build -Dcpu=baseline -Dstatic=true -Dtarget=x86_64-macos -Doptimize=ReleaseFast
-        mv zig-out/bin/ghostty zig-out/bin/ghostty-x86_64-macos
+    # GhosttyKit is the framework that is built from Zig for our native
+    # Mac app to access. Build this in release mode.
+    - name: Build GhosttyKit
+      run: nix develop -c zig build -Dstatic=true -Doptimize=ReleaseFast
 
-    - name: Create Universal Binary
-      run: |
-        # Lipo our binaries
-        nix develop -c \
-          llvm-lipo \
-          zig-out/bin/ghostty-aarch64-macos \
-          zig-out/bin/ghostty-x86_64-macos \
-          -create \
-          -output zig-out/bin/ghostty-universal
-
-        # Ensure the app is universal
-        cp zig-out/bin/ghostty-universal zig-out/Ghostty.app/Contents/MacOS/ghostty
-
-    # Upload the App bundle so we can sign it later on macOS
-    - name: Store App Bundle Artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: app-bundle
-        path: zig-out/
-        retention-days: 5
+    # The native app is built with native XCode tooling. This also does
+    # codesigning. IMPORTANT: this must NOT run in a Nix environment.
+    # Nix breaks xcodebuild so this has to be run outside.
+    - name: Build Ghostty.app
+      run: cd macos && xcodebuild -configuration Release
 
     - name: Zip Unsigned App
-      run: nix develop -c sh -c 'cd zig-out && zip -9 -r ../ghostty-macos-universal-unsigned.zip Ghostty.app'
+      run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
 
     # Update Release
     - name: Release Unsigned
@@ -79,25 +58,6 @@ jobs:
         tag: "tip"
         message: "Latest Continuous Release"
         force_push_tag: true
-
-  sign-and-release:
-    runs-on: macos-12
-    needs: build-macos
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
-        fetch-depth: 0
-
-    - uses: actions/download-artifact@v3
-      with:
-        name: app-bundle
-        path: zig-out
-
-    - name: Fix Permissions
-      run: |
-        chmod +x zig-out/Ghostty.app/Contents/MacOS/ghostty
 
     - name: Codesign app bundle
       env:
@@ -119,7 +79,7 @@ jobs:
         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
 
         # We finally codesign our app bundle, specifying the Hardened runtime option
-        /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime zig-out/Ghostty.app -v
+        /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime build/Release/Ghostty.app -v
 
     - name: "Notarize app bundle"
       env:
@@ -136,7 +96,7 @@ jobs:
         # Therefore, we create a zip file containing our app bundle, so that we can send it to the
         # notarization service
         echo "Creating temp notarization archive"
-        ditto -c -k --keepParent "zig-out/Ghostty.app" "notarization.zip"
+        ditto -c -k --keepParent "build/Release/Ghostty.app" "notarization.zip"
 
         # Here we send the notarization request to the Apple's Notarization service, waiting for the result.
         # This typically takes a few seconds inside a CI environment, but it might take more depending on the App
@@ -148,11 +108,11 @@ jobs:
         # Finally, we need to "attach the staple" to our executable, which will allow our app to be
         # validated by macOS even when an internet connection is not available.
         echo "Attach staple"
-        xcrun stapler staple "zig-out/Ghostty.app"
+        xcrun stapler staple "build/Release/Ghostty.app"
 
     # Zip up the app
     - name: Zip App
-      run: cd zig-out && zip -9 -r ../ghostty-macos-universal.zip Ghostty.app
+      run: cd build/Release && zip -9 -r ../../../ghostty-macos-universal.zip Ghostty.app
 
     # Update Release
     - name: Release
