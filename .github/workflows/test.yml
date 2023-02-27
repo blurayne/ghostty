@@ -92,9 +92,6 @@ jobs:
     - name: Test Dynamic Build
       run: nix develop -c zig build -Dstatic=false
 
-    - name: Test Flatpak and GTK Build
-      run: nix develop -c zig build -Dflatpak=true -Dapp-runtime=gtk
-
     - name: Test Wasm Build
       run: nix develop -c zig build wasm
 
