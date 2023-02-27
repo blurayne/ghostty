@@ -1,0 +1,20 @@
+on:
+  workflow_dispatch: {}
+
+name: Flatpak
+
+jobs:
+  flatpak:
+    name: "Flatpak"
+    runs-on: ubuntu-latest
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:gnome-43
+      options: --privileged
+    steps:
+    - uses: actions/checkout@v2
+    - uses: flatpak/flatpak-github-actions/flatpak-builder@v4
+      with:
+        bundle: ghostty.flatpak
+        manifest-path: com.mitchellh.ghostty.yml
+        branch: tip
+        cache-key: flatpak-builder-${{ github.sha }}-v1
