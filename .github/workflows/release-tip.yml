@@ -82,6 +82,14 @@ jobs:
     - name: Build Ghostty.app
       run: cd macos && xcodebuild -configuration Release
 
+    # We inject the "build number" as simply the number of commits since HEAD.
+    # This will be a monotonically always increasing build number that we use.
+    - name: Inject Build Number
+      run: |
+        build=$(git rev-list --count head)
+        echo "Setting build to $build"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "macos/build/Release/Ghostty.app/Contents/Info.plist"
+
     - name: Zip Unsigned App
       run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
 
