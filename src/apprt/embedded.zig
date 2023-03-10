@@ -44,6 +44,13 @@ pub const App = struct {
 
         /// Write the clipboard value.
         write_clipboard: *const fn (SurfaceUD, [*:0]const u8) callconv(.C) void,
+
+        /// Create a new split view. If the embedder doesn't support split
+        /// views then this can be null.
+        new_split: ?*const fn (SurfaceUD, input.SplitDirection) callconv(.C) void = null,
+
+        /// Close the current surface given by this function.
+        close_surface: ?*const fn (SurfaceUD) callconv(.C) void = null,
     };
 
     core_app: *CoreApp,
@@ -146,6 +153,24 @@ pub const Surface = struct {
 
         // Clean up our core surface so that all the rendering and IO stop.
         self.core_surface.deinit();
+    }
+
+    pub fn newSplit(self: *const Surface, direction: input.SplitDirection) !void {
+        const func = self.app.opts.new_split orelse {
+            log.info("runtime embedder does not support splits", .{});
+            return;
+        };
+
+        func(self.opts.userdata, direction);
+    }
+
+    pub fn closeSurface(self: *const Surface) !void {
+        const func = self.app.opts.close_surface orelse {
+            log.info("runtime embedder does not closing a surface", .{});
+            return;
+        };
+
+        func(self.opts.userdata);
     }
 
     pub fn getContentScale(self: *const Surface) !apprt.ContentScale {
@@ -444,5 +469,16 @@ pub const CAPI = struct {
         const pos = surface.core_surface.imePoint();
         x.* = pos.x;
         y.* = pos.y;
+    }
+
+    /// Request that the surface become closed. This will go through the
+    /// normal trigger process that a close surface input binding would.
+    export fn ghostty_surface_request_close(ptr: *Surface) void {
+        ptr.closeSurface() catch {};
+    }
+
+    /// Request that the surface split in the given direction.
+    export fn ghostty_surface_split(ptr: *Surface, direction: input.SplitDirection) void {
+        ptr.newSplit(direction) catch {};
     }
 };

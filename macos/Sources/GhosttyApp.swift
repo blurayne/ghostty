@@ -10,8 +10,11 @@ struct GhosttyApp: App {
     )
     
     /// The ghostty global state. Only one per process.
-    @StateObject private var ghostty = GhosttyState()
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate;
+    @StateObject private var ghostty = Ghostty.AppState()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    
+    /// The current focused Ghostty surface in this app
+    @FocusedValue(\.ghosttySurfaceView) private var focusedSurface
     
     var body: some Scene {
         WindowGroup {
@@ -21,13 +24,19 @@ struct GhosttyApp: App {
             case .error:
                 ErrorView()
             case .ready:
-                TerminalView(app: ghostty.app!)
-                    .modifier(WindowObservationModifier())
+                Ghostty.TerminalSplit(onClose: Self.closeWindow)
+                    .ghosttyApp(ghostty.app!)
             }
         }.commands {
             CommandGroup(after: .newItem) {
-                Button("New Tab", action: newTab).keyboardShortcut("t", modifiers: [.command])
-            }
+                Button("New Tab", action: Self.newTab).keyboardShortcut("t", modifiers: [.command])
+                Divider()
+                Button("Split Horizontally", action: splitHorizontally).keyboardShortcut("d", modifiers: [.command])
+                Button("Split Vertically", action: splitVertically).keyboardShortcut("d", modifiers: [.command, .shift])
+                Divider()
+                Button("Close", action: close).keyboardShortcut("w", modifiers: [.command])
+                Button("Close Window", action: Self.closeWindow).keyboardShortcut("w", modifiers: [.command, .shift])
+             }
         }
         
         Settings {
@@ -36,7 +45,7 @@ struct GhosttyApp: App {
     }
     
     // Create a new tab in the currently active window
-    func newTab() {
+    static func newTab() {
         guard let currentWindow = NSApp.keyWindow else { return }
         guard let windowController = currentWindow.windowController else { return }
         windowController.newWindowForTab(nil)
@@ -44,135 +53,84 @@ struct GhosttyApp: App {
             currentWindow.addTabbedWindow(newWindow, ordered: .above)
         }
     }
+    
+    static func closeWindow() {
+        guard let currentWindow = NSApp.keyWindow else { return }
+        currentWindow.close()
+    }
+    
+    func close() {
+        guard let surfaceView = focusedSurface else { return }
+        guard let surface = surfaceView.surface else { return }
+        ghostty.requestClose(surface: surface)
+    }
+    
+    func splitHorizontally() {
+        guard let surfaceView = focusedSurface else { return }
+        guard let surface = surfaceView.surface else { return }
+        ghostty.split(surface: surface, direction: GHOSTTY_SPLIT_RIGHT)
+    }
+    
+    func splitVertically() {
+        guard let surfaceView = focusedSurface else { return }
+        guard let surface = surfaceView.surface else { return }
+        ghostty.split(surface: surface, direction: GHOSTTY_SPLIT_DOWN)
+    }
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    // See CursedMenuManager for more information.
+    private var menuManager: CursedMenuManager?
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [
             // Disable this so that repeated key events make it through to our terminal views.
             "ApplePressAndHoldEnabled": false,
         ])
+        
+        // Create our menu manager to create some custom menu items that
+        // we can't create from SwiftUI.
+        menuManager = CursedMenuManager()
     }
 }
 
-class GhosttyState: ObservableObject {
-    enum Readiness {
-        case loading, error, ready
-    }
+/// SwiftUI as of macOS 13.x provides no way to manage the default menu items that are created
+/// as part of a WindowGroup. This class is prefixed with "Cursed" because this is a truly cursed
+/// solution to the problem and I think its quite brittle. As soon as SwiftUI supports a better option
+/// we should conditionally compile for that when supported.
+///
+/// The way this works is by setting up KVO on various menu objects and reacting to it. For example,
+/// when SwiftUI tries to add a "Close" menu, we intercept it and delete it. Nice try!
+private class CursedMenuManager {
+    var mainToken: NSKeyValueObservation?
+    var fileToken: NSKeyValueObservation?
     
-    /// The readiness value of the state.
-    @Published var readiness: Readiness = .loading
-    
-    /// The ghostty global configuration.
-    var config: ghostty_config_t? = nil
-    
-    /// The ghostty app instance. We only have one of these for the entire app, although I guess
-    /// in theory you can have multiple... I don't know why you would...
-    var app: ghostty_app_t? = nil
-    
-    /// Cached clipboard string for `read_clipboard` callback.
-    private var cached_clipboard_string: String? = nil
-
     init() {
-        // Initialize ghostty global state. This happens once per process.
-        guard ghostty_init() == GHOSTTY_SUCCESS else {
-            GhosttyApp.logger.critical("ghostty_init failed")
-            readiness = .error
-            return
+        // If the whole menu changed we want to setup our new KVO
+        self.mainToken = NSApp.observe(\.mainMenu, options: .new) { app, change in
+            self.onNewMenu()
         }
         
-        // Initialize the global configuration.
-        guard let cfg = ghostty_config_new() else {
-            GhosttyApp.logger.critical("ghostty_config_new failed")
-            readiness = .error
-            return
-        }
-        self.config = cfg;
-        
-        // Load our configuration files from the home directory.
-        ghostty_config_load_default_files(cfg);
-        ghostty_config_load_recursive_files(cfg);
-        
-        // TODO: we'd probably do some config loading here... for now we'd
-        // have to do this synchronously. When we support config updating we can do
-        // this async and update later.
-        
-        // Finalize will make our defaults available.
-        ghostty_config_finalize(cfg)
-        
-        // Create our "runtime" config. The "runtime" is the configuration that ghostty
-        // uses to interface with the application runtime environment.
-        var runtime_cfg = ghostty_runtime_config_s(
-            userdata: Unmanaged.passUnretained(self).toOpaque(),
-            wakeup_cb: { userdata in GhosttyState.wakeup(userdata) },
-            set_title_cb: { userdata, title in GhosttyState.setTitle(userdata, title: title) },
-            read_clipboard_cb: { userdata in GhosttyState.readClipboard(userdata) },
-            write_clipboard_cb: { userdata, str in GhosttyState.writeClipboard(userdata, string: str) })
-
-        // Create the ghostty app.
-        guard let app = ghostty_app_new(&runtime_cfg, cfg) else {
-            GhosttyApp.logger.critical("ghostty_app_new failed")
-            readiness = .error
-            return
-        }
-        self.app = app
-
-        self.readiness = .ready
+        // Initial setup
+        onNewMenu()
     }
     
-    deinit {
-        ghostty_app_free(app)
-        ghostty_config_free(config)
-    }
-    
-    func appTick() {
-        guard let app = self.app else { return }
-        ghostty_app_tick(app)
-    }
-    
-    // MARK: Ghostty Callbacks
-    
-    static func readClipboard(_ userdata: UnsafeMutableRawPointer?) -> UnsafePointer<CChar>? {
-        guard let appState = self.appState(fromSurface: userdata) else { return nil }
-        guard let str = NSPasteboard.general.string(forType: .string) else { return nil }
-        
-        // Ghostty requires we cache the string because the pointer we return has to remain
-        // stable until the next call to readClipboard.
-        appState.cached_clipboard_string = str
-        return (str as NSString).utf8String
-    }
-    
-    static func writeClipboard(_ userdata: UnsafeMutableRawPointer?, string: UnsafePointer<CChar>?) {
-        guard let valueStr = String(cString: string!, encoding: .utf8) else { return }
-        let pb = NSPasteboard.general
-        pb.declareTypes([.string], owner: nil)
-        pb.setString(valueStr, forType: .string)
-    }
-    
-    static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
-        let state = Unmanaged<GhosttyState>.fromOpaque(userdata!).takeUnretainedValue()
-        
-        // Wakeup can be called from any thread so we schedule the app tick
-        // from the main thread. There is probably some improvements we can make
-        // to coalesce multiple ticks but I don't think it matters from a performance
-        // standpoint since we don't do this much.
-        DispatchQueue.main.async { state.appTick() }
-    }
-    
-    static func setTitle(_ userdata: UnsafeMutableRawPointer?, title: UnsafePointer<CChar>?) {
-        let surfaceView = Unmanaged<TerminalSurfaceView_Real>.fromOpaque(userdata!).takeUnretainedValue()
-        guard let titleStr = String(cString: title!, encoding: .utf8) else { return }
-        DispatchQueue.main.async {
-            surfaceView.title = titleStr
-        }
-    }
-    
-    /// Returns the GhosttyState from the given userdata value.
-    static func appState(fromSurface userdata: UnsafeMutableRawPointer?) -> GhosttyState? {
-        let surfaceView = Unmanaged<TerminalSurfaceView_Real>.fromOpaque(userdata!).takeUnretainedValue()
-        guard let surface = surfaceView.surface else { return nil }
-        guard let app = ghostty_surface_app(surface) else { return nil }
-        guard let app_ud = ghostty_app_userdata(app) else { return nil }
-        return Unmanaged<GhosttyState>.fromOpaque(app_ud).takeUnretainedValue()
+    private func onNewMenu() {
+         guard let menu = NSApp.mainMenu else { return }
+         guard let file = menu.item(withTitle: "File") else { return }
+         guard let submenu = file.submenu else { return }
+         fileToken = submenu.observe(\.items) { (_, _) in
+             let remove = ["Close", "Close All"]
+             
+             // We look for the items in reverse since we're removing only the
+             // ones SwiftUI inserts which are at the end. We make replacements
+             // which we DON'T want deleted.
+             let items = submenu.items.reversed()
+             remove.forEach { title in
+                 if let item = items.first(where: { $0.title.caseInsensitiveCompare(title) == .orderedSame }) {
+                     submenu.removeItem(item)
+                 }
+             }
+         }
     }
 }

@@ -279,6 +279,11 @@ pub const Config = struct {
         try result.keybind.set.put(
             alloc,
             .{ .key = .w, .mods = .{ .super = true } },
+            .{ .close_surface = {} },
+        );
+        try result.keybind.set.put(
+            alloc,
+            .{ .key = .w, .mods = .{ .super = true, .shift = true } },
             .{ .close_window = {} },
         );
         try result.keybind.set.put(
@@ -295,6 +300,16 @@ pub const Config = struct {
             alloc,
             .{ .key = .right_bracket, .mods = .{ .super = true, .shift = true } },
             .{ .next_tab = {} },
+        );
+        try result.keybind.set.put(
+            alloc,
+            .{ .key = .d, .mods = .{ .super = true } },
+            .{ .new_split = .right },
+        );
+        try result.keybind.set.put(
+            alloc,
+            .{ .key = .d, .mods = .{ .super = true, .shift = true } },
+            .{ .new_split = .down },
         );
         {
             // Cmd+N for goto tab N

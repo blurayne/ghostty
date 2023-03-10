@@ -30,6 +30,8 @@ typedef void (*ghostty_runtime_wakeup_cb)(void *);
 typedef void (*ghostty_runtime_set_title_cb)(void *, const char *);
 typedef const char* (*ghostty_runtime_read_clipboard_cb)(void *);
 typedef void (*ghostty_runtime_write_clipboard_cb)(void *, const char *);
+typedef void (*ghostty_runtime_new_split_cb)(void *, ghostty_split_direction_e);
+typedef void (*ghostty_runtime_close_surface_cb)(void *);
 
 typedef struct {
     void *userdata;
@@ -37,6 +39,8 @@ typedef struct {
     ghostty_runtime_set_title_cb set_title_cb;
     ghostty_runtime_read_clipboard_cb read_clipboard_cb;
     ghostty_runtime_write_clipboard_cb write_clipboard_cb;
+    ghostty_runtime_new_split_cb new_split_cb;
+    ghostty_runtime_close_surface_cb close_surface_cb;
 } ghostty_runtime_config_s;
 
 typedef struct {
@@ -44,6 +48,11 @@ typedef struct {
     void *nsview;
     double scale_factor;
 } ghostty_surface_config_s;
+
+typedef enum {
+    GHOSTTY_SPLIT_RIGHT,
+    GHOSTTY_SPLIT_DOWN
+} ghostty_split_direction_e;
 
 typedef enum {
     GHOSTTY_MOUSE_RELEASE,
@@ -243,6 +252,8 @@ void ghostty_surface_mouse_button(ghostty_surface_t, ghostty_input_mouse_state_e
 void ghostty_surface_mouse_pos(ghostty_surface_t, double, double);
 void ghostty_surface_mouse_scroll(ghostty_surface_t, double, double);
 void ghostty_surface_ime_point(ghostty_surface_t, double *, double *);
+void ghostty_surface_request_close(ghostty_surface_t);
+void ghostty_surface_split(ghostty_surface_t, ghostty_split_direction_e);
 
 #ifdef __cplusplus
 }

@@ -476,6 +476,7 @@ pub fn deinit(self: *Surface) void {
     self.alloc.destroy(self.font_group);
 
     self.alloc.destroy(self.renderer_state.mutex);
+    log.info("surface closed addr={x}", .{@ptrToInt(self)});
 }
 
 /// Called from the app thread to handle mailbox messages to our specific
@@ -938,6 +939,18 @@ pub fn keyCallback(
                     if (@hasDecl(apprt.Surface, "gotoTab")) {
                         self.rt_surface.gotoTab(n);
                     } else log.warn("runtime doesn't implement gotoTab", .{});
+                },
+
+                .new_split => |direction| {
+                    if (@hasDecl(apprt.Surface, "newSplit")) {
+                        try self.rt_surface.newSplit(direction);
+                    } else log.warn("runtime doesn't implement newSplit", .{});
+                },
+
+                .close_surface => {
+                    if (@hasDecl(apprt.Surface, "closeSurface")) {
+                        try self.rt_surface.closeSurface();
+                    } else log.warn("runtime doesn't implement closeSurface", .{});
                 },
 
                 .close_window => {
