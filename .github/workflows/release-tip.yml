@@ -96,6 +96,12 @@ jobs:
     - name: Build Ghostty.app
       run: cd macos && xcodebuild -configuration Release
 
+    # Copy the resources we build during zig build into the final Ghostty.app
+    - name: Copy Resources
+      run: |
+        # Terminfo
+        cp -R zig-out/Ghostty.app/Contents/Resources/terminfo macos/build/Release/Ghostty.app/Contents/Resources/terminfo
+
     # We inject the "build number" as simply the number of commits since HEAD.
     # This will be a monotonically always increasing build number that we use.
     - name: Inject Build Number
