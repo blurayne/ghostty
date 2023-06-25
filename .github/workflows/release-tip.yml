@@ -105,7 +105,7 @@ jobs:
         /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "macos/build/Release/Ghostty.app/Contents/Info.plist"
 
     - name: Zip Unsigned App
-      run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
+      run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
 
     # Update Release
     - name: Release Unsigned
@@ -170,7 +170,7 @@ jobs:
 
     # Zip up the app
     - name: Zip App
-      run: cd macos/build/Release && zip -9 -r ../../../ghostty-macos-universal.zip Ghostty.app
+      run: cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal.zip Ghostty.app
 
     # Update Release
     - name: Release
