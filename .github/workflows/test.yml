@@ -38,7 +38,7 @@ jobs:
     # Cross-compile the binary. We always use static building for this
     # because its the only way to access the headers.
     - name: Test Build
-      run: nix develop -c zig build -Dstatic=true -Dtarget=${{ matrix.target }}
+      run: nix develop -c zig build -Dstatic=true -Dapp-runtime=glfw -Dtarget=${{ matrix.target }}
 
   build-macos:
     runs-on: macos-12
@@ -88,6 +88,12 @@ jobs:
 
     - name: test
       run: nix develop -c zig build test
+
+    - name: Test GTK Build
+      run: nix develop -c zig build -Dapp-runtime=gtk
+
+    - name: Test GLFW Build
+      run: nix develop -c zig build -Dapp-runtime=glfw
 
     - name: Test Dynamic Build
       run: nix develop -c zig build -Dstatic=false
