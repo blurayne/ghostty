@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [flatpak, build-macos]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Tip Tag
       run: |
         git config user.name "GitHub Actions Bot"
@@ -33,7 +33,7 @@ jobs:
       matrix:
         arch: [x86_64, aarch64]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 0
@@ -76,7 +76,7 @@ jobs:
       AGREE: "true"
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         submodules: recursive
         fetch-depth: 0
