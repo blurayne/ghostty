@@ -86,6 +86,20 @@ jobs:
       with:
         nix_path: nixpkgs=channel:nixos-unstable
 
+    # Setup our S3 client
+    - name: Setup s3cmd
+      uses: s3-actions/s3cmd@v1.5.0
+      with:
+        provider: cloudflare
+        account_id: ${{ secrets.CF_R2_TIP_ACCOUNT_ID }}
+        access_key: ${{ secrets.CF_R2_TIP_AWS_KEY }}
+        secreT_key: ${{ secrets.CF_R2_TIP_SECRET_KEY }}
+
+    # Load Build Number
+    - name: Build Number
+      run: |
+        echo "GHOSTTY_BUILD=$(git rev-list --count head)" >> $GITHUB_ENV
+
     # GhosttyKit is the framework that is built from Zig for our native
     # Mac app to access. Build this in release mode.
     - name: Build GhosttyKit
@@ -101,9 +115,8 @@ jobs:
     # This will be a monotonically always increasing build number that we use.
     - name: Inject Build Number
       run: |
-        build=$(git rev-list --count head)
-        echo "Setting build to $build"
-        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" "macos/build/Release/Ghostty.app/Contents/Info.plist"
+        echo "Setting build to $GHOSTTY_BUILD"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GHOSTTY_BUILD" "macos/build/Release/Ghostty.app/Contents/Info.plist"
 
     - name: Zip Unsigned App
       run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
@@ -184,3 +197,8 @@ jobs:
         target_commitish: ${{ github.sha }}
         files: ghostty-macos-universal.zip
         token: ${{ secrets.GH_RELEASE_TOKEN }}
+
+    # Update Blob Storage
+    - name: Upload to Blob Storage
+      run: |
+        s3cmd put ghostty-macos-universal.zip s3://ghostty-tip/${GHOSTTY_BUILD}/ghostty-macos-universal.zip
