@@ -87,7 +87,7 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
 
     - name: test
-      run: nix develop -c zig build test
+      run: nix develop -c zig build -Dapp-runtime=none test
 
     - name: Test GTK Build
       run: nix develop -c zig build -Dapp-runtime=gtk
