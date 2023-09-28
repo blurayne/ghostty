@@ -101,6 +101,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
-      - uses: actionsx/prettier@v3
+      - uses: cachix/install-nix-action@v23
         with:
-          args: --check .
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: prettier check
+        run: nix develop -c prettier --check .
