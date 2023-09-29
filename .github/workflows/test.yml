@@ -67,7 +67,6 @@ jobs:
       # Nix breaks xcodebuild so this has to be run outside.
       - name: Build Ghostty.app
         run: cd macos && xcodebuild
-
   build-windows:
     runs-on: windows-2019
     # this will not stop other jobs from running
@@ -80,7 +79,7 @@ jobs:
           submodules: recursive
           fetch-depth: 0
       # This could be from a script if we wanted to but inlining here for now
-      # in one place. 
+      # in one place.
       # Using powershell so that we do not need to install WSL components. Also,
       # WSLv1 is only installed on Github runners.
       - name: Install zig
