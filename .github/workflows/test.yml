@@ -67,6 +67,58 @@ jobs:
       # Nix breaks xcodebuild so this has to be run outside.
       - name: Build Ghostty.app
         run: cd macos && xcodebuild
+  build-windows:
+    runs-on: windows-2019
+    # this will not stop other jobs from running
+    continue-on-error: true
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      # This could be from a script if we wanted to but inlining here for now
+      # in one place.
+      # Using powershell so that we do not need to install WSL components. Also,
+      # WSLv1 is only installed on Github runners.
+      - name: Install zig
+        shell: pwsh
+        run: |
+          # Get the zig version from build.zig so that it only needs to be updated
+          $fileContent = Get-Content -Path "build.zig" -Raw
+          $pattern = 'const required_zig = "(.*?)";'
+          $zigVersion = [regex]::Match($fileContent, $pattern).Groups[1].Value
+          Write-Output $version
+          $version = "zig-windows-x86_64-$zigVersion"
+          $uri = "https://ziglang.org/builds/$version.zip"
+          Invoke-WebRequest -Uri "$uri" -OutFile ".\zig-windows.zip"
+          Expand-Archive -Path ".\zig-windows.zip" -DestinationPath ".\" -Force
+          Remove-Item -Path ".\zig-windows.zip"
+          Rename-Item -Path ".\$version" -NewName ".\zig"
+          Write-Host "Zig installed."
+          ./zig/zig.exe version
+
+      - name: Generate build testing script
+        shell: pwsh
+        run: |
+          # Generate a script so that we can swallow the errors
+          $scriptContent = @"
+          .\zig\zig.exe build test 2>&1 | Out-File -FilePath "build.log" -Append
+          exit 0
+          "@
+          $scriptPath = "zigbuild.ps1"
+          # Write the script content to a file
+          $scriptContent | Set-Content -Path $scriptPath
+          Write-Host "Script generated at: $scriptPath"
+
+      - name: Test Windows
+        shell: pwsh
+        run: .\zigbuild.ps1 -ErrorAction SiltentlyContinue
+
+      - name: Dump logs
+        shell: pwsh
+        run: Get-Content -Path ".\build.log"
 
   test:
     strategy:
