@@ -10,7 +10,6 @@ jobs:
         target: [
             aarch64-linux-gnu,
             x86_64-linux-gnu,
-
             # No windows support currently.
             # i386-windows,
             # x86_64-windows-gnu,
