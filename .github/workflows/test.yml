@@ -8,8 +8,8 @@ jobs:
         os: [ubuntu-latest]
 
         target: [
-            aarch64-linux-gnu,
-            x86_64-linux-gnu,
+            aarch64-linux,
+            x86_64-linux,
             # No windows support currently.
             # i386-windows,
             # x86_64-windows-gnu,
