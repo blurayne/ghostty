@@ -49,7 +49,7 @@ jobs:
       # Load Build Number
       - name: Build Number
         run: |
-          echo "GHOSTTY_BUILD=$(git rev-list --count head)" >> $GITHUB_ENV
+          echo "GHOSTTY_BUILD=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access. Build this in release mode.
