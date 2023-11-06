@@ -10,10 +10,8 @@ jobs:
         target: [
             aarch64-linux,
             x86_64-linux,
-            # No windows support currently.
-            # i386-windows,
-            # x86_64-windows-gnu,
-
+            x86-windows-gnu,
+            x86_64-windows-gnu,
             # We don't support cross-compiling to macOS because the macOS build
             # requires xcode due to the swift harness.
             #aarch64-macos,
