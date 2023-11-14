@@ -22,7 +22,15 @@ jobs:
           git push --force origin tip
 
   build-macos:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: |
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.repository_owner == 'mitchellh'
+        )
+      }}
+
     runs-on: macos-12
     timeout-minutes: 90
     env:
