@@ -38,11 +38,8 @@ pub const Mouse = struct {
 
 /// The pre-edit state. See Surface.preeditCallback for more information.
 pub const Preedit = struct {
-    /// The codepoints to render as preedit text. We allow up to 16 codepoints
-    /// as a sort of arbitrary limit. If we experience a realisitic use case
-    /// where we need more please open an issue.
-    codepoints: [16]Codepoint = undefined,
-    len: u8 = 0,
+    /// The codepoints to render as preedit text.
+    codepoints: []const Codepoint = &.{},
 
     /// A single codepoint to render as preedit text.
     pub const Codepoint = struct {
@@ -50,21 +47,67 @@ pub const Preedit = struct {
         wide: bool = false,
     };
 
+    /// Deinit this preedit that was cre
+    pub fn deinit(self: *const Preedit, alloc: Allocator) void {
+        alloc.free(self.codepoints);
+    }
+
+    /// Allocate a copy of this preedit in the given allocator..
+    pub fn clone(self: *const Preedit, alloc: Allocator) !Preedit {
+        return .{
+            .codepoints = try alloc.dupe(Codepoint, self.codepoints),
+        };
+    }
+
     /// The width in cells of all codepoints in the preedit.
     pub fn width(self: *const Preedit) usize {
         var result: usize = 0;
-        for (self.codepoints[0..self.len]) |cp| {
+        for (self.codepoints) |cp| {
             result += if (cp.wide) 2 else 1;
         }
 
         return result;
     }
 
-    pub fn range(self: *const Preedit, start: usize, max: usize) [2]usize {
+    /// Range returns the start and end x position of the preedit text
+    /// along with any codepoint offset necessary to fit the preedit
+    /// into the available space.
+    pub fn range(self: *const Preedit, start: usize, max: usize) struct {
+        start: usize,
+        end: usize,
+        cp_offset: usize,
+    } {
+        // If our width is greater than the number of cells we have
+        // then we need to adjust our codepoint start to a point where
+        // our width would be less than the number of cells we have.
+        const w, const cp_offset = width: {
+            // max is inclusive, so we need to add 1 to it.
+            const max_width = max - start + 1;
+
+            // Rebuild our width in reverse order. This is because we want
+            // to offset by the end cells, not the start cells (if we have to).
+            var w: usize = 0;
+            for (0..self.codepoints.len) |i| {
+                const reverse_i = self.codepoints.len - i - 1;
+                const cp = self.codepoints[reverse_i];
+                w += if (cp.wide) 2 else 1;
+                if (w > max_width) {
+                    break :width .{ w, reverse_i };
+                }
+            }
+
+            // Width fit in the max width so no offset necessary.
+            break :width .{ w, 0 };
+        };
+
         // If our preedit goes off the end of the screen, we adjust it so
         // that it shifts left.
-        const end = start + self.width();
-        const offset = if (end > max) end - max else 0;
-        return .{ start -| offset, end -| offset };
+        const end = start + w;
+        const start_offset = if (end > max) end - max else 0;
+        return .{
+            .start = start -| start_offset,
+            .end = end -| start_offset,
+            .cp_offset = cp_offset,
+        };
     }
 };
