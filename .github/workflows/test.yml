@@ -147,3 +147,13 @@ jobs:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: prettier check
         run: nix develop -c prettier --check .
+
+  alejandra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # Check out repo so we can lint it
+      - uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: alejandra check
+        run: nix develop -c alejandra --check .
