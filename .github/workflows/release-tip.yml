@@ -39,6 +39,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Important so that build number generation works
+          fetch-depth: 0
 
       # Install Nix and use that to run our tests so our environment matches exactly.
       - uses: cachix/install-nix-action@v24
@@ -57,7 +60,8 @@ jobs:
       # Load Build Number
       - name: Build Number
         run: |
-          echo "GHOSTTY_BUILD=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "GHOSTTY_BUILD=$(git rev-list --count head)" >> $GITHUB_ENV
+          echo "GHOSTTY_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access. Build this in release mode.
@@ -74,8 +78,9 @@ jobs:
       # This will be a monotonically always increasing build number that we use.
       - name: Inject Build Number
         run: |
-          echo "Setting build to $GHOSTTY_BUILD"
+          /usr/libexec/PlistBuddy -c "Set :GhosttyCommit $GHOSTTY_COMMIT" "macos/build/Release/Ghostty.app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GHOSTTY_BUILD" "macos/build/Release/Ghostty.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $GHOSTTY_COMMIT" "macos/build/Release/Ghostty.app/Contents/Info.plist"
 
       - name: Zip Unsigned App
         run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
