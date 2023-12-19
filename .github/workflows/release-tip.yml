@@ -132,8 +132,14 @@ jobs:
           security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_CI_KEYCHAIN_PWD" build.keychain
 
-          # We finally codesign our app bundle, specifying the Hardened runtime option
-          /usr/bin/codesign --force -s "$MACOS_CERTIFICATE_NAME" --options runtime macos/build/Release/Ghostty.app -v
+          # Codesign Sparkle
+          /usr/bin/codesign --verbose -f -s "$MACOS_CERTIFICATE_NAME" -o runtime "macos/build/Release/Ghostty.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
+          /usr/bin/codesign --verbose -f -s "$MACOS_CERTIFICATE_NAME" -o runtime "macos/build/Release/Ghostty.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
+          /usr/bin/codesign --verbose -f -s "$MACOS_CERTIFICATE_NAME" -o runtime "macos/build/Release/Ghostty.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
+          /usr/bin/codesign --verbose -f -s "$MACOS_CERTIFICATE_NAME" -o runtime "macos/build/Release/Ghostty.app/Contents/Frameworks/Sparkle.framework"
+
+          # Codesign the app bundle
+          /usr/bin/codesign --verbose --deep -f -s "$MACOS_CERTIFICATE_NAME" -o runtime macos/build/Release/Ghostty.app
 
       - name: "Notarize app bundle"
         env:
