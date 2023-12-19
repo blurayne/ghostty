@@ -48,6 +48,17 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
+      # Setup Sparkle
+      - name: Setup Sparkle
+        env:
+          SPARKLE_VERSION: 2.5.1
+        run: |
+          mkdir -p .action/sparkle
+          cd .action/sparkle
+          curl -L https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-for-Swift-Package-Manager.zip > sparkle.zip
+          unzip sparkle.zip
+          echo "$(pwd)/bin" >> $GITHUB_PATH
+
       # Setup our S3 client
       - name: Setup s3cmd
         uses: s3-actions/s3cmd@v1.5.0
@@ -55,7 +66,7 @@ jobs:
           provider: cloudflare
           account_id: ${{ secrets.CF_R2_TIP_ACCOUNT_ID }}
           access_key: ${{ secrets.CF_R2_TIP_AWS_KEY }}
-          secreT_key: ${{ secrets.CF_R2_TIP_SECRET_KEY }}
+          secret_key: ${{ secrets.CF_R2_TIP_SECRET_KEY }}
 
       # Load Build Number
       - name: Build Number
@@ -76,11 +87,17 @@ jobs:
 
       # We inject the "build number" as simply the number of commits since HEAD.
       # This will be a monotonically always increasing build number that we use.
-      - name: Inject Build Number
+      - name: Update Info.plist
+        env:
+          SPARKLE_KEY_PUB: ${{ secrets.PROD_MACOS_SPARKLE_KEY_PUB }}
         run: |
+          # Version Info
           /usr/libexec/PlistBuddy -c "Set :GhosttyCommit $GHOSTTY_COMMIT" "macos/build/Release/Ghostty.app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GHOSTTY_BUILD" "macos/build/Release/Ghostty.app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $GHOSTTY_COMMIT" "macos/build/Release/Ghostty.app/Contents/Info.plist"
+
+          # Updater
+          /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_KEY_PUB" "macos/build/Release/Ghostty.app/Contents/Info.plist"
 
       - name: Zip Unsigned App
         run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
