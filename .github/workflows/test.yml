@@ -31,6 +31,12 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
+
       # Cross-compile the binary. We always use static building for this
       # because its the only way to access the headers.
       - name: Test Build
@@ -50,6 +56,12 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
 
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access.
@@ -126,6 +138,12 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
+
       - name: test
         run: nix develop -c zig build -Dapp-runtime=none test
 
@@ -148,6 +166,11 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
       - name: prettier check
         run: nix develop -c prettier --check .
 
@@ -158,5 +181,10 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
       - name: alejandra check
         run: nix develop -c alejandra --check .
