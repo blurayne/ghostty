@@ -30,12 +30,10 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-
-      # Use cache to minimize build times.
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: cachix/cachix-action@v12
         with:
-          diagnostic-endpoint: "" # disable telemetry
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       # Cross-compile the binary. We always use static building for this
       # because its the only way to access the headers.
@@ -43,10 +41,7 @@ jobs:
         run: nix develop -c zig build -Dstatic=true -Dapp-runtime=glfw -Dtarget=${{ matrix.target }}
 
   build-nix:
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     needs: test
     steps:
       - name: Checkout code
@@ -56,12 +51,10 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-
-      # Use cache to minimize build times.
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: cachix/cachix-action@v12
         with:
-          diagnostic-endpoint: "" # disable telemetry
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Test NixOS package build
         run: nix build .#ghostty
@@ -80,12 +73,10 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-
-      # Use cache to minimize build times.
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: cachix/cachix-action@v12
         with:
-          diagnostic-endpoint: "" # disable telemetry
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access.
@@ -150,10 +141,7 @@ jobs:
         run: Get-Content -Path ".\build.log"
 
   test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -162,12 +150,10 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-
-      # Use cache to minimize build times.
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: cachix/cachix-action@v12
         with:
-          diagnostic-endpoint: "" # disable telemetry
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: test
         run: nix develop -c zig build -Dapp-runtime=none test
@@ -188,11 +174,10 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      # Use cache to minimize build times.
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: cachix/cachix-action@v12
         with:
-          diagnostic-endpoint: "" # disable telemetry
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: prettier check
         run: nix develop -c prettier --check .
 
@@ -203,10 +188,9 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-      # Use cache to minimize build times.
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: cachix/cachix-action@v12
         with:
-          diagnostic-endpoint: "" # disable telemetry
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: alejandra check
         run: nix develop -c alejandra --check .
