@@ -31,10 +31,40 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
+
       # Cross-compile the binary. We always use static building for this
       # because its the only way to access the headers.
       - name: Test Build
         run: nix develop -c zig build -Dstatic=true -Dapp-runtime=glfw -Dtarget=${{ matrix.target }}
+
+  build-nix:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Nix and use that to run our tests so our environment matches exactly.
+      - uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
+
+      - name: Test NixOS package build
+        run: nix build .#ghostty
 
   build-macos:
     runs-on: ghcr.io/cirruslabs/macos-ventura-xcode:latest
@@ -51,6 +81,12 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
+
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access.
       - name: Build GhosttyKit
@@ -61,6 +97,7 @@ jobs:
       # Nix breaks xcodebuild so this has to be run outside.
       - name: Build Ghostty.app
         run: cd macos && xcodebuild
+
   build-windows:
     runs-on: windows-2019
     # this will not stop other jobs from running
@@ -126,6 +163,12 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
 
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
+
       - name: test
         run: nix develop -c zig build -Dapp-runtime=none test
 
@@ -145,6 +188,11 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
       - name: prettier check
         run: nix develop -c prettier --check .
 
@@ -155,5 +203,10 @@ jobs:
       - uses: cachix/install-nix-action@v24
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+      # Use cache to minimize build times.
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: "" # disable telemetry
       - name: alejandra check
         run: nix develop -c alejandra --check .
