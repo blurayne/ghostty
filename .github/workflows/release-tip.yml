@@ -103,20 +103,6 @@ jobs:
           # Updater
           /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $SPARKLE_KEY_PUB" "macos/build/Release/Ghostty.app/Contents/Info.plist"
 
-      - name: Zip Unsigned App
-        run: nix develop -c sh -c 'cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal-unsigned.zip Ghostty.app'
-
-      # Update Release
-      - name: Release Unsigned
-        uses: softprops/action-gh-release@v1
-        with:
-          name: 'Ghostty Tip ("Nightly")'
-          prerelease: true
-          tag_name: tip
-          target_commitish: ${{ github.sha }}
-          files: ghostty-macos-universal-unsigned.zip
-          token: ${{ secrets.GH_RELEASE_TOKEN }}
-
       - name: Codesign app bundle
         env:
           MACOS_CERTIFICATE: ${{ secrets.PROD_MACOS_CERTIFICATE }}
