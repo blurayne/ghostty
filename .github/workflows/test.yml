@@ -137,10 +137,6 @@ jobs:
         shell: pwsh
         run: .\zigbuild.ps1 -ErrorAction SilentlyContinue
 
-      - name: Dump logs
-        shell: pwsh
-        run: Get-Content -Path ".\build.log"
-
       - name: Generate build script
         shell: pwsh
         run: |
