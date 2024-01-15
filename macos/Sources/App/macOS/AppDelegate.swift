@@ -8,7 +8,7 @@ class AppDelegate: NSObject,
                     ObservableObject,
                     NSApplicationDelegate,
                     UNUserNotificationCenterDelegate, 
-                    GhosttyAppStateDelegate
+                    GhosttyAppDelegate
 {
     // The application logger. We should probably move this at some point to a dedicated
     // class/struct but for now it lives here! 🤷‍♂️
@@ -62,7 +62,7 @@ class AppDelegate: NSObject,
     private var applicationHasBecomeActive: Bool = false
     
     /// The ghostty global state. Only one per process.
-    let ghostty: Ghostty.AppState = Ghostty.AppState()
+    let ghostty: Ghostty.App = Ghostty.App()
     
     /// Manages our terminal windows.
     let terminalManager: TerminalManager
@@ -143,7 +143,7 @@ class AppDelegate: NSObject,
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return ghostty.shouldQuitAfterLastWindowClosed
+        return ghostty.config.shouldQuitAfterLastWindowClosed
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -242,7 +242,7 @@ class AppDelegate: NSObject,
     
     /// Sync all of our menu item keyboard shortcuts with the Ghostty configuration.
     private func syncMenuShortcuts() {
-        guard ghostty.config != nil else { return }
+        guard ghostty.readiness == .ready else { return }
         
         syncMenuShortcut(action: "open_config", menuItem: self.menuOpenConfig)
         syncMenuShortcut(action: "reload_config", menuItem: self.menuReloadConfig)
@@ -286,19 +286,16 @@ class AppDelegate: NSObject,
     /// Syncs a single menu shortcut for the given action. The action string is the same
     /// action string used for the Ghostty configuration.
     private func syncMenuShortcut(action: String, menuItem: NSMenuItem?) {
-        guard let cfg = ghostty.config else { return }
         guard let menu = menuItem else { return }
-        
-        let trigger = ghostty_config_trigger(cfg, action, UInt(action.count))
-        guard let equiv = Ghostty.keyEquivalent(key: trigger.key) else {
+        guard let equiv = ghostty.config.keyEquivalent(for: action) else {
             // No shortcut, clear the menu item
             menu.keyEquivalent = ""
             menu.keyEquivalentModifierMask = []
             return
         }
         
-        menu.keyEquivalent = equiv
-        menu.keyEquivalentModifierMask = Ghostty.eventModifierFlags(mods: trigger.mods)
+        menu.keyEquivalent = equiv.key
+        menu.keyEquivalentModifierMask = equiv.modifiers
     }
     
     private func focusedSurface() -> ghostty_surface_t? {
@@ -341,7 +338,7 @@ class AppDelegate: NSObject,
         withCompletionHandler(options)
     }
 
-    //MARK: - GhosttyAppStateDelegate
+    //MARK: - GhosttyAppDelegate
     
     func findSurface(forUUID uuid: UUID) -> Ghostty.SurfaceView? {
         for c in terminalManager.windows {
@@ -353,11 +350,11 @@ class AppDelegate: NSObject,
         return nil
     }
     
-    func configDidReload(_ state: Ghostty.AppState) {
+    func configDidReload(_ state: Ghostty.App) {
         // Depending on the "window-save-state" setting we have to set the NSQuitAlwaysKeepsWindows
         // configuration. This is the only way to carefully control whether macOS invokes the
         // state restoration system.
-        switch (ghostty.windowSaveState) {
+        switch (ghostty.config.windowSaveState) {
         case "never": UserDefaults.standard.setValue(false, forKey: "NSQuitAlwaysKeepsWindows")
         case "always": UserDefaults.standard.setValue(true, forKey: "NSQuitAlwaysKeepsWindows")
         case "default": fallthrough
@@ -373,7 +370,7 @@ class AppDelegate: NSObject,
         
         // If we have configuration errors, we need to show them.
         let c = ConfigurationErrorsController.sharedInstance
-        c.errors = state.configErrors()
+        c.errors = state.config.errors
         if (c.errors.count > 0) {
             if (c.window == nil || !c.window!.isVisible) {
                 c.showWindow(self)
@@ -383,7 +380,7 @@ class AppDelegate: NSObject,
     
     /// Sync the appearance of our app with the theme specified in the config.
     private func syncAppearance() {
-        guard let theme = ghostty.windowTheme else { return }
+        guard let theme = ghostty.config.windowTheme else { return }
         switch (theme) {
         case "dark":
             let appearance = NSAppearance(named: .darkAqua)

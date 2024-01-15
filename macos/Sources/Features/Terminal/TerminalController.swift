@@ -11,7 +11,7 @@ class TerminalController: NSWindowController, NSWindowDelegate,
     override var windowNibName: NSNib.Name? { "Terminal" }
     
     /// The app instance that this terminal view will represent.
-    let ghostty: Ghostty.AppState
+    let ghostty: Ghostty.App
     
     /// The currently focused surface.
     var focusedSurface: Ghostty.SurfaceView? = nil
@@ -46,7 +46,7 @@ class TerminalController: NSWindowController, NSWindowDelegate,
     /// changes in the list.
     private var tabWindowsHash: Int = 0
     
-    init(_ ghostty: Ghostty.AppState, 
+    init(_ ghostty: Ghostty.App, 
          withBaseConfig base: Ghostty.SurfaceConfiguration? = nil,
          withSurfaceTree tree: Ghostty.SplitNode? = nil
     ) {
@@ -101,7 +101,6 @@ class TerminalController: NSWindowController, NSWindowDelegate,
         tabListenForFrame = false
         
         guard let windows = self.window?.tabbedWindows else { return }
-        guard let cfg = ghostty.config else { return }
         
         // We only listen for frame changes if we have more than 1 window,
         // otherwise the accessory view doesn't matter.
@@ -109,8 +108,7 @@ class TerminalController: NSWindowController, NSWindowDelegate,
         
         for (index, window) in windows.enumerated().prefix(9) {
             let action = "goto_tab:\(index + 1)"
-            let trigger = ghostty_config_trigger(cfg, action, UInt(action.count))
-            guard let equiv = Ghostty.keyEquivalentLabel(key: trigger.key, mods: trigger.mods) else {
+            guard let equiv = ghostty.config.keyEquivalent(for: action) else {
                 continue
             }
             
@@ -157,13 +155,13 @@ class TerminalController: NSWindowController, NSWindowDelegate,
         window.identifier = .init(String(describing: TerminalWindowRestoration.self))
         
         // If window decorations are disabled, remove our title
-        if (!ghostty.windowDecorations) { window.styleMask.remove(.titled) }
+        if (!ghostty.config.windowDecorations) { window.styleMask.remove(.titled) }
         
         // Terminals typically operate in sRGB color space and macOS defaults
         // to "native" which is typically P3. There is a lot more resources
         // covered in thie GitHub issue: https://github.com/mitchellh/ghostty/pull/376
         // Ghostty defaults to sRGB but this can be overridden.
-        switch (ghostty.windowColorspace) {
+        switch (ghostty.config.windowColorspace) {
         case "display-p3":
             window.colorSpace = .displayP3
         case "srgb":
@@ -462,7 +460,7 @@ class TerminalController: NSWindowController, NSWindowDelegate,
     }
     
     func cellSizeDidChange(to: NSSize) {
-        guard ghostty.windowStepResize else { return }
+        guard ghostty.config.windowStepResize else { return }
         self.window?.contentResizeIncrements = to
     }
     
@@ -504,7 +502,7 @@ class TerminalController: NSWindowController, NSWindowDelegate,
                 str = cc.contents
             }
 
-            Ghostty.AppState.completeClipboardRequest(cc.surface, data: str, state: cc.state, confirmed: true)
+            Ghostty.App.completeClipboardRequest(cc.surface, data: str, state: cc.state, confirmed: true)
         }
     }
     
@@ -591,7 +589,7 @@ class TerminalController: NSWindowController, NSWindowDelegate,
         // If we already have a clipboard confirmation view up, we ignore this request.
         // This shouldn't be possible...
         guard self.clipboardConfirmation == nil else {
-            Ghostty.AppState.completeClipboardRequest(surface, data: "", state: state, confirmed: true)
+            Ghostty.App.completeClipboardRequest(surface, data: "", state: state, confirmed: true)
             return
         }
         

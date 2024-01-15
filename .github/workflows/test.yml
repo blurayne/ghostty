@@ -88,7 +88,13 @@ jobs:
       # codesigning. IMPORTANT: this must NOT run in a Nix environment.
       # Nix breaks xcodebuild so this has to be run outside.
       - name: Build Ghostty.app
-        run: cd macos && xcodebuild
+        run: cd macos && xcodebuild -target Ghostty
+
+      # Build the iOS target without code signing just to verify it works.
+      - name: Build Ghostty iOS
+        run: |
+          cd macos
+          xcodebuild -target Ghostty-iOS "CODE_SIGNING_ALLOWED=NO"
 
   build-windows:
     runs-on: windows-2019

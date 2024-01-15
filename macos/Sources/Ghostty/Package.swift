@@ -1,7 +1,14 @@
+import os
 import SwiftUI
 import GhosttyKit
 
 struct Ghostty {
+    // The primary logger used by the GhosttyKit libraries.
+    static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier!,
+        category: "ghostty"
+    )
+    
     // All the notifications that will be emitted will be put here.
     struct Notification {}
 
@@ -10,6 +17,26 @@ struct Ghostty {
 
     // The user notification "Show" action
     static let userNotificationActionShow = "com.mitchellh.ghostty.userNotification.Show"
+}
+
+// MARK: Build Info
+
+extension Ghostty {
+    struct Info {
+        var mode: ghostty_build_mode_e
+        var version: String
+    }
+    
+    static var info: Info {
+        let raw = ghostty_info()
+        let version = NSString(
+            bytes: raw.version,
+            length: Int(raw.version_len),
+            encoding: NSUTF8StringEncoding
+        ) ?? "unknown"
+
+        return Info(mode: raw.build_mode, version: String(version))
+    }
 }
 
 // MARK: Surface Notifications

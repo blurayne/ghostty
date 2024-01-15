@@ -18,7 +18,7 @@ pub const SplitResizeDirection = Binding.Action.SplitResizeDirection;
 // in theory for XKB too on Linux but we don't need it right now.
 pub const Keymap = switch (builtin.os.tag) {
     .macos => @import("input/KeymapDarwin.zig"),
-    else => struct {},
+    else => @import("input/KeymapNoop.zig"),
 };
 
 test {

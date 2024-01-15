@@ -11,7 +11,7 @@ class TerminalManager {
         let closePublisher: AnyCancellable
     }
     
-    let ghostty: Ghostty.AppState
+    let ghostty: Ghostty.App
     
     /// The currently focused surface of the main window.
     var focusedSurface: Ghostty.SurfaceView? { mainWindow?.controller.focusedSurface }
@@ -37,7 +37,7 @@ class TerminalManager {
         return windows.last
     }
     
-    init(_ ghostty: Ghostty.AppState) {
+    init(_ ghostty: Ghostty.App) {
         self.ghostty = ghostty
         
         let center = NotificationCenter.default
@@ -66,7 +66,7 @@ class TerminalManager {
         let window = c.window!
         
         // We want to go fullscreen if we're configured for new windows to go fullscreen
-        var toggleFullScreen = ghostty.windowFullscreen
+        var toggleFullScreen = ghostty.config.windowFullscreen
         
         // If the previous focused window prior to creating this window is fullscreen,
         // then this window also becomes fullscreen.
@@ -130,7 +130,7 @@ class TerminalManager {
         controller.showWindow(self)
         
         // Add the window to the tab group and show it.
-        switch ghostty.windowNewTabPosition {
+        switch ghostty.config.windowNewTabPosition {
         case "end":
             // If we already have a tab group and we want the new tab to open at the end,
             // then we use the last window in the tab group as the parent.

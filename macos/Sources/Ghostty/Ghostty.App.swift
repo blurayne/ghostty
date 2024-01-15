@@ -2,51 +2,36 @@ import SwiftUI
 import UserNotifications
 import GhosttyKit
 
-protocol GhosttyAppStateDelegate: AnyObject {
+protocol GhosttyAppDelegate: AnyObject {
     /// Called when the configuration did finish reloading.
-    func configDidReload(_ state: Ghostty.AppState)
+    func configDidReload(_ app: Ghostty.App)
     
+    #if os(macOS)
     /// Called when a callback needs access to a specific surface. This should return nil
     /// when the surface is no longer valid.
     func findSurface(forUUID uuid: UUID) -> Ghostty.SurfaceView?
+    #endif
 }
 
 extension Ghostty {
-    enum AppReadiness {
-        case loading, error, ready
-    }
-
-    enum FontSizeModification {
-        case increase(Int)
-        case decrease(Int)
-        case reset
-    }
-
-    struct Info {
-        var mode: ghostty_build_mode_e
-        var version: String
-    }
-
-    /// The AppState is the global state that is associated with the Swift app. This handles initially
-    /// initializing Ghostty, loading the configuration, etc.
-    class AppState: ObservableObject {
-        /// The readiness value of the state.
-        @Published var readiness: AppReadiness = .loading
-
-        /// Optional delegate
-        weak var delegate: GhosttyAppStateDelegate?
-
-        /// The ghostty global configuration. This should only be changed when it is definitely
-        /// safe to change. It is definite safe to change only when the embedded app runtime
-        /// in Ghostty says so (usually, only in a reload configuration callback).
-        @Published var config: ghostty_config_t? = nil {
-            didSet {
-                // Free the old value whenever we change
-                guard let old = oldValue else { return }
-                ghostty_config_free(old)
-            }
+    // IMPORTANT: THIS IS NOT DONE.
+    // This is a refactor/redo of Ghostty.AppState so that it supports both macOS and iOS
+    class App: ObservableObject {
+        enum Readiness: String {
+            case loading, error, ready
         }
-
+        
+        /// Optional delegate
+        weak var delegate: GhosttyAppDelegate?
+        
+        /// The readiness value of the state.
+        @Published var readiness: Readiness = .loading
+        
+        /// The global app configuration. This defines the app level configuration plus any behavior
+        /// for new windows, tabs, etc. Note that when creating a new window, it may inherit some
+        /// configuration (i.e. font size) from the previously focused window. This would override this.
+        private(set) var config: Config
+        
         /// The ghostty app instance. We only have one of these for the entire app, although I guess
         /// in theory you can have multiple... I don't know why you would...
         @Published var app: ghostty_app_t? = nil {
@@ -55,253 +40,118 @@ extension Ghostty {
                 ghostty_app_free(old)
             }
         }
-
-        /// True if we should quit when the last window is closed.
-        var shouldQuitAfterLastWindowClosed: Bool {
-            guard let config = self.config else { return true }
-            var v = false;
-            let key = "quit-after-last-window-closed"
-            _ = ghostty_config_get(config, &v, key, UInt(key.count))
-            return v
-        }
-        
-        /// window-colorspace
-        var windowColorspace: String {
-            guard let config = self.config else { return "" }
-            var v: UnsafePointer<Int8>? = nil
-            let key = "window-colorspace"
-            guard ghostty_config_get(config, &v, key, UInt(key.count)) else { return "" }
-            guard let ptr = v else { return "" }
-            return String(cString: ptr)
-        }
-        
-        /// window-save-state
-        var windowSaveState: String {
-            guard let config = self.config else { return "" }
-            var v: UnsafePointer<Int8>? = nil
-            let key = "window-save-state"
-            guard ghostty_config_get(config, &v, key, UInt(key.count)) else { return "" }
-            guard let ptr = v else { return "" }
-            return String(cString: ptr)
-        }
-
-        /// window-new-tab-position
-        var windowNewTabPosition: String {
-            guard let config = self.config else { return "" }
-            var v: UnsafePointer<Int8>? = nil
-            let key = "window-new-tab-position"
-            guard ghostty_config_get(config, &v, key, UInt(key.count)) else { return "" }
-            guard let ptr = v else { return "" }
-            return String(cString: ptr)
-        }
         
         /// True if we need to confirm before quitting.
         var needsConfirmQuit: Bool {
             guard let app = app else { return false }
             return ghostty_app_needs_confirm_quit(app)
         }
-
-        /// Build information
-        var info: Info {
-            let raw = ghostty_info()
-            let version = NSString(
-                bytes: raw.version,
-                length: Int(raw.version_len),
-                encoding: NSUTF8StringEncoding
-            ) ?? "unknown"
-
-            return Info(mode: raw.build_mode, version: String(version))
-        }
-
-        /// True if we want to render window decorations
-        var windowDecorations: Bool {
-            guard let config = self.config else { return true }
-            var v = false;
-            let key = "window-decoration"
-            _ = ghostty_config_get(config, &v, key, UInt(key.count))
-            return v;
-        }
-        
-        /// The window theme as a string.
-        var windowTheme: String? {
-            guard let config = self.config else { return nil }
-            var v: UnsafePointer<Int8>? = nil
-            let key = "window-theme"
-            guard ghostty_config_get(config, &v, key, UInt(key.count)) else { return nil }
-            guard let ptr = v else { return nil }
-            return String(cString: ptr)
-        }
-        
-        /// Whether to resize windows in discrete steps or use "fluid" resizing
-        var windowStepResize: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "window-step-resize"
-            _ = ghostty_config_get(config, &v, key, UInt(key.count))
-            return v
-        }
-        
-        /// Whether to open new windows in fullscreen.
-        var windowFullscreen: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "fullscreen"
-            _ = ghostty_config_get(config, &v, key, UInt(key.count))
-            return v
-        }
-
-        /// The background opacity.
-        var backgroundOpacity: Double {
-            guard let config = self.config else { return 1 }
-            var v: Double = 1
-            let key = "background-opacity"
-            _ = ghostty_config_get(config, &v, key, UInt(key.count))
-            return v;
-        }
         
         init() {
             // Initialize ghostty global state. This happens once per process.
-            guard ghostty_init() == GHOSTTY_SUCCESS else {
-                AppDelegate.logger.critical("ghostty_init failed")
+            if ghostty_init() != GHOSTTY_SUCCESS {
+                logger.critical("ghostty_init failed, weird things may happen")
                 readiness = .error
-                return
             }
 
             // Initialize the global configuration.
-            guard let cfg = Self.loadConfig() else {
+            self.config = Config()
+            if self.config.config == nil {
                 readiness = .error
                 return
             }
-            self.config = cfg;
-
+            
             // Create our "runtime" config. The "runtime" is the configuration that ghostty
             // uses to interface with the application runtime environment.
             var runtime_cfg = ghostty_runtime_config_s(
                 userdata: Unmanaged.passUnretained(self).toOpaque(),
                 supports_selection_clipboard: false,
-                wakeup_cb: { userdata in AppState.wakeup(userdata) },
-                reload_config_cb: { userdata in AppState.reloadConfig(userdata) },
-                open_config_cb: { userdata in AppState.openConfig(userdata) },
-                set_title_cb: { userdata, title in AppState.setTitle(userdata, title: title) },
-                set_mouse_shape_cb: { userdata, shape in AppState.setMouseShape(userdata, shape: shape) },
-                set_mouse_visibility_cb: { userdata, visible in AppState.setMouseVisibility(userdata, visible: visible) },
-                read_clipboard_cb: { userdata, loc, state in AppState.readClipboard(userdata, location: loc, state: state) },
-                confirm_read_clipboard_cb: { userdata, str, state, request in AppState.confirmReadClipboard(userdata, string: str, state: state, request: request ) },
-                write_clipboard_cb: { userdata, str, loc, confirm in AppState.writeClipboard(userdata, string: str, location: loc, confirm: confirm) },
-                new_split_cb: { userdata, direction, surfaceConfig in AppState.newSplit(userdata, direction: direction, config: surfaceConfig) },
-                new_tab_cb: { userdata, surfaceConfig in AppState.newTab(userdata, config: surfaceConfig) },
-                new_window_cb: { userdata, surfaceConfig in AppState.newWindow(userdata, config: surfaceConfig) },
-                control_inspector_cb: { userdata, mode in AppState.controlInspector(userdata, mode: mode) },
-                close_surface_cb: { userdata, processAlive in AppState.closeSurface(userdata, processAlive: processAlive) },
-                focus_split_cb: { userdata, direction in AppState.focusSplit(userdata, direction: direction) },
+                wakeup_cb: { userdata in App.wakeup(userdata) },
+                reload_config_cb: { userdata in App.reloadConfig(userdata) },
+                open_config_cb: { userdata in App.openConfig(userdata) },
+                set_title_cb: { userdata, title in App.setTitle(userdata, title: title) },
+                set_mouse_shape_cb: { userdata, shape in App.setMouseShape(userdata, shape: shape) },
+                set_mouse_visibility_cb: { userdata, visible in App.setMouseVisibility(userdata, visible: visible) },
+                read_clipboard_cb: { userdata, loc, state in App.readClipboard(userdata, location: loc, state: state) },
+                confirm_read_clipboard_cb: { userdata, str, state, request in App.confirmReadClipboard(userdata, string: str, state: state, request: request ) },
+                write_clipboard_cb: { userdata, str, loc, confirm in App.writeClipboard(userdata, string: str, location: loc, confirm: confirm) },
+                new_split_cb: { userdata, direction, surfaceConfig in App.newSplit(userdata, direction: direction, config: surfaceConfig) },
+                new_tab_cb: { userdata, surfaceConfig in App.newTab(userdata, config: surfaceConfig) },
+                new_window_cb: { userdata, surfaceConfig in App.newWindow(userdata, config: surfaceConfig) },
+                control_inspector_cb: { userdata, mode in App.controlInspector(userdata, mode: mode) },
+                close_surface_cb: { userdata, processAlive in App.closeSurface(userdata, processAlive: processAlive) },
+                focus_split_cb: { userdata, direction in App.focusSplit(userdata, direction: direction) },
                 resize_split_cb: { userdata, direction, amount in
-                    AppState.resizeSplit(userdata, direction: direction, amount: amount) },
+                    App.resizeSplit(userdata, direction: direction, amount: amount) },
                 equalize_splits_cb: { userdata in
-                    AppState.equalizeSplits(userdata) },
-                toggle_split_zoom_cb: { userdata in AppState.toggleSplitZoom(userdata) },
-                goto_tab_cb: { userdata, n in AppState.gotoTab(userdata, n: n) },
-                toggle_fullscreen_cb: { userdata, nonNativeFullscreen in AppState.toggleFullscreen(userdata, nonNativeFullscreen: nonNativeFullscreen) },
-                set_initial_window_size_cb: { userdata, width, height in AppState.setInitialWindowSize(userdata, width: width, height: height) },
-                render_inspector_cb: { userdata in AppState.renderInspector(userdata) },
-                set_cell_size_cb: { userdata, width, height in AppState.setCellSize(userdata, width: width, height: height) },
+                    App.equalizeSplits(userdata) },
+                toggle_split_zoom_cb: { userdata in App.toggleSplitZoom(userdata) },
+                goto_tab_cb: { userdata, n in App.gotoTab(userdata, n: n) },
+                toggle_fullscreen_cb: { userdata, nonNativeFullscreen in App.toggleFullscreen(userdata, nonNativeFullscreen: nonNativeFullscreen) },
+                set_initial_window_size_cb: { userdata, width, height in App.setInitialWindowSize(userdata, width: width, height: height) },
+                render_inspector_cb: { userdata in App.renderInspector(userdata) },
+                set_cell_size_cb: { userdata, width, height in App.setCellSize(userdata, width: width, height: height) },
                 show_desktop_notification_cb: { userdata, title, body in
-                    AppState.showUserNotification(userdata, title: title, body: body)
+                    App.showUserNotification(userdata, title: title, body: body)
                 }
             )
-
+            
             // Create the ghostty app.
-            guard let app = ghostty_app_new(&runtime_cfg, cfg) else {
-                AppDelegate.logger.critical("ghostty_app_new failed")
+            guard let app = ghostty_app_new(&runtime_cfg, config.config) else {
+                logger.critical("ghostty_app_new failed")
                 readiness = .error
                 return
             }
             self.app = app
-
+            
+            #if os(macOS)
             // Subscribe to notifications for keyboard layout change so that we can update Ghostty.
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(self.keyboardSelectionDidChange(notification:)),
                 name: NSTextInputContext.keyboardSelectionDidChangeNotification,
                 object: nil)
-
+            #endif
+            
             self.readiness = .ready
         }
-
+        
         deinit {
             // This will force the didSet callbacks to run which free.
             self.app = nil
-            self.config = nil
-
+            
+            #if os(macOS)
             // Remove our observer
             NotificationCenter.default.removeObserver(
                 self,
                 name: NSTextInputContext.keyboardSelectionDidChangeNotification,
                 object: nil)
+            #endif
         }
-
-        /// Initializes a new configuration and loads all the values.
-        static func loadConfig() -> ghostty_config_t? {
-            // Initialize the global configuration.
-            guard let cfg = ghostty_config_new() else {
-                AppDelegate.logger.critical("ghostty_config_new failed")
-                return nil
-            }
-
-            // Load our configuration files from the home directory.
-            ghostty_config_load_default_files(cfg);
-            ghostty_config_load_cli_args(cfg);
-            ghostty_config_load_recursive_files(cfg);
-
-            // TODO: we'd probably do some config loading here... for now we'd
-            // have to do this synchronously. When we support config updating we can do
-            // this async and update later.
-
-            // Finalize will make our defaults available.
-            ghostty_config_finalize(cfg)
-
-            // Log any configuration errors. These will be automatically shown in a
-            // pop-up window too.
-            let errCount = ghostty_config_errors_count(cfg)
-            if errCount > 0 {
-                AppDelegate.logger.warning("config error: \(errCount) configuration errors on reload")
-                var errors: [String] = [];
-                for i in 0..<errCount {
-                    let err = ghostty_config_get_error(cfg, UInt32(i))
-                    let message = String(cString: err.message)
-                    errors.append(message)
-                    AppDelegate.logger.warning("config error: \(message)")
-                }
-            }
-
-            return cfg
-        }
-
-        /// Returns the configuration errors (if any).
-        func configErrors() -> [String] {
-            guard let cfg = self.config else { return [] }
-
-            var errors: [String] = [];
-            let errCount = ghostty_config_errors_count(cfg)
-            for i in 0..<errCount {
-                let err = ghostty_config_get_error(cfg, UInt32(i))
-                let message = String(cString: err.message)
-                errors.append(message)
-            }
-
-            return errors
-        }
-
+        
+        // MARK: App Operations
+        
         func appTick() {
             guard let app = self.app else { return }
 
             // Tick our app, which lets us know if we want to quit
             let exit = ghostty_app_tick(app)
             if (!exit) { return }
+            
+            // On iOS, applications do not terminate programmatically like they do
+            // on macOS. On iOS, applications are only terminated when a user physically
+            // closes the application (i.e. going to the home screen). If we request
+            // exit on iOS we ignore it.
+            #if os(iOS)
+            logger.info("quit request received, ignoring on iOS")
+            #endif
 
+            #if os(macOS)
             // We want to quit, start that process
             NSApplication.shared.terminate(nil)
+            #endif
         }
-
+        
         func openConfig() {
             guard let app = self.app else { return }
             ghostty_app_open_config(app)
@@ -311,7 +161,7 @@ extension Ghostty {
             guard let app = self.app else { return }
             ghostty_app_reload_config(app)
         }
-
+        
         /// Request that the given surface is closed. This will trigger the full normal surface close event
         /// cycle which will call our close surface callback.
         func requestClose(surface: ghostty_surface_t) {
@@ -321,14 +171,14 @@ extension Ghostty {
         func newTab(surface: ghostty_surface_t) {
             let action = "new_tab"
             if (!ghostty_surface_binding_action(surface, action, UInt(action.count))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                logger.warning("action failed action=\(action)")
             }
         }
 
         func newWindow(surface: ghostty_surface_t) {
             let action = "new_window"
             if (!ghostty_surface_binding_action(surface, action, UInt(action.count))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                logger.warning("action failed action=\(action)")
             }
         }
 
@@ -351,15 +201,21 @@ extension Ghostty {
         func splitToggleZoom(surface: ghostty_surface_t) {
             let action = "toggle_split_zoom"
             if (!ghostty_surface_binding_action(surface, action, UInt(action.count))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                logger.warning("action failed action=\(action)")
             }
         }
         
         func toggleFullscreen(surface: ghostty_surface_t) {
             let action = "toggle_fullscreen"
             if (!ghostty_surface_binding_action(surface, action, UInt(action.count))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                logger.warning("action failed action=\(action)")
             }
+        }
+        
+        enum FontSizeModification {
+            case increase(Int)
+            case decrease(Int)
+            case reset
         }
 
         func changeFontSize(surface: ghostty_surface_t, _ change: FontSizeModification) {
@@ -373,25 +229,80 @@ extension Ghostty {
                 action = "reset_font_size"
             }
             if (!ghostty_surface_binding_action(surface, action, UInt(action.count))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                logger.warning("action failed action=\(action)")
             }
         }
         
         func toggleTerminalInspector(surface: ghostty_surface_t) {
             let action = "inspector:toggle"
             if (!ghostty_surface_binding_action(surface, action, UInt(action.count))) {
-                AppDelegate.logger.warning("action failed action=\(action)")
+                logger.warning("action failed action=\(action)")
             }
         }
-
+        
+        #if os(iOS)
+        // MARK: Ghostty Callbacks (iOS)
+        
+        static func wakeup(_ userdata: UnsafeMutableRawPointer?) {}
+        static func reloadConfig(_ userdata: UnsafeMutableRawPointer?) -> ghostty_config_t? { return nil }
+        static func openConfig(_ userdata: UnsafeMutableRawPointer?) {}
+        static func setTitle(_ userdata: UnsafeMutableRawPointer?, title: UnsafePointer<CChar>?) {}
+        static func setMouseShape(_ userdata: UnsafeMutableRawPointer?, shape: ghostty_mouse_shape_e) {}
+        static func setMouseVisibility(_ userdata: UnsafeMutableRawPointer?, visible: Bool) {}
+        static func readClipboard(
+            _ userdata: UnsafeMutableRawPointer?,
+            location: ghostty_clipboard_e,
+            state: UnsafeMutableRawPointer?
+        ) {}
+        
+        static func confirmReadClipboard(
+            _ userdata: UnsafeMutableRawPointer?,
+            string: UnsafePointer<CChar>?,
+            state: UnsafeMutableRawPointer?,
+            request: ghostty_clipboard_request_e
+        ) {}
+        
+        static func writeClipboard(
+            _ userdata: UnsafeMutableRawPointer?,
+            string: UnsafePointer<CChar>?,
+            location: ghostty_clipboard_e,
+            confirm: Bool
+        ) {}
+        
+        static func newSplit(
+            _ userdata: UnsafeMutableRawPointer?,
+            direction: ghostty_split_direction_e, 
+            config: ghostty_surface_config_s
+        ) {}
+        
+        static func newTab(_ userdata: UnsafeMutableRawPointer?, config: ghostty_surface_config_s) {}
+        static func newWindow(_ userdata: UnsafeMutableRawPointer?, config: ghostty_surface_config_s) {}
+        static func controlInspector(_ userdata: UnsafeMutableRawPointer?, mode: ghostty_inspector_mode_e) {}
+        static func closeSurface(_ userdata: UnsafeMutableRawPointer?, processAlive: Bool) {}
+        static func focusSplit(_ userdata: UnsafeMutableRawPointer?, direction: ghostty_split_focus_direction_e) {}
+        static func resizeSplit(_ userdata: UnsafeMutableRawPointer?, direction: ghostty_split_resize_direction_e, amount: UInt16) {}
+        static func equalizeSplits(_ userdata: UnsafeMutableRawPointer?) {}
+        static func toggleSplitZoom(_ userdata: UnsafeMutableRawPointer?) {}
+        static func gotoTab(_ userdata: UnsafeMutableRawPointer?, n: Int32) {}
+        static func toggleFullscreen(_ userdata: UnsafeMutableRawPointer?, nonNativeFullscreen: ghostty_non_native_fullscreen_e) {}
+        static func setInitialWindowSize(_ userdata: UnsafeMutableRawPointer?, width: UInt32, height: UInt32) {}
+        static func renderInspector(_ userdata: UnsafeMutableRawPointer?) {}
+        static func setCellSize(_ userdata: UnsafeMutableRawPointer?, width: UInt32, height: UInt32) {}
+        static func showUserNotification(_ userdata: UnsafeMutableRawPointer?, title: UnsafePointer<CChar>?, body: UnsafePointer<CChar>?) {}
+        #endif
+        
+        #if os(macOS)
+        
+        // MARK: Notifications
+        
         // Called when the selected keyboard changes. We have to notify Ghostty so that
         // it can reload the keyboard mapping for input.
         @objc private func keyboardSelectionDidChange(notification: NSNotification) {
             guard let app = self.app else { return }
             ghostty_app_keyboard_changed(app)
         }
-
-        // MARK: Ghostty Callbacks
+        
+        // MARK: Ghostty Callbacks (macOS)
 
         static func newSplit(_ userdata: UnsafeMutableRawPointer?, direction: ghostty_split_direction_e, config: ghostty_surface_config_s) {
             let surface = self.surfaceUserdata(from: userdata)
@@ -534,14 +445,15 @@ extension Ghostty {
         }
 
         static func reloadConfig(_ userdata: UnsafeMutableRawPointer?) -> ghostty_config_t? {
-            guard let newConfig = Self.loadConfig() else {
+            let newConfig = Config()
+            guard newConfig.loaded else {
                 AppDelegate.logger.warning("failed to reload configuration")
                 return nil
             }
 
             // Assign the new config. This will automatically free the old config.
             // It is safe to free the old config from within this function call.
-            let state = Unmanaged<AppState>.fromOpaque(userdata!).takeUnretainedValue()
+            let state = Unmanaged<Self>.fromOpaque(userdata!).takeUnretainedValue()
             state.config = newConfig
 
             // If we have a delegate, notify.
@@ -549,11 +461,11 @@ extension Ghostty {
                 delegate.configDidReload(state)
             }
 
-            return newConfig
+            return newConfig.config
         }
 
         static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
-            let state = Unmanaged<AppState>.fromOpaque(userdata!).takeUnretainedValue()
+            let state = Unmanaged<App>.fromOpaque(userdata!).takeUnretainedValue()
 
             // Wakeup can be called from any thread so we schedule the app tick
             // from the main thread. There is probably some improvements we can make
@@ -662,7 +574,7 @@ extension Ghostty {
             let surface = self.surfaceUserdata(from: userdata)
             
             guard let appState = self.appState(fromView: surface) else { return }
-            guard appState.windowDecorations else {
+            guard appState.config.windowDecorations else {
                 let alert = NSAlert()
                 alert.messageText = "Tabs are disabled"
                 alert.informativeText = "Enable window decorations to use tabs"
@@ -701,16 +613,18 @@ extension Ghostty {
         }
 
         /// Returns the GhosttyState from the given userdata value.
-        static private func appState(fromView view: SurfaceView) -> AppState? {
+        static private func appState(fromView view: SurfaceView) -> App? {
             guard let surface = view.surface else { return nil }
             guard let app = ghostty_surface_app(surface) else { return nil }
             guard let app_ud = ghostty_app_userdata(app) else { return nil }
-            return Unmanaged<AppState>.fromOpaque(app_ud).takeUnretainedValue()
+            return Unmanaged<App>.fromOpaque(app_ud).takeUnretainedValue()
         }
 
         /// Returns the surface view from the userdata.
         static private func surfaceUserdata(from userdata: UnsafeMutableRawPointer?) -> SurfaceView {
             return Unmanaged<SurfaceView>.fromOpaque(userdata!).takeUnretainedValue()
         }
+        
+        #endif
     }
 }
