@@ -90,6 +90,15 @@ jobs:
       - name: Build Ghostty.app
         run: cd macos && xcodebuild -target Ghostty
 
+      # Build the iOS target. This requires a team ID and we can reuse our
+      # release team ID. This doesn't upload anything so that's okay.
+      - name: Build Ghostty iOS
+        env:
+          PROD_MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
+        run: |
+          cd macos
+          xcodebuild -target Ghostty-iOS "DEVELOPMENT_TEAM=$PROD_MACOS_NOTARIZATION_TEAM_ID"
+
   build-windows:
     runs-on: windows-2019
     # this will not stop other jobs from running
