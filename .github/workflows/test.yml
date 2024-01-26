@@ -10,8 +10,10 @@ jobs:
         target: [
             aarch64-linux,
             x86_64-linux,
-            x86-windows-gnu,
-            x86_64-windows-gnu,
+            # Temporarily disabled since Zig 0.12.0-dev.2341+92211135f
+            # has a regression preventing windows builds.
+            # x86-windows-gnu,
+            # x86_64-windows-gnu,
             # We don't support cross-compiling to macOS because the macOS build
             # requires xcode due to the swift harness.
             #aarch64-macos,
