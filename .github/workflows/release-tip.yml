@@ -10,7 +10,7 @@ name: Release Tip
 
 jobs:
   tag:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ghostty-sm
     needs: [build-macos]
     steps:
       - uses: actions/checkout@v4
