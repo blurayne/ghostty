@@ -2,7 +2,7 @@ on: [push, pull_request]
 name: Nix
 jobs:
   check-zig-cache-hash:
-    runs-on: ubuntu-latest
+    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-sm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
