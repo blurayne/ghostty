@@ -5,7 +5,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-sm"]
+        os: ["ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-md"]
 
         target: [
             aarch64-linux,
@@ -41,7 +41,7 @@ jobs:
         run: nix develop -c zig build -Dstatic=true -Dapp-runtime=glfw -Dtarget=${{ matrix.target }}
 
   build-linux-libghostty:
-    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-sm
+    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-md
     needs: test
     steps:
       - name: Checkout code
@@ -60,7 +60,7 @@ jobs:
         run: nix develop -c zig build -Dapp-runtime=none
 
   build-nix:
-    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-sm
+    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-md
     needs: test
     steps:
       - name: Checkout code
@@ -183,7 +183,7 @@ jobs:
         run: Get-Content -Path ".\build.log"
 
   test:
-    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-sm
+    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-md
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
