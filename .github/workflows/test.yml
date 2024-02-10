@@ -210,7 +210,7 @@ jobs:
         run: nix develop -c zig build -Dstatic=false
 
   prettier:
-    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-sm
+    runs-on: namespace-profile-default
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - uses: cachix/install-nix-action@v24
@@ -224,7 +224,7 @@ jobs:
         run: nix develop -c prettier --check .
 
   alejandra:
-    runs-on: ghcr.io/cirruslabs/ubuntu-runner-amd64:22.04-sm
+    runs-on: namespace-profile-default
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - uses: cachix/install-nix-action@v24
