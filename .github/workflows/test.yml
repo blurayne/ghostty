@@ -41,7 +41,8 @@ jobs:
         run: nix develop -c zig build -Dstatic=true -Dapp-runtime=glfw -Dtarget=${{ matrix.target }}
 
   build-bench:
-    runs-on: namespace-profile-ghostty-md
+    # We build benchmarks on large because it uses ReleaseFast
+    runs-on: namespace-profile-ghostty-lg
     needs: test
     steps:
       - name: Checkout code
