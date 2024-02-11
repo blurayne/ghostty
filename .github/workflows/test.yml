@@ -231,6 +231,7 @@ jobs:
 
   prettier:
     runs-on: namespace-profile-ghostty-sm
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - uses: cachix/install-nix-action@v24
@@ -247,6 +248,7 @@ jobs:
 
   alejandra:
     runs-on: namespace-profile-ghostty-sm
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - uses: cachix/install-nix-action@v24
