@@ -14,5 +14,6 @@ jobs:
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          useDaemon: false # sometimes fails on short jobs
       - name: Check Zig cache hash
         run: nix develop -c ./nix/build-support/check-zig-cache-hash.sh

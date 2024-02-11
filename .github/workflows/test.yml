@@ -220,6 +220,8 @@ jobs:
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipPush: true
+          useDaemon: false # sometimes fails on short jobs
       - name: prettier check
         run: nix develop -c prettier --check .
 
@@ -234,5 +236,7 @@ jobs:
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipPush: true
+          useDaemon: false # sometimes fails on short jobs
       - name: alejandra check
         run: nix develop -c alejandra --check .
