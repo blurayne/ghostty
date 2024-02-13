@@ -7,7 +7,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.0
+        uses: namespacelabs/nscloud-cache-action@v1.1.1
         with:
           path: /nix
       - name: Setup Nix
