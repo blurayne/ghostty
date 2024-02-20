@@ -92,7 +92,11 @@ jobs:
         run: nix develop -c zig build -Dapp-runtime=none
 
   build-nix:
-    runs-on: namespace-profile-ghostty-md
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [namespace-profile-ghostty-md, namespace-profile-ghostty-md-arm64]
+    runs-on: ${{ matrix.os }}
     needs: test
     steps:
       - name: Checkout code
