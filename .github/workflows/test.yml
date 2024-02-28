@@ -28,7 +28,7 @@ jobs:
 
       # Install Nix and use that to run our tests so our environment matches exactly.
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.1
+        uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
           path: /nix
       - uses: cachix/install-nix-action@v24
@@ -54,7 +54,7 @@ jobs:
 
       # Install Nix and use that to run our tests so our environment matches exactly.
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.1
+        uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
           path: /nix
       - uses: cachix/install-nix-action@v24
@@ -77,7 +77,7 @@ jobs:
 
       # Install Nix and use that to run our tests so our environment matches exactly.
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.1
+        uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
           path: /nix
       - uses: cachix/install-nix-action@v24
@@ -104,7 +104,7 @@ jobs:
 
       # Install Nix and use that to run our tests so our environment matches exactly.
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.1
+        uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
           path: /nix
       - uses: cachix/install-nix-action@v24
@@ -230,7 +230,7 @@ jobs:
 
       # Install Nix and use that to run our tests so our environment matches exactly.
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.1
+        uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
           path: /nix
       - uses: cachix/install-nix-action@v24
@@ -259,7 +259,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.1
+        uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
           path: /nix
       - uses: cachix/install-nix-action@v24
@@ -280,7 +280,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Nix Cache
-        uses: namespacelabs/nscloud-cache-action@v1.1.1
+        uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
           path: /nix
       - uses: cachix/install-nix-action@v24
