@@ -3,13 +3,18 @@ name: Nix
 jobs:
   check-zig-cache-hash:
     runs-on: namespace-profile-ghostty-sm
+    env:
+      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
+      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Setup Nix Cache
+      - name: Setup Cache
         uses: namespacelabs/nscloud-cache-action@v1.1.2
         with:
-          path: /nix
+          path: |
+            /nix
+            /zig
       - name: Setup Nix
         uses: cachix/install-nix-action@v24
         with:
