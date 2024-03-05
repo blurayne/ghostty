@@ -64,15 +64,6 @@ jobs:
           unzip sparkle.zip
           echo "$(pwd)/bin" >> $GITHUB_PATH
 
-      # Setup our S3 client
-      - name: Setup s3cmd
-        uses: s3-actions/s3cmd@v1.5.0
-        with:
-          provider: cloudflare
-          account_id: ${{ secrets.CF_R2_TIP_ACCOUNT_ID }}
-          access_key: ${{ secrets.CF_R2_TIP_AWS_KEY }}
-          secret_key: ${{ secrets.CF_R2_TIP_SECRET_KEY }}
-
       # Load Build Number
       - name: Build Number
         run: |
@@ -193,7 +184,17 @@ jobs:
           test -f appcast_new.xml
 
       # Update Blob Storage
-      - name: Upload to Blob Storage
+      - name: Prep Blob Storage
         run: |
-          s3cmd put ghostty-macos-universal.zip s3://ghostty-tip/${GHOSTTY_BUILD}/ghostty-macos-universal.zip
-          s3cmd put appcast_new.xml s3://ghostty-tip/appcast.xml
+          mkdir blob
+          mkdir -p blob/${GHOSTTY_BUILD}
+          cp ghostty-macos-universal.zip blob/${GHOSTTY_BUILD}/ghostty-macos-universal.zip
+          cp appcast_new.xml blob/appcast.xml
+      - uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.CF_R2_TIP_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.CF_R2_TIP_AWS_KEY }}
+          r2-secret-access-key: ${{ secrets.CF_R2_TIP_SECRET_KEY }}
+          r2-bucket: ghostty-tip
+          source-dir: blob
+          destination-dir: ./
