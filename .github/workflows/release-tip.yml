@@ -44,13 +44,10 @@ jobs:
           # Important so that build number generation works
           fetch-depth: 0
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: auto
-          aws-access-key-id: ${{ secrets.CF_R2_TIP_AWS_KEY }}
-          aws-secret-access-key: ${{ secrets.CF_R2_TIP_AWS_KEY }}
       - name: Test List
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_TIP_AWS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_TIP_AWS_KEY }}
         run: |
           aws s3api list-objects-v2 --endpoint-url https://${{ secrets.CF_R2_TIP_ACCOUNT_ID }}.r2.cloudflarestorage.com --bucket ghostty-tip
 
