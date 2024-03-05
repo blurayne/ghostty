@@ -32,8 +32,11 @@ jobs:
         )
       }}
 
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: ghcr.io/cirruslabs/macos-ventura-xcode:latest
     timeout-minutes: 90
+    env:
+      # Needed for macos SDK
+      AGREE: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
