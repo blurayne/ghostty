@@ -8,7 +8,7 @@ name: Release PR
 
 jobs:
   build-macos:
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: ghcr.io/cirruslabs/macos-ventura-xcode:latest
     timeout-minutes: 90
     steps:
       - name: Checkout code
