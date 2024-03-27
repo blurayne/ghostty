@@ -334,6 +334,17 @@ jobs:
       - name: Zip App
         run: cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal-debug.zip Ghostty.app
 
+      # Update Release
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 'Ghostty Tip ("Nightly")'
+          prerelease: true
+          tag_name: tip
+          target_commitish: ${{ github.sha }}
+          files: ghostty-macos-universal-debug.zip
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
+
       # Update Blob Storage
       - name: Prep R2 Storage
         run: |
