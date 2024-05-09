@@ -173,19 +173,6 @@ jobs:
           xcodebuild -target Ghostty-iOS "CODE_SIGNING_ALLOWED=NO"
 
   build-macos-matrix:
-    strategy:
-      fail-fast: false
-      matrix:
-        renderer: [opengl, metal]
-
-        font_backend:
-          [
-            freetype,
-            coretext,
-            coretext_freetype,
-            coretext_harfbuzz,
-            coretext_noshape,
-          ]
     runs-on: namespace-profile-ghostty-macos
     needs: test
     steps:
@@ -201,11 +188,35 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: Test
-        run: nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=${{ matrix.renderer }} -Dfont-backend=${{ matrix.font_backend }}
+      - name: Test All
+        run: |
+          # OpenGL
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
 
-      - name: Build
-        run: nix develop -c zig build -Dapp-runtime=glfw -Drenderer=${{ matrix.renderer }} -Dfont-backend=${{ matrix.font_backend }}
+          # Metal
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
+
+      - name: Build All
+        run: |
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
+
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
 
   build-windows:
     runs-on: windows-2019
