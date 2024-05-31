@@ -27,7 +27,7 @@ jobs:
         github.event_name == 'workflow_dispatch' ||
         (
           github.event.workflow_run.conclusion == 'success' &&
-          github.repository_owner == 'mitchellh' &&
+          github.repository_owner == 'ghostty-org' &&
           github.ref_name == 'main'
         )
       }}
@@ -203,7 +203,7 @@ jobs:
         github.event_name == 'workflow_dispatch' ||
         (
           github.event.workflow_run.conclusion == 'success' &&
-          github.repository_owner == 'mitchellh' &&
+          github.repository_owner == 'ghostty-org' &&
           github.ref_name == 'main'
         )
       }}
