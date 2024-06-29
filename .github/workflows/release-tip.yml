@@ -53,7 +53,7 @@ jobs:
       # Setup Sparkle
       - name: Setup Sparkle
         env:
-          SPARKLE_VERSION: 2.5.1
+          SPARKLE_VERSION: 2.6.3
         run: |
           mkdir -p .action/sparkle
           cd .action/sparkle
