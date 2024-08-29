@@ -7,6 +7,48 @@ on:
 name: Release PR
 
 jobs:
+  sentry-dsym-debug:
+    runs-on: namespace-profile-ghostty-sm
+    needs: [build-macos-debug]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sentry-cli
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+
+      - name: Download dSYM
+        run: |
+          GHOSTTY_COMMIT_LONG=$(git rev-parse HEAD)
+          curl -L https://pr.files.ghostty.dev/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal-debug-dsym.zip > dsym.zip
+
+      - name: Upload dSYM to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          sentry-cli dif upload --project ghostty --wait dsym.zip
+
+  sentry-dsym:
+    runs-on: namespace-profile-ghostty-sm
+    needs: [build-macos]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install sentry-cli
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+
+      - name: Download dSYM
+        run: |
+          GHOSTTY_COMMIT_LONG=$(git rev-parse HEAD)
+          curl -L https://pr.files.ghostty.dev/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal-dsym.zip > dsym.zip
+
+      - name: Upload dSYM to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          sentry-cli dif upload --project ghostty --wait dsym.zip
+
   build-macos:
     runs-on: namespace-profile-ghostty-macos
     timeout-minutes: 90
@@ -42,6 +84,7 @@ jobs:
         run: |
           echo "GHOSTTY_BUILD=$(git rev-list --count head)" >> $GITHUB_ENV
           echo "GHOSTTY_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "GHOSTTY_COMMIT_LONG=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access. Build this in release mode.
@@ -132,14 +175,18 @@ jobs:
 
       # Zip up the app
       - name: Zip App
-        run: cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal.zip Ghostty.app
+        run: |
+          cd macos/build/Release
+          zip -9 -r --symlinks ../../../ghostty-macos-universal.zip Ghostty.app
+          zip -9 -r --symlinks ../../../ghostty-macos-universal-dsym.zip Ghostty.app.dSYM/
 
       # Update Blob Storage
       - name: Prep R2 Storage
         run: |
           mkdir blob
-          mkdir -p blob/${GHOSTTY_BUILD}
-          cp ghostty-macos-universal.zip blob/${GHOSTTY_BUILD}/ghostty-macos-universal.zip
+          mkdir -p blob/${GHOSTTY_COMMIT_LONG}
+          cp ghostty-macos-universal.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal.zip
+          cp ghostty-macos-universal-dsym.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal-dsym.zip
       - name: Upload to R2
         uses: ryand56/r2-upload-action@latest
         with:
@@ -185,6 +232,7 @@ jobs:
         run: |
           echo "GHOSTTY_BUILD=$(git rev-list --count head)" >> $GITHUB_ENV
           echo "GHOSTTY_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "GHOSTTY_COMMIT_LONG=$(git rev-parse HEAD)" >> $GITHUB_ENV
 
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access. Build this in release mode.
@@ -275,14 +323,18 @@ jobs:
 
       # Zip up the app
       - name: Zip App
-        run: cd macos/build/Release && zip -9 -r --symlinks ../../../ghostty-macos-universal-debug.zip Ghostty.app
+        run: |
+          cd macos/build/Release
+          zip -9 -r --symlinks ../../../ghostty-macos-universal-debug.zip Ghostty.app
+          zip -9 -r --symlinks ../../../ghostty-macos-universal-debug-dsym.zip Ghostty.app.dSYM/
 
       # Update Blob Storage
       - name: Prep R2 Storage
         run: |
           mkdir blob
-          mkdir -p blob/${GHOSTTY_BUILD}
-          cp ghostty-macos-universal-debug.zip blob/${GHOSTTY_BUILD}/ghostty-macos-universal-debug.zip
+          mkdir -p blob/${GHOSTTY_COMMIT_LONG}
+          cp ghostty-macos-universal-debug.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal-debug.zip
+          cp ghostty-macos-universal-debug-dsym.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal-debug-dsym.zip
       - name: Upload to R2
         uses: ryand56/r2-upload-action@latest
         with:
