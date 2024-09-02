@@ -2,6 +2,7 @@ on: [push, pull_request]
 name: Nix
 jobs:
   check-zig-cache-hash:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     env:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache

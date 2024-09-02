@@ -287,6 +287,7 @@ jobs:
         run: Get-Content -Path ".\build.log"
 
   test:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-md
     env:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
@@ -343,6 +344,7 @@ jobs:
         run: nix develop -c zig build test
 
   prettier:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     timeout-minutes: 60
     env:
@@ -369,6 +371,7 @@ jobs:
         run: nix develop -c prettier --check .
 
   alejandra:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     timeout-minutes: 60
     env:
@@ -395,6 +398,7 @@ jobs:
         run: nix develop -c alejandra --check .
 
   typos:
+    if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
     timeout-minutes: 60
     env:
