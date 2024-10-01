@@ -9,7 +9,6 @@ name: Test macOS Matrix
 jobs:
   build-macos-matrix:
     runs-on: namespace-profile-ghostty-macos
-    needs: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
