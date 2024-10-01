@@ -1,0 +1,54 @@
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+name: Test macOS Matrix
+
+jobs:
+  build-macos-matrix:
+    runs-on: namespace-profile-ghostty-macos
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install Nix and use that to run our tests so our environment matches exactly.
+      - uses: cachix/install-nix-action@v29
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: cachix/cachix-action@v15
+        with:
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      - name: Test All
+        run: |
+          # OpenGL
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
+
+          # Metal
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
+
+      - name: Build All
+        run: |
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
+
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
