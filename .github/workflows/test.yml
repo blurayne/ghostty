@@ -227,7 +227,7 @@ jobs:
           nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
 
   build-windows:
-    runs-on: windows-2019
+    runs-on: windows-2022
     # this will not stop other jobs from running
     continue-on-error: true
     needs: test
@@ -248,13 +248,13 @@ jobs:
           $zigVersion = [regex]::Match($fileContent, $pattern).Groups[1].Value
           Write-Output $version
           $version = "zig-windows-x86_64-$zigVersion"
-          $uri = "https://ziglang.org/builds/$version.zip"
+          $uri = "https://ziglang.org/download/$zigVersion/$version.zip"
           Invoke-WebRequest -Uri "$uri" -OutFile ".\zig-windows.zip"
           Expand-Archive -Path ".\zig-windows.zip" -DestinationPath ".\" -Force
           Remove-Item -Path ".\zig-windows.zip"
           Rename-Item -Path ".\$version" -NewName ".\zig"
           Write-Host "Zig installed."
-          ./zig/zig.exe version
+          .\zig\zig.exe version
 
       - name: Generate build testing script
         shell: pwsh
