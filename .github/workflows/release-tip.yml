@@ -112,10 +112,7 @@ jobs:
           MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
         run: |
           echo $MINISIGN_KEY > minisign.key
-          echo $MINISIGN_PASSWORD | nix develop -c \
-            minisign -S \
-            -m ghostty-source.tar.gz \
-            -s minisign.key
+          echo $MINISIGN_PASSWORD | nix develop -c minisign -S -m ghostty-source.tar.gz -s minisign.key
       - name: Update Release
         uses: softprops/action-gh-release@v2
         with:
