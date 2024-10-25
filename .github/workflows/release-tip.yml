@@ -84,6 +84,42 @@ jobs:
         run: |
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
+  source-tarball:
+    if: |
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.repository_owner == 'ghostty-org' &&
+          github.ref_name == 'main'
+        )
+      }}
+    runs-on: namespace-profile-ghostty-md
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Tarball
+        run: git archive --format=tgz -o ghostty-source.tar.gz HEAD
+      - name: Sign Tarball
+        env:
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
+        run: |
+          echo $MINISIGN_KEY > minisign.key
+          echo $MINISIGN_PASSWORD | minisign -S \
+            -m ghostty-source.tar.gz \
+            -s minisign.key
+      - name: Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 'Ghostty Tip ("Nightly")'
+          prerelease: true
+          tag_name: tip
+          target_commitish: ${{ github.sha }}
+          files: |
+            ghostty-source.tar.gz
+            ghostty-source.tar.gz.minisig
+          token: ${{ secrets.GH_RELEASE_TOKEN }}
+
   build-macos:
     if: |
       ${{

@@ -50,7 +50,7 @@ jobs:
       # Cross-compile the binary. We always use static building for this
       # because its the only way to access the headers.
       - name: Test Build
-        run: nix develop -c zig build -Dstatic=true -Dapp-runtime=glfw -Dtarget=${{ matrix.target }}
+        run: nix develop -c zig build -Dapp-runtime=glfw -Dtarget=${{ matrix.target }}
 
   build-bench:
     # We build benchmarks on large because it uses ReleaseFast
@@ -166,7 +166,7 @@ jobs:
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access.
       - name: Build GhosttyKit
-        run: nix develop -c zig build -Dstatic=true
+        run: nix develop -c zig build
 
       # The native app is built with native XCode tooling. This also does
       # codesigning. IMPORTANT: this must NOT run in a Nix environment.
@@ -332,8 +332,9 @@ jobs:
       - name: Test GLFW Build
         run: nix develop -c zig build -Dapp-runtime=glfw
 
-      - name: Test Dynamic Build
-        run: nix develop -c zig build -Dstatic=false
+      # This relies on the cache being populated by the commands above.
+      - name: Test System Build
+        run: nix develop -c zig build --system ${ZIG_GLOBAL_CACHE_DIR}/p
 
   test-macos:
     runs-on: namespace-profile-ghostty-macos
