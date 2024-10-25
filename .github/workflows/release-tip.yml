@@ -107,12 +107,10 @@ jobs:
       - name: Create Tarball
         run: git archive --format=tgz -o ghostty-source.tar.gz HEAD
       - name: Sign Tarball
-        env:
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-          MINISIGN_KEY: ${{ secrets.MINISIGN_KEY }}
         run: |
-          echo -n $MINISIGN_KEY > minisign.key
-          echo -n $MINISIGN_PASSWORD > minisign.password
+          echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
+          echo -n "${{ secrets.MINISIGN_PASSWORD }}" > minisign.password
+          ls -hal
           nix develop -c minisign -S -m ghostty-source.tar.gz -s minisign.key < minisign.password
       - name: Update Release
         uses: softprops/action-gh-release@v2
