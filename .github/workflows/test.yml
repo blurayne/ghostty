@@ -196,9 +196,6 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: XCode Select
-        run: sudo xcode-select -s /Applications/Xcode_16.0.app
-
       - name: Test All
         run: |
           # OpenGL
@@ -354,9 +351,6 @@ jobs:
         with:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
-
-      - name: XCode Select
-        run: sudo xcode-select -s /Applications/Xcode_16.0.app
 
       - name: test
         run: nix develop -c zig build test
