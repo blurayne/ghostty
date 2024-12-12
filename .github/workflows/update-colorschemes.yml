@@ -33,7 +33,7 @@ jobs:
     - name: Update zig cache hash
       run: |
         # Only proceed if build.zig.zon has changed
-        if [ "$(git status build.zig.zon --porcelain)" ]; then
+        if ! git diff --exit-code build.zig.zon; then
           nix develop -c ./nix/build-support/check-zig-cache-hash.sh --update
         fi
 
