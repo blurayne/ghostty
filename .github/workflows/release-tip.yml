@@ -297,15 +297,33 @@ jobs:
           python3 ./dist/macos/update_appcast_tip.py
           test -f appcast_new.xml
 
-      # Update Blob Storage
+      # Upload our binaries first
       - name: Prep R2 Storage
         run: |
           mkdir blob
           mkdir -p blob/${GHOSTTY_COMMIT_LONG}
           cp ghostty-macos-universal.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal.zip
           cp ghostty-macos-universal-dsym.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal-dsym.zip
-          cp appcast_new.xml blob/appcast.xml
+
       - name: Upload to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.CF_R2_TIP_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.CF_R2_TIP_AWS_KEY }}
+          r2-secret-access-key: ${{ secrets.CF_R2_TIP_SECRET_KEY }}
+          r2-bucket: ghostty-tip
+          source-dir: blob
+          destination-dir: ./
+
+      # Now upload our appcast. This ensures that the appcast never
+      # gets out of sync with the binaries.
+      - name: Prep R2 Storage for Appcast
+        run: |
+          rm -r blob
+          mkdir blob
+          cp appcast_new.xml blob/appcast.xml
+
+      - name: Upload Appcast to R2
         uses: ryand56/r2-upload-action@latest
         with:
           r2-account-id: ${{ secrets.CF_R2_TIP_ACCOUNT_ID }}
