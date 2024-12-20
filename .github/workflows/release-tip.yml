@@ -293,7 +293,7 @@ jobs:
         run: |
           echo $SPARKLE_KEY > signing.key
           sign_update -f signing.key ghostty-macos-universal.zip > sign_update.txt
-          curl -L https://tip.files.ghostty.dev/appcast.xml > appcast.xml
+          curl -L https://tip.files.ghostty.org/appcast.xml > appcast.xml
           python3 ./dist/macos/update_appcast_tip.py
           test -f appcast_new.xml
 
