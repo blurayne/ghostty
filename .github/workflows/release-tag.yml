@@ -199,7 +199,18 @@ jobs:
           # Codesign the app bundle
           /usr/bin/codesign --verbose -f -s "$MACOS_CERTIFICATE_NAME" -o runtime --entitlements "macos/Ghostty.entitlements" macos/build/Release/Ghostty.app
 
-      - name: "Notarize app bundle"
+      - name: Create DMG
+        env:
+          MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+        run: |
+          npm install --global create-dmg
+          create-dmg \
+            --identity="$MACOS_CERTIFICATE_NAME" \
+            ./macos/build/Release/Ghostty.app \
+            ./
+          mv ./Ghostty*.dmg ./Ghostty.dmg
+
+      - name: "Notarize DMG"
         env:
           PROD_MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_APPLE_ID }}
           PROD_MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
@@ -210,22 +221,18 @@ jobs:
           echo "Create keychain profile"
           xcrun notarytool store-credentials "notarytool-profile" --apple-id "$PROD_MACOS_NOTARIZATION_APPLE_ID" --team-id "$PROD_MACOS_NOTARIZATION_TEAM_ID" --password "$PROD_MACOS_NOTARIZATION_PWD"
 
-          # We can't notarize an app bundle directly, but we need to compress it as an archive.
-          # Therefore, we create a zip file containing our app bundle, so that we can send it to the
-          # notarization service
-          echo "Creating temp notarization archive"
-          ditto -c -k --keepParent "macos/build/Release/Ghostty.app" "notarization.zip"
-
           # Here we send the notarization request to the Apple's Notarization service, waiting for the result.
           # This typically takes a few seconds inside a CI environment, but it might take more depending on the App
           # characteristics. Visit the Notarization docs for more information and strategies on how to optimize it if
           # you're curious
-          echo "Notarize app"
-          xcrun notarytool submit "notarization.zip" --keychain-profile "notarytool-profile" --wait
+          echo "Notarize dmg"
+          xcrun notarytool submit "Ghostty.dmg" --keychain-profile "notarytool-profile" --wait
 
           # Finally, we need to "attach the staple" to our executable, which will allow our app to be
-          # validated by macOS even when an internet connection is not available.
+          # validated by macOS even when an internet connection is not available. We do this to
+          # both the app and the dmg
           echo "Attach staple"
+          xcrun stapler staple "Ghostty.dmg"
           xcrun stapler staple "macos/build/Release/Ghostty.app"
 
       # Zip up the app and symbols
@@ -240,6 +247,7 @@ jobs:
         with:
           name: macos
           path: |-
+            Ghostty.dmg
             ghostty-macos-universal.zip
             ghostty-macos-universal-dsym.zip
 
@@ -299,7 +307,7 @@ jobs:
           echo "GHOSTTY_COMMIT_LONG=$GHOSTTY_COMMIT_LONG"
 
           echo $SPARKLE_KEY > signing.key
-          sign_update -f signing.key ghostty-macos-universal.zip > sign_update.txt
+          sign_update -f signing.key Ghostty.dmg > sign_update.txt
           curl -L https://release.files.ghostty.org/appcast.xml > appcast.xml
           python3 ./dist/macos/update_appcast_tag.py
           test -f appcast_new.xml
@@ -348,6 +356,7 @@ jobs:
           mv ghostty-source.tar.gz.minisig blob/${GHOSTTY_VERSION}/ghostty-source.tar.gz.minisig
           mv ghostty-macos-universal.zip blob/${GHOSTTY_VERSION}/ghostty-macos-universal.zip
           mv ghostty-macos-universal-dsym.zip blob/${GHOSTTY_VERSION}/ghostty-macos-universal-dsym.zip
+          mv Ghostty.dmg blob/${GHOSTTY_VERSION}/Ghostty.dmg
       - name: Upload to R2
         uses: ryand56/r2-upload-action@latest
         with:
