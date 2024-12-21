@@ -87,7 +87,7 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Create Tarball
-        run: git archive --format=tgz -o ghostty-source.tar.gz HEAD
+        run: git archive --format=tgz --prefix=ghostty-source/ -o ghostty-source.tar.gz HEAD
 
       - name: Sign Tarball
         run: |
