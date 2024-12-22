@@ -111,7 +111,7 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
       - name: Create Tarball
-        run: git archive --format=tgz -o ghostty-source.tar.gz HEAD
+        run: git archive --format=tgz --prefix=ghostty-source/ -o ghostty-source.tar.gz HEAD
       - name: Sign Tarball
         run: |
           echo -n "${{ secrets.MINISIGN_KEY }}" > minisign.key
@@ -239,7 +239,18 @@ jobs:
           # Codesign the app bundle
           /usr/bin/codesign --verbose -f -s "$MACOS_CERTIFICATE_NAME" -o runtime --entitlements "macos/Ghostty.entitlements" macos/build/Release/Ghostty.app
 
-      - name: "Notarize app bundle"
+      - name: Create DMG
+        env:
+          MACOS_CERTIFICATE_NAME: ${{ secrets.PROD_MACOS_CERTIFICATE_NAME }}
+        run: |
+          npm install --global create-dmg
+          create-dmg \
+            --identity="$MACOS_CERTIFICATE_NAME" \
+            ./macos/build/Release/Ghostty.app \
+            ./
+          mv ./Ghostty*.dmg ./Ghostty.dmg
+
+      - name: "Notarize DMG"
         env:
           PROD_MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_APPLE_ID }}
           PROD_MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.PROD_MACOS_NOTARIZATION_TEAM_ID }}
@@ -250,22 +261,18 @@ jobs:
           echo "Create keychain profile"
           xcrun notarytool store-credentials "notarytool-profile" --apple-id "$PROD_MACOS_NOTARIZATION_APPLE_ID" --team-id "$PROD_MACOS_NOTARIZATION_TEAM_ID" --password "$PROD_MACOS_NOTARIZATION_PWD"
 
-          # We can't notarize an app bundle directly, but we need to compress it as an archive.
-          # Therefore, we create a zip file containing our app bundle, so that we can send it to the
-          # notarization service
-          echo "Creating temp notarization archive"
-          ditto -c -k --keepParent "macos/build/Release/Ghostty.app" "notarization.zip"
-
           # Here we send the notarization request to the Apple's Notarization service, waiting for the result.
           # This typically takes a few seconds inside a CI environment, but it might take more depending on the App
           # characteristics. Visit the Notarization docs for more information and strategies on how to optimize it if
           # you're curious
-          echo "Notarize app"
-          xcrun notarytool submit "notarization.zip" --keychain-profile "notarytool-profile" --wait
+          echo "Notarize dmg"
+          xcrun notarytool submit "Ghostty.dmg" --keychain-profile "notarytool-profile" --wait
 
           # Finally, we need to "attach the staple" to our executable, which will allow our app to be
-          # validated by macOS even when an internet connection is not available.
+          # validated by macOS even when an internet connection is not available. We do this to
+          # both the app and the dmg
           echo "Attach staple"
+          xcrun stapler staple "Ghostty.dmg"
           xcrun stapler staple "macos/build/Release/Ghostty.app"
 
       # Zip up the app and symbols
@@ -283,7 +290,9 @@ jobs:
           prerelease: true
           tag_name: tip
           target_commitish: ${{ github.sha }}
-          files: ghostty-macos-universal.zip
+          files: |
+            ghostty-macos-universal.zip
+            Ghostty.dmg
           token: ${{ secrets.GH_RELEASE_TOKEN }}
 
       # Create our appcast for Sparkle
@@ -292,8 +301,8 @@ jobs:
           SPARKLE_KEY: ${{ secrets.PROD_MACOS_SPARKLE_KEY }}
         run: |
           echo $SPARKLE_KEY > signing.key
-          sign_update -f signing.key ghostty-macos-universal.zip > sign_update.txt
-          curl -L https://tip.files.ghostty.dev/appcast.xml > appcast.xml
+          sign_update -f signing.key Ghostty.dmg > sign_update.txt
+          curl -L https://tip.files.ghostty.org/appcast.xml > appcast.xml
           python3 ./dist/macos/update_appcast_tip.py
           test -f appcast_new.xml
 
@@ -304,6 +313,7 @@ jobs:
           mkdir -p blob/${GHOSTTY_COMMIT_LONG}
           cp ghostty-macos-universal.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal.zip
           cp ghostty-macos-universal-dsym.zip blob/${GHOSTTY_COMMIT_LONG}/ghostty-macos-universal-dsym.zip
+          cp Ghostty.dmg blob/${GHOSTTY_COMMIT_LONG}/Ghostty.dmg
 
       - name: Upload to R2
         uses: ryand56/r2-upload-action@latest
