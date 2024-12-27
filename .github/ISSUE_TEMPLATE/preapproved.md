@@ -7,4 +7,3 @@ about: |-
 
 Discussion Number:
 
-# Additional Information
