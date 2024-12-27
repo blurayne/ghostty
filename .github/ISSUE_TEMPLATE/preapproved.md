@@ -1,8 +1,7 @@
 ---
-name: Pre-Discussed Issue or Feature Request
+name: Pre-Discussed and Approved Topics
 about: |-
-  Create a new issue or feature request that has been already been
-  discussed and approved in the GitHub Discussions section.
+  Only for topics already discussed and approved in the GitHub Discussions section.
 ---
 
 Discussion Number:
