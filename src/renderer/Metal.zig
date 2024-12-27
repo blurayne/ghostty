@@ -1721,21 +1721,22 @@ fn prepKittyGraphics(
         }.lessThan,
     );
 
-    // Find our indices
-    self.image_bg_end = 0;
-    self.image_text_end = 0;
+    // Find our indices. The values are sorted by z so we can find the
+    // first placement out of bounds to find the limits.
+    var bg_end: ?u32 = null;
+    var text_end: ?u32 = null;
     const bg_limit = std.math.minInt(i32) / 2;
     for (self.image_placements.items, 0..) |p, i| {
-        if (self.image_bg_end == 0 and p.z >= bg_limit) {
-            self.image_bg_end = @intCast(i);
+        if (bg_end == null and p.z >= bg_limit) {
+            bg_end = @intCast(i);
         }
-        if (self.image_text_end == 0 and p.z >= 0) {
-            self.image_text_end = @intCast(i);
+        if (text_end == null and p.z >= 0) {
+            text_end = @intCast(i);
         }
     }
-    if (self.image_text_end == 0) {
-        self.image_text_end = @intCast(self.image_placements.items.len);
-    }
+
+    self.image_bg_end = bg_end orelse 0;
+    self.image_text_end = text_end orelse self.image_bg_end;
 }
 
 fn prepKittyVirtualPlacement(
@@ -1820,6 +1821,21 @@ fn prepKittyPlacement(
         break :offset_y @intCast(offset_pixels);
     } else 0;
 
+    // If we specify `rows` then our offset above is in viewport space
+    // and not in the coordinate space of the source image. Without `rows`
+    // that's one and the same.
+    const source_offset_y: u32 = if (p.rows > 0) source_offset_y: {
+        // Determine the scale factor to apply for this row height.
+        const image_height: f64 = @floatFromInt(image.height);
+        const viewport_height: f64 = @floatFromInt(p.rows * self.grid_metrics.cell_height);
+        const scale: f64 = image_height / viewport_height;
+
+        // Apply the scale to the offset
+        const offset_y_f64: f64 = @floatFromInt(offset_y);
+        const source_offset_y_f64: f64 = offset_y_f64 * scale;
+        break :source_offset_y @intFromFloat(@round(source_offset_y_f64));
+    } else offset_y;
+
     // We need to prep this image for upload if it isn't in the cache OR
     // it is in the cache but the transmit time doesn't match meaning this
     // image is different.
@@ -1833,7 +1849,7 @@ fn prepKittyPlacement(
 
     // Calculate the source rectangle
     const source_x = @min(image.width, p.source_x);
-    const source_y = @min(image.height, p.source_y + offset_y);
+    const source_y = @min(image.height, p.source_y + source_offset_y);
     const source_width = if (p.source_width > 0)
         @min(image.width - source_x, p.source_width)
     else
@@ -1845,7 +1861,11 @@ fn prepKittyPlacement(
 
     // Calculate the width/height of our image.
     const dest_width = if (p.columns > 0) p.columns * self.grid_metrics.cell_width else source_width;
-    const dest_height = if (p.rows > 0) p.rows * self.grid_metrics.cell_height else source_height;
+    const dest_height = if (p.rows > 0) rows: {
+        // Clip to the viewport to handle scrolling. offset_y is already in
+        // viewport scale so we can subtract it directly.
+        break :rows (p.rows * self.grid_metrics.cell_height) - offset_y;
+    } else source_height;
 
     // Accumulate the placement
     if (image.width > 0 and image.height > 0) {

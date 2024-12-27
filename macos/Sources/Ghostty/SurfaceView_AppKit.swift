@@ -409,6 +409,11 @@ extension Ghostty {
             // ID. If vsync is enabled, this will be used with the CVDisplayLink to ensure
             // the proper refresh rate is going.
             ghostty_surface_set_display_id(surface, screen.displayID ?? 0)
+
+            // We also just trigger a backing property change. Just in case the screen has
+            // a different scaling factor, this ensures that we update our content scale.
+            // Issue: https://github.com/ghostty-org/ghostty/issues/2731
+            viewDidChangeBackingProperties()
         }
 
         // MARK: - NSView
@@ -568,6 +573,20 @@ extension Ghostty {
 
             // Mouse event not consumed
             super.rightMouseUp(with: event)
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            super.mouseEntered(with: event)
+
+            guard let surface = self.surface else { return }
+
+            // On mouse enter we need to reset our cursor position. This is
+            // super important because we set it to -1/-1 on mouseExit and
+            // lots of mouse logic (i.e. whether to send mouse reports) depend
+            // on the position being in the viewport if it is.
+            let pos = self.convert(event.locationInWindow, from: nil)
+            let mods = Ghostty.ghosttyMods(event.modifierFlags)
+            ghostty_surface_mouse_pos(surface, pos.x, frame.height - pos.y, mods)
         }
 
         override func mouseExited(with event: NSEvent) {

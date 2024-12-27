@@ -351,10 +351,10 @@ const c = @cImport({
 ///
 /// The second directory is the `themes` subdirectory of the Ghostty resources
 /// directory. Ghostty ships with a multitude of themes that will be installed
-/// into this directory. On macOS, this list is in the `Ghostty.app/Contents/
-/// Resources/ghostty/themes` directory. On Linux, this list is in the `share/
-/// ghostty/themes` directory (wherever you installed the Ghostty "share"
-/// directory.
+/// into this directory. On macOS, this list is in the
+/// `Ghostty.app/Contents/Resources/ghostty/themes` directory. On Linux, this
+/// list is in the `share/ghostty/themes` directory (wherever you installed the
+/// Ghostty "share" directory.
 ///
 /// To see a list of available themes, run `ghostty +list-themes`.
 ///
@@ -1189,12 +1189,12 @@ keybind: Keybinds = .{},
 /// value larger than this will be clamped to the maximum value.
 @"resize-overlay-duration": Duration = .{ .duration = 750 * std.time.ns_per_ms },
 
-// If true, when there are multiple split panes, the mouse selects the pane
-// that is focused. This only applies to the currently focused window; i.e.
-// mousing over a split in an unfocused window will now focus that split
-// and bring the window to front.
-//
-// Default is false.
+/// If true, when there are multiple split panes, the mouse selects the pane
+/// that is focused. This only applies to the currently focused window; i.e.
+/// mousing over a split in an unfocused window will now focus that split
+/// and bring the window to front.
+///
+/// Default is false.
 @"focus-follows-mouse": bool = false,
 
 /// Whether to allow programs running in the terminal to read/write to the
@@ -1377,6 +1377,7 @@ keybind: Keybinds = .{},
 ///   * `bottom` - Terminal appears at the bottom of the screen.
 ///   * `left` - Terminal appears at the left of the screen.
 ///   * `right` - Terminal appears at the right of the screen.
+///   * `center` - Terminal appears at the center of the screen.
 ///
 /// Changing this configuration requires restarting Ghostty completely.
 @"quick-terminal-position": QuickTerminalPosition = .top,
@@ -2531,6 +2532,32 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
             alloc,
             .{ .key = .{ .translated = .f }, .mods = .{ .super = true, .ctrl = true } },
             .{ .toggle_fullscreen = {} },
+        );
+
+        // "Natural text editing" keybinds. This forces these keys to go back
+        // to legacy encoding (not fixterms). It seems macOS users more than
+        // others are used to these keys so we set them as defaults. If
+        // people want to get back to the fixterm encoding they can set
+        // the keybinds to `unbind`.
+        try result.keybind.set.put(
+            alloc,
+            .{ .key = .{ .translated = .right }, .mods = .{ .super = true } },
+            .{ .text = "\\x05" },
+        );
+        try result.keybind.set.put(
+            alloc,
+            .{ .key = .{ .translated = .left }, .mods = .{ .super = true } },
+            .{ .text = "\\x01" },
+        );
+        try result.keybind.set.put(
+            alloc,
+            .{ .key = .{ .translated = .left }, .mods = .{ .alt = true } },
+            .{ .esc = "b" },
+        );
+        try result.keybind.set.put(
+            alloc,
+            .{ .key = .{ .translated = .right }, .mods = .{ .alt = true } },
+            .{ .esc = "f" },
         );
     }
 
@@ -5257,6 +5284,7 @@ pub const QuickTerminalPosition = enum {
     bottom,
     left,
     right,
+    center,
 };
 
 /// See quick-terminal-screen
