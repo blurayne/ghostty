@@ -105,8 +105,8 @@ jobs:
         with:
           name: source-tarball
           path: |-
-            "ghostty-${{ env.GHOSTTY_VERSION }}.tar.gz"
-            "ghostty-${{ env.GHOSTTY_VERSION }}.tar.gz.minisig"
+            ghostty-${{ env.GHOSTTY_VERSION }}.tar.gz
+            ghostty-${{ env.GHOSTTY_VERSION }}.tar.gz.minisig
             ghostty-source.tar.gz
             ghostty-source.tar.gz.minisig
 
