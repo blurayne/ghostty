@@ -342,7 +342,8 @@ jobs:
       matrix:
         adwaita: ["true", "false"]
         x11: ["true", "false"]
-    name: GTK adwaita=${{ matrix.adwaita }} x11=${{ matrix.x11 }}
+        wayland: ["true", "false"]
+    name: GTK adwaita=${{ matrix.adwaita }} x11=${{ matrix.x11 }} wayland=${{ matrix.wayland }}
     runs-on: namespace-profile-ghostty-sm
     needs: test
     env:
@@ -374,7 +375,8 @@ jobs:
             zig build \
             -Dapp-runtime=gtk \
             -Dgtk-adwaita=${{ matrix.adwaita }} \
-            -Dgtk-x11=${{ matrix.x11 }}
+            -Dgtk-x11=${{ matrix.x11 }} \
+            -Dgtk-wayland=${{ matrix.wayland }}
 
   test-sentry-linux:
     strategy:
