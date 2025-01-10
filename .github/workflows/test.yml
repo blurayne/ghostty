@@ -6,6 +6,29 @@ on:
 name: Test
 
 jobs:
+  required:
+    name: Required Checks
+    runs-on: namespace-profile-ghostty-sm
+    needs:
+      - build
+      - build-bench
+      - build-linux-libghostty
+      - build-nix
+      - build-macos
+      - build-macos-matrix
+      - build-windows
+      - test
+      - test-gtk
+      - test-sentry-linux
+      - test-macos
+      - prettier
+      - alejandra
+      - typos
+      - test-pkg-linux
+    steps:
+      - name: Noop
+        run: echo "Required Checks Met"
+
   build:
     strategy:
       fail-fast: false

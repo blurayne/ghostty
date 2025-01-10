@@ -1,6 +1,15 @@
 on: [push, pull_request]
 name: Nix
 jobs:
+  required:
+    name: Required Checks
+    runs-on: namespace-profile-ghostty-sm
+    needs:
+      - check-zig-cache-hash
+    steps:
+      - name: Noop
+        run: echo "Required Checks Met"
+
   check-zig-cache-hash:
     if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-sm
