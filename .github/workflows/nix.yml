@@ -2,7 +2,7 @@ on: [push, pull_request]
 name: Nix
 jobs:
   required:
-    name: Required Checks
+    name: "Required Checks: Nix"
     runs-on: namespace-profile-ghostty-sm
     needs:
       - check-zig-cache-hash
