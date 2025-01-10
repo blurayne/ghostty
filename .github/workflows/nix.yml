@@ -7,8 +7,24 @@ jobs:
     needs:
       - check-zig-cache-hash
     steps:
-      - name: Noop
-        run: echo "Required Checks Met"
+      - id: status
+        name: Determine status
+        run: |
+          results=$(tr -d '\n' <<< '${{ toJSON(needs.*.result) }}')
+          if ! grep -q -v -E '(failure|cancelled)' <<< "$results"; then
+            result="failed"
+          else
+            result="success"
+          fi
+          {
+            echo "result=${result}"
+            echo "results=${results}"
+          } | tee -a "$GITHUB_OUTPUT"
+      - if: always() && steps.status.outputs.result != 'success'
+        name: Check for failed status
+        run: |
+          echo "One or more required build workflows failed: ${{ steps.status.outputs.results }}"
+          exit 1
 
   check-zig-cache-hash:
     if: github.repository == 'ghostty-org/ghostty'
