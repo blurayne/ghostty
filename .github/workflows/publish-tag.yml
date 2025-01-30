@@ -55,7 +55,7 @@ jobs:
 
       - name: Download Staged Appcast
         run: |
-          curl -L https://release.files.ghostty.org/${GHOSTTY_VERSION}/appcast-staged.xml
+          curl -L https://release.files.ghostty.org/${GHOSTTY_VERSION}/appcast-staged.xml > appcast-staged.xml
           mv appcast-staged.xml appcast.xml
 
       - name: Upload Appcast
