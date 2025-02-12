@@ -202,10 +202,14 @@ jobs:
       - name: XCode Select
         run: sudo xcode-select -s /Applications/Xcode_16.0.app
 
+      - name: get the Zig deps
+        id: deps
+        run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
+
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access.
       - name: Build GhosttyKit
-        run: nix develop -c zig build
+        run: nix develop -c zig build --system ${{ steps.deps.outputs.deps }}
 
       # The native app is built with native XCode tooling. This also does
       # codesigning. IMPORTANT: this must NOT run in a Nix environment.
@@ -238,35 +242,39 @@ jobs:
       - name: XCode Select
         run: sudo xcode-select -s /Applications/Xcode_16.0.app
 
+      - name: get the Zig deps
+        id: deps
+        run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
+
       - name: Test All
         run: |
           # OpenGL
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
 
           # Metal
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
-          nix develop -c zig build test -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build test --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
 
       - name: Build All
         run: |
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=freetype
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_freetype
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=opengl -Dfont-backend=coretext_noshape
 
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
-          nix develop -c zig build -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=freetype
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
+          nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
 
   build-windows:
     runs-on: windows-2022
@@ -471,8 +479,12 @@ jobs:
       - name: XCode Select
         run: sudo xcode-select -s /Applications/Xcode_16.0.app
 
+      - name: get the Zig deps
+        id: deps
+        run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
+
       - name: test
-        run: nix develop -c zig build test
+        run: nix develop -c zig build test --system ${{ steps.deps.outputs.deps }}
 
   prettier:
     if: github.repository == 'ghostty-org/ghostty'
