@@ -26,6 +26,7 @@ jobs:
       - alejandra
       - typos
       - test-pkg-linux
+      - test-debian-12
     steps:
       - id: status
         name: Determine status
