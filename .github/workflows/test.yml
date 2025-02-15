@@ -14,6 +14,7 @@ jobs:
       - build-bench
       - build-linux-libghostty
       - build-nix
+      - build-snap
       - build-macos
       - build-macos-matrix
       - build-windows
@@ -275,6 +276,32 @@ jobs:
           nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_freetype
           nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_harfbuzz
           nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Dapp-runtime=glfw -Drenderer=metal -Dfont-backend=coretext_noshape
+
+  build-snap:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          [namespace-profile-ghostty-snap, namespace-profile-ghostty-snap-arm64]
+    runs-on: ${{ matrix.os }}
+    needs: test
+    env:
+      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
+      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Setup Cache
+        uses: namespacelabs/nscloud-cache-action@v1.2.0
+        with:
+          path: |
+            /nix
+            /zig
+      - run: sudo apt install -y udev
+      - run: sudo systemctl start systemd-udevd
+      - uses: snapcore/action-build@v1
 
   build-windows:
     runs-on: windows-2022
