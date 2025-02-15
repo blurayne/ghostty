@@ -628,11 +628,7 @@ jobs:
           nix develop -c sh -c "cd pkg/${{ matrix.pkg }} ; zig build test"
 
   test-debian-12:
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: ["linux/amd64", "linux/arm64"]
-    name: Test build on Debian 12 ${{ matrix.platform }}
+    name: Test build on Debian 12
     runs-on: namespace-profile-ghostty-sm
     needs: test
     steps:
@@ -651,4 +647,3 @@ jobs:
           context: .
           file: src/build/docker/debian/Dockerfile
           build-args: DISTRO_VERSION=12
-          platform: ${{ matrix.platform }}
