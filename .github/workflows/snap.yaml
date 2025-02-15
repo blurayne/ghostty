@@ -12,6 +12,9 @@ jobs:
     runs-on: namespace-profile-ghostty-snap
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: Setup Cache
         uses: namespacelabs/nscloud-cache-action@v1.2.0
         with:
@@ -26,6 +29,9 @@ jobs:
     runs-on: namespace-profile-ghostty-snap-arm64
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: Setup Cache
         uses: namespacelabs/nscloud-cache-action@v1.2.0
         with:
