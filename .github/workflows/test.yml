@@ -14,6 +14,7 @@ jobs:
       - build-bench
       - build-linux-libghostty
       - build-nix
+      - build-snap
       - build-macos
       - build-macos-matrix
       - build-windows
