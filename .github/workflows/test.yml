@@ -626,3 +626,29 @@ jobs:
       - name: Test ${{ matrix.pkg }} Build
         run: |
           nix develop -c sh -c "cd pkg/${{ matrix.pkg }} ; zig build test"
+
+  test-debian-12:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["linux/amd64", "linux/arm64"]
+    name: Test build on Debian 12 ${{ matrix.platform }}
+    runs-on: namespace-profile-ghostty-sm
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install and configure Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+
+      - name: Configure Namespace powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@v0
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/build/docker/debian/Dockerfile
+          build-args: DISTRO_VERSION=12
+          platform: ${{ matrix.platform }}
