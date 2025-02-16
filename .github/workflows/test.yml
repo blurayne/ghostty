@@ -647,4 +647,4 @@ jobs:
         with:
           context: .
           file: src/build/docker/debian/Dockerfile
-          build-args: DISTRO_VERSION=12
+          build-args: DISTRO_VERSION=12,ZIG_VERSION=0.13.0
