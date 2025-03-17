@@ -755,4 +755,3 @@ jobs:
           file: src/build/docker/debian/Dockerfile
           build-args: |
             DISTRO_VERSION=12
-            ZIG_VERSION=0.14.0
