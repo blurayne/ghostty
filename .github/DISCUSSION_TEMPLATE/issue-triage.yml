@@ -4,7 +4,7 @@ body:
     attributes:
       value: |
         > [!IMPORTANT]
-        > Please read through [the Discussion rules](https://github.com/ghostty-org/ghostty/discussions/6937) and review [the FAQs](https://ghostty.org/docs/help#common-issues-and-solutions) prior to opening a new Discussion.
+        > Please read through [the Discussion rules](https://github.com/ghostty-org/ghostty/discussions/6937), review [the FAQs](https://ghostty.org/docs/help#common-issues-and-solutions), and check for both existing [Discussions](https://github.com/ghostty-org/ghostty/discussions?discussions_q=) and [Issues](https://github.com/ghostty-org/ghostty/issues?q=sort%3Areactions-desc) prior to opening a new Discussion.
   - type: markdown
     attributes:
       value: "# Issue Details"
