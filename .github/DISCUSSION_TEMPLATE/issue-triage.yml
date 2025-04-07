@@ -112,7 +112,7 @@ body:
     attributes:
       label: Additional Relevant Configuration
       description: |
-        If your issue involves other programs, tools, or applications in addition to Ghostty (e.g. Neovim, tmux, Zellij, etc.), please provide any relevant configuration information here.  If you use custom CSS or shaders for Ghostty, please also include them here, if applicable to your issue.
+        If your issue involves other programs, tools, or applications in addition to Ghostty (e.g. Neovim, tmux, Zellij, etc.), please provide any relevant configuration information here.  If you use custom CSS or shaders for Ghostty, also include them here, if applicable to your issue.
       placeholder: |
         `tmux.conf`
         ---
