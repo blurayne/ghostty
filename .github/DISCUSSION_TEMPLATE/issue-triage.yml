@@ -18,7 +18,7 @@ body:
         - The actual behavior (and how it deviates from the expected behavior, if it is not immediately obvious).
         - Relevant Ghostty logs or other stacktraces.
         - Relevant screenshots, screen recordings, or other supporting media (as needed).
-        - If this is a regression of an existing issue that was closed or resolved, please include the previous item reference (Discussion, Issue, PR, commit) in your description.  
+        - If this is a regression of an existing issue that was closed or resolved, please include the previous item reference (Discussion, Issue, PR, commit) in your description.
 
         >[!TIP]
         > **Not sure what information to include?**
