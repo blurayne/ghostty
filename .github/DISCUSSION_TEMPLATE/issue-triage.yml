@@ -95,7 +95,7 @@ body:
     attributes:
       label: Ghostty Configuration
       description: |
-        Please paste the output of `ghostty +show-config` here.
+        Please provide the minimum conifguration needed to reproduce this issue.  If you cannot determine the minimum configuration needed to reproduce the issue, paste the output of `ghostty +show-config` here.
       placeholder: |
         font-family = CommitMono Nerd Font
         font-family-bold = CommitMono Nerd Font
@@ -112,7 +112,7 @@ body:
     attributes:
       label: Additional Relevant Configuration
       description: |
-        If your issue involves other programs, tools, or applications in addition to Ghostty (e.g. Neovim, tmux, Zellij, etc.), please provide any relevant configuration information here.  If you use custom CSS or shaders for Ghostty, also include them here, if applicable to your issue.
+        If your issue involves other programs, tools, or applications in addition to Ghostty (e.g. Neovim, tmux, Zellij, etc.), please provide any relevant configuration information here.  Please provide the minimal configuration needed.  If you use custom CSS or shaders for Ghostty, also include them here, if applicable to your issue.
       placeholder: |
         `tmux.conf`
         ---
