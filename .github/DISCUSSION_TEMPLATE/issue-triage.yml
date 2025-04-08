@@ -128,7 +128,7 @@ body:
       value: |
         # User Acknowledgements
         > [!TIP]
-        > Use the these links to review the existing Ghostty [Discussions](https://github.com/ghostty-org/ghostty/discussions?discussions_q=) and [Issues](https://github.com/ghostty-org/ghostty/issues?q=sort%3Areactions-desc).
+        > Use these links to review the existing Ghostty [Discussions](https://github.com/ghostty-org/ghostty/discussions?discussions_q=) and [Issues](https://github.com/ghostty-org/ghostty/issues?q=sort%3Areactions-desc).
   - type: checkboxes
     attributes:
       label: "I acknowledge that:"
