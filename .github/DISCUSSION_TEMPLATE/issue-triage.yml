@@ -135,5 +135,5 @@ body:
       options:
         - label: I have reviewed the FAQ and confirm that my issue is NOT among them.
           required: true
-        - label: I have searched the Ghostty repository (both open and closed Discussions and Issues) and confirm this is not a duplicate of an exiting issue or discussion.
+        - label: I have searched the Ghostty repository (both open and closed Discussions and Issues) and confirm this is not a duplicate of an existing issue or discussion.
           required: true
