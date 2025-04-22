@@ -896,6 +896,7 @@ jobs:
           - arch: aarch64
             runner: namespace-profile-ghostty-md-arm64
     runs-on: ${{ matrix.variant.runner }}
+    needs: [flatpak-check-zig-cache, test]
     steps:
       - uses: actions/checkout@v4
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
