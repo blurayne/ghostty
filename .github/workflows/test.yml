@@ -21,6 +21,8 @@ jobs:
       - build-macos-matrix
       - build-windows
       - build-windows-cross
+      - flatpak-check-zig-cache
+      - flatpak
       - test
       - test-gtk
       - test-sentry-linux
@@ -734,7 +736,7 @@ jobs:
 
   translations:
     if: github.repository == 'ghostty-org/ghostty'
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
@@ -761,7 +763,7 @@ jobs:
 
   blueprint-compiler:
     if: github.repository == 'ghostty-org/ghostty'
-    runs-on: namespace-profile-ghostty-sm
+    runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
@@ -851,3 +853,56 @@ jobs:
           file: dist/src/build/docker/debian/Dockerfile
           build-args: |
             DISTRO_VERSION=12
+
+  flatpak-check-zig-cache:
+    if: github.repository == 'ghostty-org/ghostty'
+    runs-on: namespace-profile-ghostty-xsm
+    env:
+      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
+      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Cache
+        uses: namespacelabs/nscloud-cache-action@v1.2.0
+        with:
+          path: |
+            /nix
+            /zig
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: cachix/cachix-action@v15
+        with:
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          useDaemon: false # sometimes fails on short jobs
+      - name: Check Flatpak Zig Dependencies
+        run: nix develop -c ./flatpak/build-support/check-zig-cache.sh
+
+  flatpak:
+    if: github.repository == 'ghostty-org/ghostty'
+    name: "Flatpak"
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
+      options: --privileged
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - arch: x86_64
+            runner: namespace-profile-ghostty-md
+          - arch: aarch64
+            runner: namespace-profile-ghostty-md-arm64
+    runs-on: ${{ matrix.variant.runner }}
+    needs: [flatpak-check-zig-cache, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: com.mitchellh.ghostty
+          manifest-path: flatpak/com.mitchellh.ghostty.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          arch: ${{ matrix.variant.arch }}
+          verbose: true
