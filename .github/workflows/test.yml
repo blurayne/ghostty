@@ -888,6 +888,7 @@ jobs:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
       options: --privileged
     strategy:
+      fail-fast: false
       matrix:
         variant:
           - arch: x86_64
