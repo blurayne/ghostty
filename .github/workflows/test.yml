@@ -757,19 +757,7 @@ jobs:
           skipPush: true
           useDaemon: false # sometimes fails on short jobs
       - name: check translations
-        run: |
-          old_pot=$(mktemp)
-          cp po/com.mitchellh.ghostty.pot "$old_pot"
-          nix develop -c zig build update-translations
-
-          # Compare previous POT to current POT
-          msgcmp "$old_pot" po/com.mitchellh.ghostty.pot --use-untranslated
-
-          # Compare all other POs to current POT
-          for f in po/*.po; do
-            # Ignore untranslated entries
-            msgcmp --use-untranslated "$f" po/com.mitchellh.ghostty.pot;
-          done
+        run: nix develop -c .github/scripts/check-translations.sh
 
   blueprint-compiler:
     if: github.repository == 'ghostty-org/ghostty'
