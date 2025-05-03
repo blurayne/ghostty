@@ -36,6 +36,7 @@ body:
       label: Ghostty Logs
       description: |
         Provide any captured Ghostty logs or stacktraces during your issue reproduction in this field.  For macOS users, logs can be found via the command provided in [#7194](https://github.com/ghostty-org/ghostty/discussions/7194)
+      render: text
   - type: textarea
     attributes:
       label: Reproduction Steps
