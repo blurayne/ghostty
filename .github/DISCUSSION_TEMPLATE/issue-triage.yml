@@ -33,12 +33,6 @@ body:
       required: true
   - type: textarea
     attributes:
-      label: Ghostty Logs
-      description: |
-        Provide any captured Ghostty logs or stacktraces during your issue reproduction in this field.  For macOS users, logs can be viewed with `sudo log stream --level debug --predicate 'subsystem=="com.mitchellh.ghostty"'`.
-      render: text
-  - type: textarea
-    attributes:
       label: Reproduction Steps
       description: |
         Provide a detailed set of step-by-step instructions for reproducing this issue.
@@ -49,6 +43,12 @@ body:
         4. Observe `xterm-ghostty` error message above.
     validations:
       required: true
+  - type: textarea
+    attributes:
+      label: Ghostty Logs
+      description: |
+        Provide any captured Ghostty logs or stacktraces during your issue reproduction in this field.  For macOS users, logs can be viewed with `sudo log stream --level debug --predicate 'subsystem=="com.mitchellh.ghostty"'`.
+      render: text
   - type: textarea
     attributes:
       label: Ghostty Version
