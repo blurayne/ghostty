@@ -118,7 +118,7 @@ body:
     attributes:
       label: Minimal Ghostty Configuration
       description: |
-        Please provide the **minimum** configuration needed to reproduce this issue.  If you cannot determine this, paste the contents of your Ghostty configuration file here.
+        Please provide the **minimum** configuration needed to reproduce this issue.  If you can still reproduce the issue with one of the lines removed, do not include that line.  If and **only** if you are not able to determine this, paste the contents of your Ghostty configuration file here.
       placeholder: |
         font-family = CommitMono Nerd Font
         font-family-bold = CommitMono Nerd Font
