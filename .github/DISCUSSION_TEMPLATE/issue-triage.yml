@@ -157,5 +157,5 @@ body:
           required: true
         - label: I have searched the Ghostty repository (both open and closed Discussions and Issues) and confirm this is not a duplicate of an existing issue or discussion.
           required: true
-        - label:  I have checked the “Preview” tab on all text fields to ensure that everything looks right, and have wrapped all configuration and code in code blocks with a group of three backticks (```) on separate lines.
+        - label: I have checked the “Preview” tab on all text fields to ensure that everything looks right, and have wrapped all configuration and code in code blocks with a group of three backticks (```) on separate lines.
           required: true
