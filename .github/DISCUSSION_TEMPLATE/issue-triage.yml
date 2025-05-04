@@ -35,7 +35,7 @@ body:
       description: |
         Provide a summary of how you expect Ghostty to behave in this situation.  Include any relevant documentation links.
       placeholder: |
-        The screen to be cleared and the prompt is redrawn at the top of the window.
+        The screen is cleared and the prompt is redrawn at the top of the window.
       render: text
     validations:
       required: true
