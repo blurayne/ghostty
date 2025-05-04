@@ -26,7 +26,7 @@ body:
         > - **Renderer issues:** (Linux) include your OpenGL version, graphics card, driver version.
         > - **Crashes:** (macOS) include the [Sentry UUID](https://github.com/ghostty-org/ghostty?tab=readme-ov-file#crash-reports); (Linux) try to reproduce using a debug build and provide the stack trace.
       placeholder: |
-        Example: When using SSH to connect to my remote Linux machine from my local macOS device in Ghostty, I try to run `clear`, and the screen does not clear.  Instead, I see the following error message printed to the terminal: `Error opening terminal: xterm-ghostty.`
+        When using SSH to connect to my remote Linux machine from my local macOS device in Ghostty, I try to run `clear`, and the screen does not clear.  Instead, I see the following error message printed to the terminal: `Error opening terminal: xterm-ghostty.`
     validations:
       required: true
   - type: textarea
@@ -35,7 +35,7 @@ body:
       description: |
         Provide a summary of how you expect Ghostty to behave in this situation.  Include any relevant documentation links.
       placeholder: |
-        Example: When I run `clear`, I expect the screen to be cleared and the prompt to be redrawn at the top of the window.
+        The screen to be cleared and the prompt is redrawn at the top of the window.
       render: text
     validations:
       required: true
@@ -45,7 +45,7 @@ body:
       description: |
         Provide a summary of how Ghostty actually behaves in this situation.  If it is not immediately obvious how the actual behavior differs from the expected behavior described above, please be sure to mention the deviation specifically.
       placeholder: |
-        Example: When I run `clear`, the screen is not cleared, and an error is printed: `Error opening terminal: xterm-ghostty.`
+        The screen is not cleared, and an error is printed: `Error opening terminal: xterm-ghostty`.
       render: text
     validations:
       required: true
