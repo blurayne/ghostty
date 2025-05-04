@@ -116,7 +116,7 @@ body:
       required: false
   - type: textarea
     attributes:
-      label: Ghostty Configuration (Minimal)
+      label: Minimal Ghostty Configuration
       description: |
         Please provide the **minimum** configuration needed to reproduce this issue.  If you cannot determine this, paste the contents of your Ghostty configuration file here.
       placeholder: |
