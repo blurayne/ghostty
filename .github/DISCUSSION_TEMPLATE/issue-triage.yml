@@ -17,7 +17,7 @@ body:
         - Screenshots, screen recordings, or other supporting media (as needed).
         - If this is a regression of an existing issue that was closed or resolved, please include the previous item reference (Discussion, Issue, PR, commit) in your description.
 
-        >[!TIP]
+        > [!TIP]
         > **Not sure what information to include?**
         > Here are some recommendations:
         > - **Input issues:** include your keyboard layout, a screenshot of logged keystrokes from the terminal inspector's "Keyboard" tab (Linux: <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>i</kbd>; MacOS: <kbd>cmd</kbd>+<kbd>alt</kbd>+<kbd>i</kbd>), input method, Linux input method engine (IBus, Fcitx 5, or none) and its version.
