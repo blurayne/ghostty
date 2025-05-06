@@ -135,7 +135,7 @@ body:
       description: |
         If your issue involves other programs, tools, or applications in addition to Ghostty (e.g. Neovim, tmux, Zellij, etc.), please provide the minimum configuration and versions needed for all relevant programs to reproduce the issue here.  If you use custom CSS or shaders for Ghostty, also include them here, if applicable to your issue.
       placeholder: |
-        `tmux.conf` (tmux 3.5a)
+        #### `tmux.conf` (tmux 3.5a)
         ---
         set  -g default-terminal "tmux-256color"
         set-option -sa terminal-overrides ",xterm*:Tc"
