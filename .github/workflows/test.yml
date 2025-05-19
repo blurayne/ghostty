@@ -211,8 +211,23 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: Test NixOS package build
-        run: nix build .#ghostty
+      - name: Test release NixOS package build
+        run: nix build .#ghostty-releasefast
+
+      - name: Check version
+        run: result/bin/ghostty +version | grep -q 'builtin.OptimizeMode.ReleaseFast'
+
+      - name: Check to see if the binary has been stripped
+        run: nm result/bin/.ghostty-wrapped 2>&1 | grep -q 'no symbols'
+
+      - name: Test debug NixOS package build
+        run: nix build .#ghostty-debug
+
+      - name: Check version
+        run: result/bin/ghostty +version | grep -q 'builtin.OptimizeMode.Debug'
+
+      - name: Check to see if the binary has not been stripped
+        run: nm result/bin/.ghostty-wrapped 2>&1 | grep -q 'main_ghostty.main'
 
   build-dist:
     runs-on: namespace-profile-ghostty-md
