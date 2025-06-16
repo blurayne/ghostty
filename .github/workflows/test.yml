@@ -269,6 +269,29 @@ jobs:
           path: |-
             ghostty-source.tar.gz
 
+  build-freebsd:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: test
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            sed 's/quarterly/latest/g' /etc/pkg/FreeBSD.conf
+            pkg update -f
+            pkg upgrade -y
+            pkg install -y wget
+
+          run: |
+            # switch to pkg
+            wget https://ziglang.org/builds/zig-x86_64-freebsd-0.15.0-dev.777+6810ffa42.tar.xz
+            tar -xf zig-x86_64-freebsd-0.15.0-dev.777+6810ffa42.tar.xz
+            zig-x86_64-freebsd-0.15.0-dev.777+6810ffa42/zig build -Dapp-runtime=none test
+
   build-macos:
     runs-on: namespace-profile-ghostty-macos-sequoia
     needs: test
