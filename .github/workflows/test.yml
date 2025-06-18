@@ -270,11 +270,14 @@ jobs:
             ghostty-source.tar.gz
 
   build-freebsd:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-ghostty-md-systemd
     needs: test
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Needed to work on Namespace
+      - run: sudo systemctl start ssh
 
       - name: test
         uses: vmactions/freebsd-vm@v1
