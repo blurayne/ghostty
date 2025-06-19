@@ -18,7 +18,6 @@ jobs:
       - build-nix
       - build-snap
       - build-macos
-      - build-macos-sequoia-stable
       - build-macos-tahoe
       - build-macos-matrix
       - build-windows
@@ -288,46 +287,6 @@ jobs:
 
       - name: Xcode Select
         run: sudo xcode-select -s /Applications/Xcode_26.0.app
-
-      - name: get the Zig deps
-        id: deps
-        run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
-
-      # GhosttyKit is the framework that is built from Zig for our native
-      # Mac app to access.
-      - name: Build GhosttyKit
-        run: nix develop -c zig build --system ${{ steps.deps.outputs.deps }}
-
-      # The native app is built with native Xcode tooling. This also does
-      # codesigning. IMPORTANT: this must NOT run in a Nix environment.
-      # Nix breaks xcodebuild so this has to be run outside.
-      - name: Build Ghostty.app
-        run: cd macos && xcodebuild -target Ghostty
-
-      # Build the iOS target without code signing just to verify it works.
-      - name: Build Ghostty iOS
-        run: |
-          cd macos
-          xcodebuild -target Ghostty-iOS "CODE_SIGNING_ALLOWED=NO"
-
-  build-macos-sequoia-stable:
-    runs-on: namespace-profile-ghostty-macos-sequoia
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@v31
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-      - uses: cachix/cachix-action@v16
-        with:
-          name: ghostty
-          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
-
-      - name: Xcode Select
-        run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
       - name: get the Zig deps
         id: deps
