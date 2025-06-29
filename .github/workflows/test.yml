@@ -18,6 +18,7 @@ jobs:
       - build-nix
       - build-snap
       - build-macos
+      - build-macos-tahoe
       - build-macos-matrix
       - build-windows
       - build-windows-cross
@@ -67,7 +68,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -98,7 +99,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -134,7 +135,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -163,7 +164,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -196,7 +197,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -240,7 +241,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -269,7 +270,7 @@ jobs:
             ghostty-source.tar.gz
 
   build-macos:
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: namespace-profile-ghostty-macos-sequoia
     needs: test
     steps:
       - name: Checkout code
@@ -284,8 +285,8 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: XCode Select
-        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+      - name: Xcode Select
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app
 
       - name: get the Zig deps
         id: deps
@@ -296,7 +297,47 @@ jobs:
       - name: Build GhosttyKit
         run: nix develop -c zig build --system ${{ steps.deps.outputs.deps }}
 
-      # The native app is built with native XCode tooling. This also does
+      # The native app is built with native Xcode tooling. This also does
+      # codesigning. IMPORTANT: this must NOT run in a Nix environment.
+      # Nix breaks xcodebuild so this has to be run outside.
+      - name: Build Ghostty.app
+        run: cd macos && xcodebuild -target Ghostty
+
+      # Build the iOS target without code signing just to verify it works.
+      - name: Build Ghostty iOS
+        run: |
+          cd macos
+          xcodebuild -target Ghostty-iOS "CODE_SIGNING_ALLOWED=NO"
+
+  build-macos-tahoe:
+    runs-on: namespace-profile-ghostty-macos-tahoe
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # TODO(tahoe): https://github.com/NixOS/nix/issues/13342
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          determinate: true
+      - uses: cachix/cachix-action@v16
+        with:
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      - name: Xcode Select
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app
+
+      - name: get the Zig deps
+        id: deps
+        run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
+
+      # GhosttyKit is the framework that is built from Zig for our native
+      # Mac app to access.
+      - name: Build GhosttyKit
+        run: nix develop -c zig build --system ${{ steps.deps.outputs.deps }}
+
+      # The native app is built with native Xcode tooling. This also does
       # codesigning. IMPORTANT: this must NOT run in a Nix environment.
       # Nix breaks xcodebuild so this has to be run outside.
       - name: Build Ghostty.app
@@ -309,7 +350,7 @@ jobs:
           xcodebuild -target Ghostty-iOS "CODE_SIGNING_ALLOWED=NO"
 
   build-macos-matrix:
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: namespace-profile-ghostty-macos-sequoia
     needs: test
     steps:
       - name: Checkout code
@@ -324,8 +365,8 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: XCode Select
-        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+      - name: Xcode Select
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app
 
       - name: get the Zig deps
         id: deps
@@ -382,7 +423,7 @@ jobs:
           mkdir dist
           tar --verbose --extract --strip-components 1 --directory dist --file ghostty-source.tar.gz
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -492,7 +533,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -523,7 +564,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -568,7 +609,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -607,7 +648,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -627,7 +668,7 @@ jobs:
           nix develop -c zig build -Dsentry=${{ matrix.sentry }}
 
   test-macos:
-    runs-on: namespace-profile-ghostty-macos
+    runs-on: namespace-profile-ghostty-macos-sequoia
     needs: test
     steps:
       - name: Checkout code
@@ -642,8 +683,8 @@ jobs:
           name: ghostty
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
-      - name: XCode Select
-        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+      - name: Xcode Select
+        run: sudo xcode-select -s /Applications/Xcode_26.0.app
 
       - name: get the Zig deps
         id: deps
@@ -662,7 +703,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -689,7 +730,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -716,7 +757,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -743,7 +784,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -770,7 +811,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -797,7 +838,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4 # Check out repo so we can lint it
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -832,7 +873,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
@@ -890,7 +931,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@v1.2.7
+        uses: namespacelabs/nscloud-cache-action@v1.2.8
         with:
           path: |
             /nix
