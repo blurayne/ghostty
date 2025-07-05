@@ -86,7 +86,7 @@ jobs:
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access. Build this in release mode.
       - name: Build GhosttyKit
-        run: nix develop -c zig build -Doptimize=ReleaseSafe
+        run: nix develop -c zig build -Doptimize=ReleaseSafe -Demit-macos-app=false
 
       # The native app is built with native XCode tooling. This also does
       # codesigning. IMPORTANT: this must NOT run in a Nix environment.
@@ -238,7 +238,7 @@ jobs:
       # GhosttyKit is the framework that is built from Zig for our native
       # Mac app to access. Build this in release mode.
       - name: Build GhosttyKit
-        run: nix develop -c zig build -Doptimize=Debug
+        run: nix develop -c zig build -Doptimize=Debug -Demit-macos-app=false
 
       # The native app is built with native XCode tooling. This also does
       # codesigning. IMPORTANT: this must NOT run in a Nix environment.
