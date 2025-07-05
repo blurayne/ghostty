@@ -158,6 +158,7 @@ jobs:
           nix develop -c \
             zig build \
             -Doptimize=ReleaseFast \
+            -Demit-macos-app=false \
             -Dversion-string=${GHOSTTY_VERSION}
 
       # The native app is built with native XCode tooling. This also does
