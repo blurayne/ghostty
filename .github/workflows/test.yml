@@ -270,7 +270,7 @@ jobs:
             ghostty-source.tar.gz
 
   build-macos:
-    runs-on: namespace-profile-ghostty-macos-sequoia
+    runs-on: namespace-profile-ghostty-macos-sequoia-edge
     needs: test
     steps:
       - name: Checkout code
@@ -287,6 +287,9 @@ jobs:
 
       - name: Xcode Select
         run: sudo xcode-select -s /Applications/Xcode_26.0.app
+
+      - name: Xcode Version
+        run: xcodebuild -version
 
       - name: get the Zig deps
         id: deps
@@ -350,7 +353,7 @@ jobs:
           xcodebuild -target Ghostty-iOS "CODE_SIGNING_ALLOWED=NO"
 
   build-macos-matrix:
-    runs-on: namespace-profile-ghostty-macos-sequoia
+    runs-on: namespace-profile-ghostty-macos-sequoia-edge
     needs: test
     steps:
       - name: Checkout code
@@ -614,7 +617,7 @@ jobs:
           nix develop -c zig build -Dsentry=${{ matrix.sentry }}
 
   test-macos:
-    runs-on: namespace-profile-ghostty-macos-sequoia
+    runs-on: namespace-profile-ghostty-macos-sequoia-edge
     needs: test
     steps:
       - name: Checkout code
