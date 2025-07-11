@@ -47,7 +47,7 @@ jobs:
           sentry-cli dif upload --project ghostty --wait dsym.zip
 
   build-macos:
-    runs-on: namespace-profile-ghostty-macos-sequoia-edge
+    runs-on: namespace-profile-ghostty-macos-sequoia
     timeout-minutes: 90
     steps:
       - name: Checkout code
@@ -201,7 +201,7 @@ jobs:
           destination-dir: ./
 
   build-macos-debug:
-    runs-on: namespace-profile-ghostty-macos-sequoia-edge
+    runs-on: namespace-profile-ghostty-macos-sequoia
     timeout-minutes: 90
     steps:
       - name: Checkout code
