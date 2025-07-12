@@ -107,12 +107,12 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@449c929cd5138e6607e7e78458e88cc476e76f89 # v1.2.8
+        uses: namespacelabs/nscloud-cache-action@0ac1550c04676e19d39872be6216ccbf9c6bab43 # v1.2.9
         with:
           path: |
             /nix
             /zig
-      - uses: cachix/install-nix-action@f0fe604f8a612776892427721526b4c7cfb23aba # v31.4.1
+      - uses: cachix/install-nix-action@cebd211ec2008b83bda8fb0b21c3c072f004fe04 # v31.5.0
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad # v16
@@ -164,7 +164,7 @@ jobs:
           fetch-depth: 0
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@f0fe604f8a612776892427721526b4c7cfb23aba # v31.4.1
+      - uses: cachix/install-nix-action@cebd211ec2008b83bda8fb0b21c3c072f004fe04 # v31.5.0
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad # v16
@@ -174,6 +174,9 @@ jobs:
 
       - name: XCode Select
         run: sudo xcode-select -s /Applications/Xcode_26.0.app
+
+      - name: Xcode Version
+        run: xcodebuild -version
 
       # Setup Sparkle
       - name: Setup Sparkle
@@ -381,7 +384,7 @@ jobs:
           fetch-depth: 0
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@f0fe604f8a612776892427721526b4c7cfb23aba # v31.4.1
+      - uses: cachix/install-nix-action@cebd211ec2008b83bda8fb0b21c3c072f004fe04 # v31.5.0
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad # v16
@@ -391,6 +394,9 @@ jobs:
 
       - name: XCode Select
         run: sudo xcode-select -s /Applications/Xcode_26.0.app
+
+      - name: Xcode Version
+        run: xcodebuild -version
 
       # Setup Sparkle
       - name: Setup Sparkle
@@ -558,7 +564,7 @@ jobs:
           fetch-depth: 0
 
       # Install Nix and use that to run our tests so our environment matches exactly.
-      - uses: cachix/install-nix-action@f0fe604f8a612776892427721526b4c7cfb23aba # v31.4.1
+      - uses: cachix/install-nix-action@cebd211ec2008b83bda8fb0b21c3c072f004fe04 # v31.5.0
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad # v16
@@ -568,6 +574,9 @@ jobs:
 
       - name: XCode Select
         run: sudo xcode-select -s /Applications/Xcode_26.0.app
+
+      - name: Xcode Version
+        run: xcodebuild -version
 
       # Setup Sparkle
       - name: Setup Sparkle
