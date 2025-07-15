@@ -36,7 +36,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@0ac1550c04676e19d39872be6216ccbf9c6bab43 # v1.2.9
+        uses: namespacelabs/nscloud-cache-action@c343d6c4c2c3268bbec55c542f096f74130eb22c # v1.2.12
         with:
           path: |
             /nix
