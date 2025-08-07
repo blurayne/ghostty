@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Cache
-        uses: namespacelabs/nscloud-cache-action@a2c6b4830ed1830cc8ee3ee33f4210a856f4ae02 # v1.2.14
+        uses: namespacelabs/nscloud-cache-action@f2d0a9e9ed4a256f08f9ae18c912b06bcf62a413 # v1.2.15
         with:
           path: |
             /nix
