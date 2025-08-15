@@ -36,7 +36,7 @@ jobs:
       - translations
       - blueprint-compiler
       - test-pkg-linux
-      - test-debian-12
+      - test-debian-13
       - zig-fmt
     steps:
       - id: status
@@ -957,8 +957,8 @@ jobs:
         run: |
           nix develop -c sh -c "cd pkg/${{ matrix.pkg }} ; zig build test"
 
-  test-debian-12:
-    name: Test build on Debian 12
+  test-debian-13:
+    name: Test build on Debian 13
     runs-on: namespace-profile-ghostty-sm
     needs: [test, build-dist]
     steps:
@@ -984,7 +984,7 @@ jobs:
           context: dist
           file: dist/src/build/docker/debian/Dockerfile
           build-args: |
-            DISTRO_VERSION=12
+            DISTRO_VERSION=13
 
   flatpak-check-zig-cache:
     if: github.repository == 'ghostty-org/ghostty'
