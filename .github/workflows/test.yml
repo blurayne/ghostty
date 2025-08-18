@@ -294,6 +294,10 @@ jobs:
       - name: Xcode Version
         run: xcodebuild -version
 
+      # Workaround a bug where some Namespace images don't have the the metal
+      # toolchain installed. We should be able to remove this eventually.
+      - run: xcodebuild -downloadComponent MetalToolchain
+
       - name: get the Zig deps
         id: deps
         run: nix build -L .#deps && echo "deps=$(readlink ./result)" >> $GITHUB_OUTPUT
