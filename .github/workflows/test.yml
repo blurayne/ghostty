@@ -426,6 +426,11 @@ jobs:
           _LXD_SNAP_DEVCGROUP_CONFIG="/var/lib/snapd/cgroup/snap.lxd.device"
           sudo mkdir -p /var/lib/snapd/cgroup
           echo 'self-managed=true' | sudo tee  "${_LXD_SNAP_DEVCGROUP_CONFIG}"
+      # Workaround from a change introduced between 8.10.2 and 8.11.1 where the
+      # user runtime directory was changed.
+      - run: |
+          sudo mkdir /run/user/1001
+          sudo chown 1001 /run/user/1001
       - uses: snapcore/action-build@3bdaa03e1ba6bf59a65f84a751d943d549a54e79 # v1.3.0
         with:
           path: dist
