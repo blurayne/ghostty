@@ -36,6 +36,7 @@ jobs:
       - blueprint-compiler
       - test-pkg-linux
       - test-debian-13
+      - valgrind
       - zig-fmt
     steps:
       - id: status
@@ -1038,3 +1039,42 @@ jobs:
   #         cache-key: flatpak-builder-${{ github.sha }}
   #         arch: ${{ matrix.variant.arch }}
   #         verbose: true
+
+  valgrind:
+    if: github.repository == 'ghostty-org/ghostty'
+    runs-on: namespace-profile-ghostty-lg
+    needs: test
+    env:
+      ZIG_LOCAL_CACHE_DIR: /zig/local-cache
+      ZIG_GLOBAL_CACHE_DIR: /zig/global-cache
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Cache
+        uses: namespacelabs/nscloud-cache-action@305bfa7ea980a858d511af4899414a84847c7991 # v1.2.16
+        with:
+          path: |
+            /nix
+            /zig
+
+      # Install Nix and use that to run our tests so our environment matches exactly.
+      - uses: cachix/install-nix-action@fc6e360bedc9ee72d75e701397f0bb30dce77568 # v31.5.2
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: cachix/cachix-action@0fc020193b5a1fa3ac4575aa3a7d3aa6a35435ad # v16
+        with:
+          name: ghostty
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      - name: valgrind deps
+        run: |
+          sudo apt update -y
+          sudo apt install -y valgrind libc6-dbg
+
+      # Currently, the entire Ghostty test suite does not pass Valgrind.
+      # As we incrementally add areas that pass, we'll add more filters here.
+      # Ultimately, we'll remove the filter and run the full suite.
+      - name: valgrind
+        run: |
+          nix develop -c zig build test-valgrind -Dtest-filter="OSC"
