@@ -363,6 +363,7 @@ jobs:
         os:
           [namespace-profile-ghostty-snap, namespace-profile-ghostty-snap-arm64]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     needs: [test, build-dist]
     env:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
@@ -397,6 +398,7 @@ jobs:
     runs-on: windows-2022
     # this will not stop other jobs from running
     continue-on-error: true
+    timeout-minutes: 45
     needs: test
     steps:
       - name: Checkout code
