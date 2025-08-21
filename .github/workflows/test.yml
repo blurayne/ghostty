@@ -1079,3 +1079,4 @@ jobs:
         run: |
           nix develop -c zig build test-valgrind -Dtest-filter="OSC"
           nix develop -c zig build test-valgrind -Dtest-filter="Parser"
+          nix develop -c zig build test-valgrind -Dtest-filter="PageList"
