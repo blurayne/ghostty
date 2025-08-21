@@ -1072,9 +1072,6 @@ jobs:
           sudo apt update -y
           sudo apt install -y valgrind libc6-dbg
 
-      # Currently, the entire Ghostty test suite does not pass Valgrind.
-      # As we incrementally add areas that pass, we'll add more filters here.
-      # Ultimately, we'll remove the filter and run the full suite.
       - name: valgrind
         run: |
-          nix develop -c zig build test-valgrind -Dtest-filter="OSC"
+          nix develop -c zig build test-valgrind
