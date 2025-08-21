@@ -1010,6 +1010,7 @@ jobs:
   valgrind:
     if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-lg
+    timeout-minutes: 30
     needs: test
     env:
       ZIG_LOCAL_CACHE_DIR: /zig/local-cache
