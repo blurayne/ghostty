@@ -38,6 +38,7 @@ jobs:
       - test-debian-13
       - valgrind
       - zig-fmt
+      - flatpak
     steps:
       - id: status
         name: Determine status
