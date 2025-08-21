@@ -38,6 +38,7 @@ jobs:
       - test-debian-13
       - valgrind
       - zig-fmt
+      - flatpak
     steps:
       - id: status
         name: Determine status
@@ -1013,32 +1014,31 @@ jobs:
       - name: Check Flatpak Zig Dependencies
         run: nix develop -c ./flatpak/build-support/check-zig-cache.sh
 
-  # Disabled until we update to Zig 0.15 or if we can pin this to Zig 0.14
-  # flatpak:
-  #   if: github.repository == 'ghostty-org/ghostty'
-  #   name: "Flatpak"
-  #   container:
-  #     image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
-  #     options: --privileged
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       variant:
-  #         - arch: x86_64
-  #           runner: namespace-profile-ghostty-md
-  #         - arch: aarch64
-  #           runner: namespace-profile-ghostty-md-arm64
-  #   runs-on: ${{ matrix.variant.runner }}
-  #   needs: [flatpak-check-zig-cache, test]
-  #   steps:
-  #     - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-  #     - uses: flatpak/flatpak-github-actions/flatpak-builder@10a3c29f0162516f0f68006be14c92f34bd4fa6c # v6.5
-  #       with:
-  #         bundle: com.mitchellh.ghostty
-  #         manifest-path: flatpak/com.mitchellh.ghostty.yml
-  #         cache-key: flatpak-builder-${{ github.sha }}
-  #         arch: ${{ matrix.variant.arch }}
-  #         verbose: true
+  flatpak:
+    if: github.repository == 'ghostty-org/ghostty'
+    name: "Flatpak"
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-47
+      options: --privileged
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - arch: x86_64
+            runner: namespace-profile-ghostty-md
+          - arch: aarch64
+            runner: namespace-profile-ghostty-md-arm64
+    runs-on: ${{ matrix.variant.runner }}
+    needs: [flatpak-check-zig-cache, test]
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@10a3c29f0162516f0f68006be14c92f34bd4fa6c # v6.5
+        with:
+          bundle: com.mitchellh.ghostty
+          manifest-path: flatpak/com.mitchellh.ghostty.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          arch: ${{ matrix.variant.arch }}
+          verbose: true
 
   valgrind:
     if: github.repository == 'ghostty-org/ghostty'
