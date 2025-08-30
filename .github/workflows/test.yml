@@ -13,6 +13,7 @@ jobs:
       - build-bench
       - build-dist
       - build-flatpak
+      - build-freebsd
       - build-linux
       - build-linux-libghostty
       - build-nix
@@ -1015,3 +1016,57 @@ jobs:
       - name: valgrind
         run: |
           nix develop -c zig build test-valgrind
+
+  build-freebsd:
+    name: Build on FreeBSD
+    needs: test
+    runs-on: namespace-profile-mitchellh-sm-systemd
+    strategy:
+      matrix:
+        release:
+          - "14.3"
+          # - "15.0" # disable until fixed: https://github.com/vmactions/freebsd-vm/issues/108
+    steps:
+      - name: Checkout Ghostty
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Start SSH
+        run: |
+          sudo systemctl start ssh
+
+      - name: Set up FreeBSD VM
+        uses: vmactions/freebsd-vm@05856381fab64eeee9b038a0818f6cec649ca17a # v1.2.3
+        with:
+          release: ${{ matrix.release }}
+          copyback: false
+          usesh: true
+          prepare: |
+            pkg install -y \
+              devel/blueprint-compiler \
+              devel/gettext \
+              devel/git \
+              devel/pkgconf \
+              graphics/wayland \
+              lang/zig \
+              security/ca_root_nss \
+              textproc/hs-pandoc \
+              x11-fonts/jetbrains-mono \
+              x11-toolkits/libadwaita \
+              x11-toolkits/gtk40 \
+              x11-toolkits/gtk4-layer-shell
+
+          run: |
+            zig env
+
+      - name: Run tests
+        shell: freebsd {0}
+        run: |
+          cd $GITHUB_WORKSPACE
+          zig build test
+
+      - name: Build GTK-NG app runtime
+        shell: freebsd {0}
+        run: |
+          cd $GITHUB_WORKSPACE
+          zig build
+          ./zig-out/bin/ghostty +version
