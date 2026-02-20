@@ -23,6 +23,7 @@ jobs:
         with:
           filters: |
             macos:
+              - '.swiftlint.yml'
               - 'macos/**'
 
   required:
@@ -963,7 +964,7 @@ jobs:
           useDaemon: false # sometimes fails on short jobs
 
       - name: swiftlint check
-        run: nix develop -c swiftlint lint --strict macos
+        run: nix develop -c swiftlint lint --strict
 
   alejandra:
     if: github.repository == 'ghostty-org/ghostty'
