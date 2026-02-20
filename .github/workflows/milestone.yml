@@ -9,25 +9,17 @@ on:
   pull_request_target:
     types: [closed]
 
-permissions: {}
-
 jobs:
   update-milestone:
     runs-on: namespace-profile-ghostty-sm
     name: Milestone Update
     steps:
-      - uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
-        id: app-token
-        with:
-          app-id: ${{ secrets.VOUCH_APP_ID }}
-          private-key: ${{ secrets.VOUCH_APP_PRIVATE_KEY }}
-
       - name: Set Milestone for PR
         uses: hustcer/milestone-action@ebed8d5daafd855a600d7e665c1b130f06d24130 # v3.1
         if: github.event.pull_request.merged == true
         with:
           action: bind-pr # `bind-pr` is the default action
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       # Bind milestone to closed issue that has a merged PR fix
       - name: Set Milestone for Issue
@@ -35,4 +27,4 @@ jobs:
         if: github.event.issue.state == 'closed'
         with:
           action: bind-issue
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
