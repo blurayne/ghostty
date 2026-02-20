@@ -11,26 +11,71 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  paths:
+  # Determines whether other jobs should be skipped. Modify this if there
+  # are other fast skip conditions, and add it as an output. Then modify
+  # other tests `needs/if` to check them. Document the outputs.
+  skip:
     if: github.repository == 'ghostty-org/ghostty'
     runs-on: namespace-profile-ghostty-xsm
     outputs:
+      # 'true' when all changed files are non-code (e.g. only VOUCHED.td),
+      # signaling that all other jobs can be skipped entirely.
+      skip: ${{ steps.determine.outputs.skip }}
+      # Path-based filters to gate specific linter/formatter jobs.
+      actions_pins: ${{ steps.filter.outputs.actions_pins }}
+      blueprints: ${{ steps.filter.outputs.blueprints }}
       macos: ${{ steps.filter.outputs.macos }}
+      nix: ${{ steps.filter.outputs.nix }}
+      shell: ${{ steps.filter.outputs.shell }}
+      zig: ${{ steps.filter.outputs.zig }}
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter
         with:
           filters: |
+            code:
+              - '**'
+              - '!.github/VOUCHED.td'
             macos:
               - '.swiftlint.yml'
               - 'macos/**'
+            actions_pins:
+              - '.github/workflows/**'
+              - '.github/pinact.yml'
+            shell:
+              - '**/*.sh'
+              - '**/*.bash'
+            nix:
+              - 'nix/**'
+              - '*.nix'
+              - 'flake.nix'
+              - 'flake.lock'
+              - 'default.nix'
+              - 'shell.nix'
+            zig:
+              - '**/*.zig'
+              - 'build.zig*'
+            blueprints:
+              - 'src/apprt/gtk/**/*.blp'
+              - 'nix/build-support/check-blueprints.sh'
+
+      - id: determine
+        name: Determine skip
+        run: |
+          if [ "${{ steps.filter.outputs.code }}" = "false" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
   required:
     name: "Required Checks: Test"
+    if: always()
     runs-on: namespace-profile-ghostty-xsm
     needs:
-      - paths
+      - skip
       - build-bench
       - build-dist
       - build-examples
@@ -633,7 +678,8 @@ jobs:
         run: Get-Content -Path ".\build.log"
 
   test:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-md
     outputs:
       zig_version: ${{ steps.zig.outputs.version }}
@@ -828,7 +874,7 @@ jobs:
       fail-fast: false
       matrix:
         i18n: ["true", "false"]
-    name: Build -Di18n=${{ matrix.simd }}
+    name: Build -Di18n=${{ matrix.i18n }}
     runs-on: namespace-profile-ghostty-sm
     needs: test
     env:
@@ -859,7 +905,8 @@ jobs:
           nix develop -c zig build -Di18n=${{ matrix.i18n }}
 
   zig-fmt:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true' && needs.skip.outputs.zig == 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
@@ -887,7 +934,8 @@ jobs:
 
   pinact:
     name: "GitHub Actions Pins"
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true' && needs.skip.outputs.actions_pins == 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     permissions:
@@ -918,7 +966,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   prettier:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
@@ -945,9 +994,9 @@ jobs:
         run: nix develop -c prettier --check .
 
   swiftlint:
-    if: github.repository == 'ghostty-org/ghostty' && needs.paths.outputs.macos == 'true'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true' && needs.skip.outputs.macos == 'true'
     runs-on: namespace-profile-ghostty-macos-tahoe
-    needs: paths
+    needs: skip
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -967,7 +1016,8 @@ jobs:
         run: nix develop -c swiftlint lint --strict
 
   alejandra:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true' && needs.skip.outputs.nix == 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
@@ -994,7 +1044,8 @@ jobs:
         run: nix develop -c alejandra --check .
 
   typos:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
@@ -1021,7 +1072,8 @@ jobs:
         run: nix develop -c typos
 
   shellcheck:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true' && needs.skip.outputs.shell == 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
@@ -1053,7 +1105,8 @@ jobs:
             $(find . \( -name "*.sh" -o -name "*.bash" \) -type f ! -path "./zig-out/*" ! -path "./macos/build/*" ! -path "./.git/*" | sort)
 
   translations:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
@@ -1080,7 +1133,8 @@ jobs:
         run: nix develop -c .github/scripts/check-translations.sh
 
   blueprint-compiler:
-    if: github.repository == 'ghostty-org/ghostty'
+    if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true' && needs.skip.outputs.blueprints == 'true'
+    needs: skip
     runs-on: namespace-profile-ghostty-xsm
     timeout-minutes: 60
     env:
