@@ -34,6 +34,7 @@ jobs:
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter_every
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           predicate-quantifier: "every"
           filters: |
             code:
@@ -42,6 +43,7 @@ jobs:
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter_any
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           filters: |
             macos:
               - '.swiftlint.yml'
