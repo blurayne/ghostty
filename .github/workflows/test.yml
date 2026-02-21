@@ -22,22 +22,27 @@ jobs:
       # signaling that all other jobs can be skipped entirely.
       skip: ${{ steps.determine.outputs.skip }}
       # Path-based filters to gate specific linter/formatter jobs.
-      actions_pins: ${{ steps.filter.outputs.actions_pins }}
-      blueprints: ${{ steps.filter.outputs.blueprints }}
-      macos: ${{ steps.filter.outputs.macos }}
-      nix: ${{ steps.filter.outputs.nix }}
-      shell: ${{ steps.filter.outputs.shell }}
-      zig: ${{ steps.filter.outputs.zig }}
+      actions_pins: ${{ steps.filter_any.outputs.actions_pins }}
+      blueprints: ${{ steps.filter_any.outputs.blueprints }}
+      macos: ${{ steps.filter_any.outputs.macos }}
+      nix: ${{ steps.filter_any.outputs.nix }}
+      shell: ${{ steps.filter_any.outputs.shell }}
+      zig: ${{ steps.filter_any.outputs.zig }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
-        id: filter
+        id: filter_every
         with:
+          predicate-quantifier: "every"
           filters: |
             code:
               - '**'
               - '!.github/VOUCHED.td'
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter_any
+        with:
+          filters: |
             macos:
               - '.swiftlint.yml'
               - 'macos/**'
@@ -64,7 +69,7 @@ jobs:
       - id: determine
         name: Determine skip
         run: |
-          if [ "${{ steps.filter.outputs.code }}" = "false" ]; then
+          if [ "${{ steps.filter_every.outputs.code }}" = "false" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
