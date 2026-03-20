@@ -744,6 +744,10 @@ jobs:
           Write-Host "Zig installed."
           .\zig\zig.exe version
 
+      - name: Compile build
+        shell: pwsh
+        run: .\zig\zig.exe build --help
+
       - name: Generate build testing script
         shell: pwsh
         run: |
