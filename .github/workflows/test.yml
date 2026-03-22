@@ -87,6 +87,7 @@ jobs:
       - build-dist
       - build-examples-zig
       - build-examples-cmake
+      - build-examples-cmake-windows
       - build-cmake
       - build-flatpak
       - build-libghostty-vt
@@ -262,6 +263,30 @@ jobs:
           cd example/${{ matrix.dir }}
           nix develop -c cmake -B build -DFETCHCONTENT_SOURCE_DIR_GHOSTTY=${{ github.workspace }}
           nix develop -c cmake --build build
+
+  build-examples-cmake-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJSON(needs.list-examples.outputs.cmake) }}
+    name: Example ${{ matrix.dir }} (Windows)
+    runs-on: windows-2025
+    continue-on-error: true
+    timeout-minutes: 45
+    needs: [test, list-examples]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+
+      - name: Build Example
+        shell: pwsh
+        run: |
+          cd example/${{ matrix.dir }}
+          cmake -B build -DFETCHCONTENT_SOURCE_DIR_GHOSTTY=${{ github.workspace }}
+          cmake --build build
 
   build-cmake:
     runs-on: namespace-profile-ghostty-sm
