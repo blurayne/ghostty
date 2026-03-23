@@ -92,13 +92,13 @@ jobs:
       - build-libghostty-vt
       - build-libghostty-vt-android
       - build-libghostty-vt-macos
+      - build-libghostty-vt-windows
       - build-linux
       - build-linux-libghostty
       - build-nix
       - build-macos
       - build-macos-freetype
       - build-snap
-      - build-windows
       - test
       - test-simd
       - test-gtk
@@ -500,6 +500,25 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
+  build-libghostty-vt-windows:
+    runs-on: windows-2025
+    continue-on-error: true
+    timeout-minutes: 45
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+
+      # TODO: Work towards passing the full test suite on Windows.
+      - name: Test libghostty-vt
+        run: zig build test-lib-vt
+
+      - name: Build libghostty-vt
+        run: zig build -Demit-lib-vt
+
   build-linux:
     strategy:
       fail-fast: false
@@ -794,79 +813,6 @@ jobs:
       - name: Build All
         run: |
           nix develop -c zig build --system ${{ steps.deps.outputs.deps }} -Demit-macos-app=false -Drenderer=metal -Dfont-backend=coretext_freetype
-
-  build-windows:
-    runs-on: windows-2022
-    # this will not stop other jobs from running
-    continue-on-error: true
-    timeout-minutes: 45
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      # This could be from a script if we wanted to but inlining here for now
-      # in one place.
-      # Using powershell so that we do not need to install WSL components. Also,
-      # WSLv1 is only installed on Github runners.
-      - name: Install zig
-        shell: pwsh
-        run: |
-          # Get the zig version from build.zig.zon so that it only needs to be updated
-          $fileContent = Get-Content -Path "build.zig.zon" -Raw
-          $pattern = 'minimum_zig_version\s*=\s*"([^"]+)"'
-          $zigVersion = [regex]::Match($fileContent, $pattern).Groups[1].Value
-          $version = "zig-x86_64-windows-$zigVersion"
-          Write-Output $version
-          $uri = "https://ziglang.org/download/$zigVersion/$version.zip"
-          Invoke-WebRequest -Uri "$uri" -OutFile ".\zig-windows.zip"
-          Expand-Archive -Path ".\zig-windows.zip" -DestinationPath ".\" -Force
-          Remove-Item -Path ".\zig-windows.zip"
-          Rename-Item -Path ".\$version" -NewName ".\zig"
-          Write-Host "Zig installed."
-          .\zig\zig.exe version
-
-      - name: Compile build
-        shell: pwsh
-        run: .\zig\zig.exe build --help
-
-      - name: Generate build testing script
-        shell: pwsh
-        run: |
-          # Generate a script so that we can swallow the errors
-          $scriptContent = @"
-          .\zig\zig.exe build test 2>&1 | Out-File -FilePath "build.log" -Append
-          exit 0
-          "@
-          $scriptPath = "zigbuild.ps1"
-          # Write the script content to a file
-          $scriptContent | Set-Content -Path $scriptPath
-          Write-Host "Script generated at: $scriptPath"
-
-      - name: Test Windows
-        shell: pwsh
-        run: .\zigbuild.ps1 -ErrorAction SilentlyContinue
-
-      - name: Generate build script
-        shell: pwsh
-        run: |
-          # Generate a script so that we can swallow the errors
-          $scriptContent = @"
-          .\zig\zig.exe build 2>&1 | Out-File -FilePath "build.log" -Append
-          exit 0
-          "@
-          $scriptPath = "zigbuild.ps1"
-          # Write the script content to a file
-          $scriptContent | Set-Content -Path $scriptPath
-          Write-Host "Script generated at: $scriptPath"
-
-      - name: Build Windows
-        shell: pwsh
-        run: .\zigbuild.ps1 -ErrorAction SilentlyContinue
-
-      - name: Dump logs
-        shell: pwsh
-        run: Get-Content -Path ".\build.log"
 
   test:
     if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
