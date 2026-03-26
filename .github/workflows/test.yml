@@ -271,7 +271,7 @@ jobs:
       matrix:
         dir: ${{ fromJSON(needs.list-examples.outputs.cmake) }}
     name: Example ${{ matrix.dir }} (Windows)
-    runs-on: windows-2025
+    runs-on: namespace-profile-ghostty-windows
     timeout-minutes: 45
     needs: [test, list-examples]
     steps:
@@ -526,7 +526,7 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
   build-libghostty-vt-windows:
-    runs-on: windows-2025
+    runs-on: namespace-profile-ghostty-windows
     timeout-minutes: 45
     needs: test
     steps:
