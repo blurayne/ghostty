@@ -1116,7 +1116,7 @@ jobs:
   test-windows:
     if: github.repository == 'ghostty-org/ghostty' && needs.skip.outputs.skip != 'true'
     needs: skip
-    runs-on: windows-2025
+    runs-on: namespace-profile-ghostty-windows
     timeout-minutes: 45
     steps:
       - name: Checkout code
