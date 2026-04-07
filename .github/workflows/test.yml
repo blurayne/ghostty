@@ -99,6 +99,7 @@ jobs:
       - build-linux
       - build-linux-libghostty
       - build-nix
+      - build-nix-macos
       - build-macos
       - build-macos-freetype
       - build-snap
