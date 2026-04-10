@@ -278,6 +278,11 @@ jobs:
       fail-fast: false
       matrix:
         dir: ${{ fromJSON(needs.list-examples.outputs.cmake) }}
+        exclude:
+          # Cross-compilation with zig cc requires a single-config
+          # generator (Makefiles/Ninja). The Windows CI uses Visual
+          # Studio which always uses MSVC and ignores CMAKE_C_COMPILER.
+          - dir: c-vt-cmake-cross
     name: Example ${{ matrix.dir }} (Windows)
     runs-on: namespace-profile-ghostty-windows
     timeout-minutes: 45
