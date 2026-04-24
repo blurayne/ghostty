@@ -340,6 +340,9 @@ jobs:
       - name: Build XCFramework
         run: nix develop -c zig build -Demit-lib-vt
 
+      - name: Verify XCFramework artifact
+        run: test -f zig-out/lib/ghostty-vt.xcframework/Info.plist
+
       - name: Build and Run Example
         run: |
           cd example/${{ matrix.dir }}
