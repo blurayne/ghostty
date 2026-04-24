@@ -338,7 +338,7 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_26.3.app
 
       - name: Build XCFramework
-        run: nix develop -c zig build -Demit-lib-vt -Demit-lib-vt-xcframework
+        run: nix develop -c zig build -Demit-lib-vt
 
       - name: Verify XCFramework artifact
         run: test -f zig-out/lib/ghostty-vt.xcframework/Info.plist
