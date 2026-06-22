@@ -2,6 +2,22 @@
 
 A file for [guiding coding agents](https://agents.md/).
 
+## Dev Container
+
+All development, file operations, and builds MUST run inside the dev container.
+Use `mise` as the task runner on both host and inside the container.
+Never run `zig build` or `flatpak-builder` directly on the host.
+
+| Task | Command |
+|---|---|
+| Build Flatpak | `mise run build` |
+| Install locally | `mise run install` |
+| Interactive shell | `mise run shell` |
+| Clean all | `mise run clean` |
+
+Build artifacts land in `dist/build/` after a successful build.
+First build downloads the GNOME 50 runtime (~1 GB) into a named Docker volume — subsequent builds reuse it.
+
 ## Commands
 
 - **Build:** `zig build`

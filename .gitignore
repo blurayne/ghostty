@@ -21,6 +21,7 @@ test/ghostty
 test/cases/**/*.actual.png
 flatpak/builddir/
 flatpak/repo/
+dist/build/
 
 glad.zip
 /Box_test.ppm

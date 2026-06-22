@@ -1,0 +1,14 @@
+services:
+  builder:
+    build: .
+    image: ghostty-flatpak-builder
+    privileged: true
+    volumes:
+      - .:/workspace
+      - flatpak-cache:/root/.local/share/flatpak
+      - flatpak-builder-cache:/workspace/flatpak/.flatpak-builder
+    working_dir: /workspace
+
+volumes:
+  flatpak-cache:
+  flatpak-builder-cache:

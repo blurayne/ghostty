@@ -1,0 +1,65 @@
+[tasks.build]
+description = "Build Ghostty Flatpak inside dev container"
+run = "docker compose run --build --rm builder mise run _flatpak-build"
+
+[tasks.install]
+description = "Install the built Flatpak locally on host"
+run = """
+set -e
+if [ ! -f dist/build/com.mitchellh.ghostty.flatpak ]; then
+  echo "No flatpak found. Run: mise run build"
+  exit 1
+fi
+flatpak install --user --bundle --reinstall -y dist/build/com.mitchellh.ghostty.flatpak
+"""
+
+[tasks.shell]
+description = "Open interactive shell in dev container"
+run = "docker compose run --rm builder bash"
+
+[tasks.clean]
+description = "Remove build artifacts and container caches"
+run = """
+rm -rf dist/build flatpak/builddir flatpak/repo .flatpak-builder
+docker compose down -v
+"""
+
+[tasks._flatpak-build]
+description = "Build flatpak bundle — run inside container only"
+run = """
+set -e
+# The workspace is a git worktree whose .git file points to an absolute host path
+# unavailable in the container. flatpak-builder's type:dir source sees the .git
+# file, treats the dir as a git repo, and tries to fetch from it — which fails.
+# Fix: rename .git for the duration of the build so flatpak-builder treats it as
+# a plain directory. trap restores it even on failure.
+mv .git .git.worktree-bak
+trap 'mv .git.worktree-bak .git 2>/dev/null || true' EXIT INT TERM
+
+# Start system D-Bus if not already running.
+# machine-id and messagebus user are set up in the Dockerfile.
+if [ ! -S /app/var/run/dbus/system_bus_socket ] && [ ! -S /run/dbus/system_bus_socket ]; then
+  dbus-daemon --system --fork
+fi
+
+# rofiles-fuse (used by flatpak-builder) requires a session bus.
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+  export DBUS_SESSION_BUS_ADDRESS=$(dbus-daemon --session --fork --print-address)
+fi
+
+# --force-clean only clears builddir output, NOT the .flatpak-builder module
+# cache, so dependency builds are reused between runs.
+flatpak-builder \
+  --force-clean \
+  --disable-rofiles-fuse \
+  --repo=flatpak/repo \
+  flatpak/builddir \
+  flatpak/com.mitchellh.ghostty.yml
+
+mkdir -p dist/build
+flatpak build-bundle \
+  flatpak/repo \
+  dist/build/com.mitchellh.ghostty.flatpak \
+  com.mitchellh.ghostty \
+  tip
+"""
