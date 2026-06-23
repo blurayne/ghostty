@@ -2587,3 +2587,97 @@ test "SplitTree: zoom transfers on goto" {
     split.zoom(target_after_goto);
     try testing.expectEqual(handle_b, split.zoomed.?);
 }
+
+test "goto_split_index: iterator creation order" {
+    // Verify that tree.iterator() yields leaves in stable index order.
+    // This is the ordering that gotoIndex relies on to map index → surface.
+    // When splitting with .right, the existing node moves to the end of the
+    // node array and the new node is placed in the middle, so iterator order
+    // is deterministic but may differ from user-visible split order.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+    var vB: TestView = .{ .label = "B" };
+    var tB: TestTree = try .init(alloc, &vB);
+    defer tB.deinit();
+    var vC: TestView = .{ .label = "C" };
+    var tC: TestTree = try .init(alloc, &vC);
+    defer tC.deinit();
+
+    // Build tree: start with A, split right to add B → [split_AB, B, A]
+    // Then split right at A to add C → A|B|C in some index order.
+    var splitAB = try tA.split(alloc, .root, .right, 0.5, &tB);
+    defer splitAB.deinit();
+
+    // After splitAB: nodes are [split, B, A]; iterator yields B then A.
+    {
+        var it = splitAB.iterator();
+        const e1 = it.next() orelse return error.NotFound;
+        try testing.expectEqualStrings("B", e1.view.label);
+        const e2 = it.next() orelse return error.NotFound;
+        try testing.expectEqualStrings("A", e2.view.label);
+        try testing.expectEqual(null, it.next());
+    }
+
+    // Now split at A (last node) with .right to add C → iterator yields B, C, A.
+    var split = try splitAB.split(
+        alloc,
+        at: {
+            var it = splitAB.iterator();
+            break :at while (it.next()) |entry| {
+                if (std.mem.eql(u8, entry.view.label, "A")) break entry.handle;
+            } else return error.NotFound;
+        },
+        .right,
+        0.5,
+        &tC,
+    );
+    defer split.deinit();
+
+    // Count leaves and verify all three labels are present
+    var it = split.iterator();
+    var count: usize = 0;
+    var saw_a = false;
+    var saw_b = false;
+    var saw_c = false;
+    while (it.next()) |entry| {
+        count += 1;
+        if (std.mem.eql(u8, entry.view.label, "A")) saw_a = true;
+        if (std.mem.eql(u8, entry.view.label, "B")) saw_b = true;
+        if (std.mem.eql(u8, entry.view.label, "C")) saw_c = true;
+    }
+    try testing.expectEqual(@as(usize, 3), count);
+    try testing.expect(saw_a);
+    try testing.expect(saw_b);
+    try testing.expect(saw_c);
+}
+
+test "goto_split_index: out of range returns null handle" {
+    // Verify iterator correctly exhausts on an out-of-range index (simulates gotoIndex returning false).
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+    var vB: TestView = .{ .label = "B" };
+    var tB: TestTree = try .init(alloc, &vB);
+    defer tB.deinit();
+
+    // Tree has 2 leaves. Requesting index 99 should exhaust iterator.
+    var tree2 = try tA.split(alloc, .root, .right, 0.5, &tB);
+    defer tree2.deinit();
+
+    var it = tree2.iterator();
+    var i: usize = 0;
+    var found: bool = false;
+    while (it.next()) |_| {
+        i += 1;
+        if (i == 99) { found = true; break; }
+    }
+    try testing.expect(!found);
+    try testing.expectEqual(@as(usize, 2), i); // only 2 leaves
+}

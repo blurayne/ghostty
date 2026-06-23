@@ -773,10 +773,7 @@ pub const Application = extern struct {
             .search_total => Action.searchTotal(target, value),
             .search_selected => Action.searchSelected(target, value),
 
-            .goto_split_index => {
-                log.warn("goto_split_index: not yet implemented", .{});
-                return false;
-            },
+            .goto_split_index => |n| return Action.gotoSplitIndex(target, n),
             .move_split_to_new_window => {
                 log.warn("move_split_to_new_window: not yet implemented", .{});
                 return false;
@@ -2014,6 +2011,26 @@ const Action = struct {
             .surface => |core| {
                 const surface = core.rt_surface.surface;
                 return surface.as(gtk.Widget).activateAction("split-tree.equalize", null) != 0;
+            },
+        }
+    }
+
+    pub fn gotoSplitIndex(
+        target: apprt.Target,
+        n: usize,
+    ) bool {
+        switch (target) {
+            .app => return false,
+            .surface => |core| {
+                const surface = core.rt_surface.surface;
+                const tree = ext.getAncestor(
+                    SplitTree,
+                    surface.as(gtk.Widget),
+                ) orelse {
+                    log.warn("surface is not in a split tree, ignoring goto_split_index", .{});
+                    return false;
+                };
+                return tree.gotoIndex(n);
             },
         }
     }

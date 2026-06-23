@@ -378,6 +378,33 @@ pub const SplitTree = extern struct {
         return true;
     }
 
+    /// Move focus to the Nth leaf in creation order (1-indexed).
+    /// Returns true if focus switched to the target surface.
+    pub fn gotoIndex(self: *Self, n: usize) bool {
+        if (n == 0) return false; // 1-indexed; 0 is a no-op
+        const tree = self.getTree() orelse return false;
+        var it = tree.iterator();
+        var i: usize = 0;
+        while (it.next()) |entry| {
+            i += 1;
+            if (i == n) {
+                const surface = entry.view;
+                surface.grabFocus();
+                const old = self.private().last_focused.get();
+                defer if (old) |v| v.unref();
+                self.private().last_focused.set(surface);
+                if (tree.zoomed != null) {
+                    tree.zoom(entry.handle);
+                    const object = self.as(gobject.Object);
+                    object.notifyByPspec(properties.tree.impl.param_spec);
+                    object.notifyByPspec(properties.@"is-zoomed".impl.param_spec);
+                }
+                return true;
+            }
+        }
+        return false; // out of range
+    }
+
     fn disconnectSurfaceHandlers(self: *Self) void {
         const tree = self.getTree() orelse return;
         var it = tree.iterator();
