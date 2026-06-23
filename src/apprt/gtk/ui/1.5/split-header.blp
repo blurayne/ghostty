@@ -1,0 +1,42 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $GhosttySplitHeader: Adw.Bin {
+  styles ["split-header"]
+
+  Gtk.Box header_box {
+    orientation: horizontal;
+    spacing: 4;
+
+    Gtk.Label title_label {
+      hexpand: true;
+      ellipsize: end;
+      xalign: 0;
+    }
+
+    Gtk.Image broadcast_icon {
+      visible: false;
+      icon-name: "audio-input-microphone-symbolic";
+    }
+
+    Gtk.Button zoom_button {
+      icon-name: "view-fullscreen-symbolic";
+      clicked => $on_zoom_clicked() swapped;
+    }
+
+    Gtk.Button close_button {
+      icon-name: "window-close-symbolic";
+      clicked => $on_close_clicked() swapped;
+    }
+
+    Gtk.GestureClick title_gesture {
+      button: 0;
+      pressed => $on_title_click() swapped;
+    }
+
+    Gtk.GestureClick middle_gesture {
+      button: 2;
+      pressed => $on_middle_click() swapped;
+    }
+  }
+}

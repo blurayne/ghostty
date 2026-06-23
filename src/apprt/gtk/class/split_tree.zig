@@ -17,6 +17,7 @@ const Application = @import("application.zig").Application;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const Surface = @import("surface.zig").Surface;
 const SurfaceScrolledWindow = @import("surface_scrolled_window.zig").SurfaceScrolledWindow;
+const SplitHeader = @import("split_header.zig").SplitHeader;
 
 const log = std.log.scoped(.gtk_ghostty_split_tree);
 
@@ -169,6 +170,9 @@ pub const SplitTree = extern struct {
         /// close dialog.
         pending_close: ?Surface.Tree.Node.Handle,
 
+        /// Manual visibility toggle for split-header in manual mode.
+        header_manual_visible: bool = false,
+
         pub var offset: c_int = 0;
     };
 
@@ -194,6 +198,7 @@ pub const SplitTree = extern struct {
             .init("equalize", actionEqualize, null),
             .init("zoom", actionZoom, null),
             .init("close-split", actionCloseSplit, null),
+            .init("toggle-header", actionToggleHeader, null),
         };
 
         _ = ext.actions.addAsGroup(Self, self, "split-tree", &actions);
@@ -711,6 +716,50 @@ pub const SplitTree = extern struct {
         surface.close();
     }
 
+    fn actionToggleHeader(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        priv.header_manual_visible = !priv.header_manual_visible;
+        self.updateHeaderVisibility();
+    }
+
+    /// Walk all leaves in the tree and update their SplitHeader visibility
+    /// based on the current config split-header mode and split count.
+    fn updateHeaderVisibility(self: *Self) void {
+        const tree = self.getTree() orelse return;
+        const app = Application.default();
+        const config_obj = app.getConfig();
+        defer config_obj.unref();
+        const config = config_obj.get();
+        const mode = config.@"split-header";
+        const priv = self.private();
+
+        // Count leaves in the tree
+        var count: u32 = 0;
+        var it = tree.iterator();
+        while (it.next()) |_| count += 1;
+
+        // Update each leaf's header
+        var it2 = tree.iterator();
+        while (it2.next()) |entry| {
+            const surface = entry.view;
+            const ssw = ext.getAncestor(
+                SurfaceScrolledWindow,
+                surface.as(gtk.Widget),
+            ) orelse continue;
+            const header = ssw.getHeader();
+            header.setSplitCount(count);
+            header.setHeaderMode(mode);
+            // For manual mode, directly override the visibility
+            if (mode == .manual) {
+                header.as(gtk.Widget).setVisible(priv.header_manual_visible);
+            }
+        }
+    }
+
     fn surfaceCloseRequest(
         surface: *Surface,
         self: *Self,
@@ -910,6 +959,9 @@ pub const SplitTree = extern struct {
 
         // Our active surface may have changed
         self.as(gobject.Object).notifyByPspec(properties.@"active-surface".impl.param_spec);
+
+        // Update header visibility for all splits based on current config + count
+        self.updateHeaderVisibility();
 
         return 0;
     }

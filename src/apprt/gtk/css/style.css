@@ -158,6 +158,22 @@ label.resize-overlay {
 }
 
 /*
+ * Split Header Bar
+ */
+.split-header {
+  background-color: @headerbar_bg_color;
+  border-bottom: 1px solid @borders;
+  padding: 2px 4px;
+  min-height: 28px;
+}
+
+.split-header button {
+  padding: 2px;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/*
  * Splits
  */
 

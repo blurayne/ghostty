@@ -7,6 +7,7 @@ const gtk_version = @import("../gtk_version.zig");
 const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
 const Surface = @import("surface.zig").Surface;
+const SplitHeader = @import("split_header.zig").SplitHeader;
 const Config = @import("config.zig").Config;
 
 const log = std.log.scoped(.gtk_ghostty_surface_scrolled_window);
@@ -60,6 +61,7 @@ pub const SurfaceScrolledWindow = extern struct {
         config: ?*Config = null,
         config_binding: ?*gobject.Binding = null,
         surface: ?*Surface = null,
+        header: *SplitHeader,
         scrolled_window: *gtk.ScrolledWindow,
         pub var offset: c_int = 0;
     };
@@ -134,6 +136,10 @@ pub const SurfaceScrolledWindow = extern struct {
         return self.private().surface;
     }
 
+    pub fn getHeader(self: *Self) *SplitHeader {
+        return self.private().header;
+    }
+
     pub fn setSurface(self: *Self, surface_: ?*Surface) void {
         const priv = self.private();
 
@@ -195,6 +201,8 @@ pub const SurfaceScrolledWindow = extern struct {
         pub const Instance = Self;
 
         fn init(class: *Class) callconv(.c) void {
+            gobject.ext.ensureType(SplitHeader);
+
             gtk.Widget.Class.setTemplateFromResource(
                 class.as(gtk.Widget.Class),
                 comptime gresource.blueprint(.{
@@ -207,6 +215,7 @@ pub const SurfaceScrolledWindow = extern struct {
             // Bindings
             class.bindTemplateCallback("scrollbar_policy", &closureScrollbarPolicy);
             class.bindTemplateCallback("notify_surface", &propSurface);
+            class.bindTemplateChildPrivate("header", .{});
             class.bindTemplateChildPrivate("scrolled_window", .{});
 
             // Properties

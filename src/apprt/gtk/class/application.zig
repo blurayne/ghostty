@@ -779,8 +779,18 @@ pub const Application = extern struct {
                 return false;
             },
             .toggle_split_header => {
-                log.warn("toggle_split_header: not yet implemented", .{});
-                return false;
+                switch (target) {
+                    .app => return false,
+                    .surface => |core_target| {
+                        const surface = core_target.rt_surface.surface;
+                        const tree = ext.getAncestor(
+                            SplitTree,
+                            surface.as(gtk.Widget),
+                        ) orelse return false;
+                        _ = tree.as(gtk.Widget).activateAction("split-tree.toggle-header", null);
+                        return true;
+                    },
+                }
             },
 
             // Unimplemented

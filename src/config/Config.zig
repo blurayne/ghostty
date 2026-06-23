@@ -1103,6 +1103,16 @@ palette: Palette = .{},
 /// Available since: 1.3.0
 @"split-preserve-zoom": SplitPreserveZoom = .{},
 
+/// Per-split header bar visibility.
+///   - off       never show header (current behavior)
+///   - auto      show only when the active tab has more than 2 splits (default)
+///   - always    always show on every split
+///   - manual    per-tab; user toggles via `toggle_split_header`. Initial state hidden.
+@"split-header": SplitHeaderMode = .auto,
+
+/// Middle-click anywhere on the split header closes the split.
+@"split-header-middle-click-close": bool = false,
+
 /// The foreground and background color for search matches. This only applies
 /// to non-focused search matches, also known as candidate matches.
 ///
@@ -8713,6 +8723,17 @@ pub const ShellIntegrationFeatures = packed struct {
 pub const SplitPreserveZoom = packed struct {
     /// Deprecated: zoom is now always transferred on navigation (no-op).
     navigation: bool = false,
+};
+
+pub const SplitHeaderMode = enum {
+    /// Never show the header bar (current behavior if not set).
+    off,
+    /// Show only when the active tab has more than 2 splits.
+    auto,
+    /// Always show on every split.
+    always,
+    /// Per-tab; user toggles via `toggle_split_header`. Initial state hidden.
+    manual,
 };
 
 pub const RepeatableCommand = struct {
