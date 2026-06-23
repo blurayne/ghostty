@@ -1091,9 +1091,10 @@ palette: Palette = .{},
 /// will unzoom any zoomed split. This configuration allows you to control
 /// this behavior.
 ///
-/// This can be set to `navigation` to preserve the zoomed split state
-/// when navigating to another split (e.g. via `goto_split`). This will
-/// change the zoomed split to the newly focused split instead of unzooming.
+/// The `navigation` sub-flag is deprecated and now a no-op. Zoom is always
+/// transferred to the newly focused split when navigating (e.g. via
+/// `goto_split`). Existing configurations with `split-preserve-zoom =
+/// navigation` will continue to parse without error.
 ///
 /// Any options can also be prefixed with `no-` to disable that option.
 ///
@@ -8710,6 +8711,7 @@ pub const ShellIntegrationFeatures = packed struct {
 };
 
 pub const SplitPreserveZoom = packed struct {
+    /// Deprecated: zoom is now always transferred on navigation (no-op).
     navigation: bool = false,
 };
 

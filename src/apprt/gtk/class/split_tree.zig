@@ -365,16 +365,7 @@ pub const SplitTree = extern struct {
         errdefer self.private().last_focused.set(old_last_focused);
 
         if (tree.zoomed != null) {
-            const app = Application.default();
-            const config_obj = app.getConfig();
-            defer config_obj.unref();
-            const config = config_obj.get();
-
-            if (!config.@"split-preserve-zoom".navigation) {
-                tree.zoomed = null;
-            } else {
-                tree.zoom(target);
-            }
+            tree.zoom(target);
 
             // When the zoom state changes our tree state changes and
             // we need to send the proper notifications to trigger

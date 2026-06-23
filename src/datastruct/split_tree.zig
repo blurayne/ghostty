@@ -221,6 +221,7 @@ pub fn SplitTree(comptime V: type) type {
             if (handle) |v| {
                 assert(@intFromEnum(v) >= 0);
                 assert(@intFromEnum(v) < self.nodes.len);
+                assert(self.nodes[v.idx()] == .leaf); // zoom target must be a leaf
             }
             self.zoomed = handle;
         }
@@ -2514,4 +2515,53 @@ test "SplitTree: remove and zoom" {
             \\
         );
     }
+}
+
+test "SplitTree: zoom transfers on goto" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var v1: TestTree.View = .{ .label = "A" };
+    var t1: TestTree = try .init(alloc, &v1);
+    defer t1.deinit();
+    var v2: TestTree.View = .{ .label = "B" };
+    var t2: TestTree = try .init(alloc, &v2);
+    defer t2.deinit();
+
+    // A | B horizontal
+    var split = try t1.split(
+        alloc,
+        .root, // at root
+        .right, // split right
+        0.5,
+        &t2, // insert t2
+    );
+    defer split.deinit();
+
+    // Find handles for A and B
+    const handle_a = ha: {
+        var it = split.iterator();
+        break :ha while (it.next()) |entry| {
+            if (std.mem.eql(u8, entry.view.label, "A")) break entry.handle;
+        } else return error.NotFound;
+    };
+    const handle_b = hb: {
+        var it = split.iterator();
+        break :hb while (it.next()) |entry| {
+            if (std.mem.eql(u8, entry.view.label, "B")) break entry.handle;
+        } else return error.NotFound;
+    };
+
+    // Zoom A
+    split.zoom(handle_a);
+    try testing.expectEqual(handle_a, split.zoomed.?);
+
+    // goto next should point to B
+    const target = try split.goto(alloc, handle_a, .next);
+    try testing.expect(target != null);
+    try testing.expectEqual(handle_b, target.?);
+
+    // Simulate the GTK goto() zoom transfer: zoom to the goto target
+    split.zoom(target);
+    try testing.expectEqual(handle_b, split.zoomed.?);
 }
