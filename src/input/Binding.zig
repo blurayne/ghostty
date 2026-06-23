@@ -661,6 +661,22 @@ pub const Action = union(enum) {
     /// Equalize the size of all splits in the current window.
     equalize_splits,
 
+    /// Focus the Nth split in the current tab (1-indexed, creation order).
+    /// Out-of-range index is a silent no-op.
+    goto_split_index: usize,
+
+    /// Detach the active split into a new window.
+    ///
+    /// Behavior is wired in a later phase; registered here so user configs
+    /// can reference the action name.
+    move_split_to_new_window,
+
+    /// Toggle split-header visibility for the current tab.
+    ///
+    /// Only effective when `split-header = manual`; a no-op in all other modes.
+    /// The header widget is wired in a later phase.
+    toggle_split_header,
+
     /// Reset the window to the default size. The "default size" is the
     /// size that a new window would be created with. This has no effect
     /// if the window is fullscreen.
@@ -1426,6 +1442,9 @@ pub const Action = union(enum) {
             .toggle_readonly,
             .resize_split,
             .equalize_splits,
+            .goto_split_index,
+            .move_split_to_new_window,
+            .toggle_split_header,
             .inspector,
             => .surface,
         };
@@ -4600,6 +4619,21 @@ test "parse: write screen file invalid" {
     try testing.expectError(Error.InvalidFormat, parseSingle(
         "a=write_screen_file:copy,html,extra",
     ));
+}
+
+test "parse: goto_split_index" {
+    const result = try Action.parse("goto_split_index:3");
+    try std.testing.expectEqual(Action{ .goto_split_index = 3 }, result);
+}
+
+test "parse: toggle_split_header" {
+    const result = try Action.parse("toggle_split_header");
+    try std.testing.expectEqual(Action.toggle_split_header, result);
+}
+
+test "parse: move_split_to_new_window" {
+    const result = try Action.parse("move_split_to_new_window");
+    try std.testing.expectEqual(Action.move_split_to_new_window, result);
 }
 
 test "action: format" {

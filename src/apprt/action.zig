@@ -148,6 +148,22 @@ pub const Action = union(Key) {
     /// Equalize all the splits in the target window.
     equalize_splits,
 
+    /// Focus the Nth split in the current tab (1-indexed, creation order).
+    /// Out-of-range index is a silent no-op.
+    goto_split_index: usize,
+
+    /// Detach the active split into a new window.
+    ///
+    /// Behavior is wired in a later phase; registered here so user configs
+    /// can reference the action name.
+    move_split_to_new_window,
+
+    /// Toggle split-header visibility for the current tab.
+    ///
+    /// Only effective when `split-header = manual`; a no-op in all other modes.
+    /// The header widget is wired in a later phase.
+    toggle_split_header,
+
     /// Toggle whether a split is zoomed or not. A zoomed split is resized
     /// to take up the entire window.
     toggle_split_zoom,
@@ -369,6 +385,9 @@ pub const Action = union(Key) {
         goto_window,
         resize_split,
         equalize_splits,
+        goto_split_index,
+        move_split_to_new_window,
+        toggle_split_header,
         toggle_split_zoom,
         present_terminal,
         size_limit,
@@ -430,7 +449,12 @@ pub const Action = union(Key) {
             const Type = t: {
                 const Type = @TypeOf(@field(action, field.name));
                 // Types can provide custom types for their CValue.
-                if (Type != void and @hasDecl(Type, "C")) break :t Type.C;
+                // Only struct/enum/union/opaque types can have decls.
+                const can_have_decls = switch (@typeInfo(Type)) {
+                    .@"struct", .@"enum", .@"union", .@"opaque" => true,
+                    else => false,
+                };
+                if (Type != void and can_have_decls and @hasDecl(Type, "C")) break :t Type.C;
                 break :t Type;
             };
 
@@ -482,7 +506,14 @@ pub const Action = union(Key) {
             inline else => |v, tag| @unionInit(
                 CValue,
                 @tagName(tag),
-                if (@TypeOf(v) != void and @hasDecl(@TypeOf(v), "cval")) v.cval() else v,
+                blk: {
+                    const V = @TypeOf(v);
+                    const can_have_decls = switch (@typeInfo(V)) {
+                        .@"struct", .@"enum", .@"union", .@"opaque" => true,
+                        else => false,
+                    };
+                    break :blk if (V != void and can_have_decls and @hasDecl(V, "cval")) v.cval() else v;
+                },
             ),
         };
 

@@ -13,6 +13,14 @@ RUN echo "messagebus:x:81:" >> /etc/group && \
 
 RUN curl -fsSL https://mise.run | sh
 
-ENV PATH="/root/.local/bin:$PATH"
+# Install zig 0.15.2 — same version used by flatpak-builder (dependencies.yml).
+# Baked into the image so zig-build / zig-test tasks don't need to download it.
+# zig expects its lib/ directory alongside the binary, so extract the whole
+# tarball into /usr/local/zig and add that to PATH.
+RUN mkdir -p /usr/local/zig && \
+    curl -fsSL https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz \
+    | tar -xJ --strip-components=1 -C /usr/local/zig
+
+ENV PATH="/usr/local/zig:/root/.local/bin:$PATH"
 
 WORKDIR /workspace

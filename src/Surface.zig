@@ -5355,6 +5355,24 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             {},
         ),
 
+        .goto_split_index => |index| return try self.rt_app.performAction(
+            .{ .surface = self },
+            .goto_split_index,
+            index,
+        ),
+
+        .move_split_to_new_window => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .move_split_to_new_window,
+            {},
+        ),
+
+        .toggle_split_header => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .toggle_split_header,
+            {},
+        ),
+
         .toggle_split_zoom => return try self.rt_app.performAction(
             .{ .surface = self },
             .toggle_split_zoom,

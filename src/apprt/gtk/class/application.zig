@@ -773,6 +773,19 @@ pub const Application = extern struct {
             .search_total => Action.searchTotal(target, value),
             .search_selected => Action.searchSelected(target, value),
 
+            .goto_split_index => {
+                log.warn("goto_split_index: not yet implemented", .{});
+                return false;
+            },
+            .move_split_to_new_window => {
+                log.warn("move_split_to_new_window: not yet implemented", .{});
+                return false;
+            },
+            .toggle_split_header => {
+                log.warn("toggle_split_header: not yet implemented", .{});
+                return false;
+            },
+
             // Unimplemented
             .secure_input,
             .close_all_windows,

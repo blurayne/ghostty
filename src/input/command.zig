@@ -537,6 +537,21 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Equalize the size of all splits.",
         }},
 
+        .move_split_to_new_window => comptime &.{.{
+            .action = .move_split_to_new_window,
+            .title = "Move Split to New Window",
+            .description = "Detach the active split into a new window.",
+        }},
+
+        .toggle_split_header => comptime &.{.{
+            .action = .toggle_split_header,
+            .title = "Toggle Split Header",
+            .description = "Toggle split-header visibility for the current tab.",
+        }},
+
+        // No default command because goto_split_index requires a numeric parameter.
+        .goto_split_index => comptime &.{},
+
         .reset_window_size => comptime &.{.{
             .action = .reset_window_size,
             .title = "Reset Window Size",

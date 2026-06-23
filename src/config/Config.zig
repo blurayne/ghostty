@@ -6818,6 +6818,37 @@ pub const Keybinds = struct {
                 .{ .key = .{ .physical = .insert }, .mods = .{ .shift = true } },
                 .{ .paste_from_selection = {} },
             );
+
+            // New splits (auto-orient)
+            try self.set.put(
+                alloc,
+                .{ .key = .{ .unicode = 'g' }, .mods = .{ .ctrl = true, .shift = true } },
+                .{ .new_split = .auto },
+            );
+            // Equalize splits
+            try self.set.put(
+                alloc,
+                .{ .key = .{ .unicode = '=' }, .mods = .{ .super = true, .ctrl = true } },
+                .{ .equalize_splits = {} },
+            );
+            // Fullscreen (F11 — standard Linux convention)
+            try self.set.put(
+                alloc,
+                .{ .key = .{ .physical = .f11 } },
+                .{ .toggle_fullscreen = {} },
+            );
+            // Tab overview (F12)
+            try self.set.put(
+                alloc,
+                .{ .key = .{ .physical = .f12 } },
+                .{ .toggle_tab_overview = {} },
+            );
+            // Toggle split header (manual mode)
+            try self.set.put(
+                alloc,
+                .{ .key = .{ .unicode = 'h' }, .mods = .{ .ctrl = true, .shift = true } },
+                .{ .toggle_split_header = {} },
+            );
         }
         {
             // On macOS we default to super but everywhere else

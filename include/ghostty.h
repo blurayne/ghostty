@@ -903,6 +903,9 @@ typedef enum {
   GHOSTTY_ACTION_GOTO_WINDOW,
   GHOSTTY_ACTION_RESIZE_SPLIT,
   GHOSTTY_ACTION_EQUALIZE_SPLITS,
+  GHOSTTY_ACTION_GOTO_SPLIT_INDEX,
+  GHOSTTY_ACTION_MOVE_SPLIT_TO_NEW_WINDOW,
+  GHOSTTY_ACTION_TOGGLE_SPLIT_HEADER,
   GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM,
   GHOSTTY_ACTION_PRESENT_TERMINAL,
   GHOSTTY_ACTION_SIZE_LIMIT,
@@ -990,6 +993,7 @@ typedef union {
   ghostty_action_search_total_s search_total;
   ghostty_action_search_selected_s search_selected;
   ghostty_action_readonly_e readonly;
+  size_t goto_split_index;
 } ghostty_action_u;
 
 typedef struct {

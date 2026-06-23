@@ -13,6 +13,16 @@ fi
 flatpak install --user --bundle --reinstall -y dist/build/com.mitchellh.ghostty.flatpak
 """
 
+[tasks.zig-build]
+description = "Run zig build inside dev container (fast compile check, no flatpak)"
+run = "docker compose run --build --rm builder zig build -Demit-macos-app=false"
+
+[tasks.zig-test]
+description = "Run zig tests inside dev container. Pass -Dtest-filter=<name> via ZIG_ARGS env or positional args"
+run = """
+docker compose run --build --rm builder zig build test ${ZIG_ARGS:-} "$@"
+"""
+
 [tasks.shell]
 description = "Open interactive shell in dev container"
 run = "docker compose run --rm builder bash"
