@@ -713,6 +713,7 @@ pub const SplitTree = extern struct {
         // Remove source from the tree.
         var tree_after_remove = try old_tree.remove(alloc, source_handle);
         errdefer tree_after_remove.deinit();
+        defer tree_after_remove.deinit();
 
         // Find the target's handle in the post-removal tree by pointer comparison.
         const new_target_handle = blk: {
@@ -722,7 +723,6 @@ pub const SplitTree = extern struct {
             }
             // Target was not found (should not happen since source != target).
             log.warn("moveSurfaceInto: target surface not found after removal", .{});
-            tree_after_remove.deinit();
             return;
         };
 
@@ -738,7 +738,6 @@ pub const SplitTree = extern struct {
             0.5,
             &source_single_tree,
         );
-        defer tree_after_remove.deinit();
         defer final_tree.deinit();
 
         self.setTree(&final_tree);
