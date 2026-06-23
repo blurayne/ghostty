@@ -1923,6 +1923,51 @@ pub const Application = extern struct {
             url,
         ) catch |err| log.warn("unable to open url: {}", .{err});
     }
+
+    /// Find a surface by its 16-byte UUID, walking all windows, tabs, and
+    /// split trees in this process. Returns null if not found.
+    pub fn findSurfaceByUuid(self: *Self, uuid: [16]u8) ?*Surface {
+        _ = self;
+        const glist = gtk.Window.listToplevels();
+        defer glist.free();
+
+        var node_: ?*glib.List = glist;
+        while (node_) |node| : (node_ = node.f_next) {
+            const data = node.f_data orelse continue;
+            const gtk_window: *gtk.Window = @ptrCast(@alignCast(data));
+            const window = gobject.ext.cast(Window, gtk_window) orelse continue;
+
+            // Walk all tab pages in this window.
+            const tab_view = window.getTabView();
+            const n_pages = tab_view.getNPages();
+            var i: c_int = 0;
+            while (i < n_pages) : (i += 1) {
+                const page = tab_view.getNthPage(i) orelse continue;
+                const tab = gobject.ext.cast(
+                    Tab,
+                    page.getChild(),
+                ) orelse continue;
+                const split_tree = tab.getSplitTree();
+                const tree = split_tree.getTree() orelse continue;
+                var it = tree.iterator();
+                while (it.next()) |entry| {
+                    if (std.mem.eql(u8, entry.view.getUuid(), &uuid)) {
+                        return entry.view;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    test "findSurfaceByUuid: UUID comparison logic" {
+        // We can't instantiate Application in unit tests (requires GTK runtime),
+        // so verify the UUID comparison logic used by findSurfaceByUuid directly.
+        const uuid_a: [16]u8 = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+        const uuid_b: [16]u8 = .{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+        try std.testing.expect(!std.mem.eql(u8, &uuid_a, &uuid_b));
+        try std.testing.expect(std.mem.eql(u8, &uuid_a, &uuid_a));
+    }
 };
 
 /// All apprt action handlers

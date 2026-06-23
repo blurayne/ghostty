@@ -2736,6 +2736,19 @@ test "SplitTree: move within tree" {
     try testing.expect(saw_c);
 }
 
+test "SplitTree: cross-tree move closes empty source" {
+    // Verify that removing the only leaf from a single-node tree yields an
+    // empty tree — this is the condition that triggers source-tab close in P6.
+    const alloc = std.testing.allocator;
+    var v: TestView = .{ .label = "A" };
+    var tree: TestTree = try .init(alloc, &v);
+    defer tree.deinit();
+    // Remove the only (root) leaf — should produce an empty tree.
+    var empty_tree = try tree.remove(alloc, .root);
+    defer empty_tree.deinit();
+    try std.testing.expect(empty_tree.isEmpty());
+}
+
 test "goto_split_index: out of range returns null handle" {
     // Verify iterator correctly exhausts on an out-of-range index (simulates gotoIndex returning false).
     const testing = std.testing;

@@ -17,6 +17,8 @@ const Application = @import("application.zig").Application;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const Surface = @import("surface.zig").Surface;
 const SurfaceScrolledWindow = @import("surface_scrolled_window.zig").SurfaceScrolledWindow;
+const Tab = @import("tab.zig").Tab;
+const Window = @import("window.zig").Window;
 
 const log = std.log.scoped(.gtk_ghostty_split_tree);
 
@@ -690,9 +692,12 @@ pub const SplitTree = extern struct {
     }
 
     /// Move the surface identified by `source_handle` into a new position
-    /// adjacent to `target_handle` in `source_tree`, splitting in `direction`.
+    /// adjacent to `target_handle` in this tree, splitting in `direction`.
     ///
-    /// P5: only same-tree moves are supported (source_tree == self is asserted).
+    /// P5: same-tree moves (source_tree == self).
+    /// P6: cross-tree moves (source_tree != self) — removes source from its
+    ///     tree, closes the source tab if it becomes empty, then inserts the
+    ///     surface into this tree and focuses the destination tab.
     pub fn moveSurfaceInto(
         self: *Self,
         source_tree: *Self,
@@ -700,46 +705,123 @@ pub const SplitTree = extern struct {
         target_handle: Surface.Tree.Node.Handle,
         direction: Surface.Tree.Split.Direction,
     ) Allocator.Error!void {
-        // P5: only same-tree moves are supported.
-        assert(source_tree == self);
-
-        const old_tree = self.getTree() orelse return;
         const alloc = Application.default().allocator();
 
-        // Capture the source and target surface pointers before mutating the tree.
-        const source_surface = old_tree.nodes[source_handle.idx()].leaf;
-        const target_surface = old_tree.nodes[target_handle.idx()].leaf;
+        if (source_tree == self) {
+            // Same-tree move (P5 logic — preserved exactly).
+            const old_tree = self.getTree() orelse return;
 
-        // Remove source from the tree.
-        var tree_after_remove = try old_tree.remove(alloc, source_handle);
-        defer tree_after_remove.deinit();
+            // Capture the source and target surface pointers before mutating the tree.
+            const source_surface = old_tree.nodes[source_handle.idx()].leaf;
+            const target_surface = old_tree.nodes[target_handle.idx()].leaf;
 
-        // Find the target's handle in the post-removal tree by pointer comparison.
-        const new_target_handle = blk: {
-            var it = tree_after_remove.iterator();
-            while (it.next()) |e| {
-                if (e.view == target_surface) break :blk e.handle;
+            // Remove source from the tree.
+            var tree_after_remove = try old_tree.remove(alloc, source_handle);
+            defer tree_after_remove.deinit();
+
+            // Find the target's handle in the post-removal tree by pointer comparison.
+            const new_target_handle = blk: {
+                var it = tree_after_remove.iterator();
+                while (it.next()) |e| {
+                    if (e.view == target_surface) break :blk e.handle;
+                }
+                // Target was not found (should not happen since source != target).
+                log.warn("moveSurfaceInto: target surface not found after removal", .{});
+                return;
+            };
+
+            // Wrap the source surface in a single-leaf tree for the split call.
+            var source_single_tree = try Surface.Tree.init(alloc, source_surface);
+            defer source_single_tree.deinit();
+
+            // Split at the target, inserting the source surface.
+            var final_tree = try tree_after_remove.split(
+                alloc,
+                new_target_handle,
+                direction,
+                0.5,
+                &source_single_tree,
+            );
+            defer final_tree.deinit();
+
+            self.setTree(&final_tree);
+        } else {
+            // Cross-tree move (P6): source surface lives in a different tree.
+            const source_old_tree = source_tree.getTree() orelse return;
+            const target_old_tree = self.getTree() orelse return;
+
+            // Capture surface pointers before any mutation.
+            const source_surface = source_old_tree.nodes[source_handle.idx()].leaf;
+            const target_surface = target_old_tree.nodes[target_handle.idx()].leaf;
+
+            // Remove source from source tree.
+            var source_new_tree = try source_old_tree.remove(alloc, source_handle);
+            defer source_new_tree.deinit();
+
+            // Update (or clear) source tree; close its tab when it becomes empty.
+            if (source_new_tree.isEmpty()) {
+                // Walk up to find the containing adw.TabView and close the page.
+                const tab_view = ext.getAncestor(
+                    adw.TabView,
+                    source_tree.as(gtk.Widget),
+                ) orelse {
+                    log.warn("moveSurfaceInto: source_tree has no ancestor TabView", .{});
+                    return;
+                };
+                const source_tab = ext.getAncestor(
+                    Tab,
+                    source_tree.as(gtk.Widget),
+                ) orelse {
+                    log.warn("moveSurfaceInto: source_tree has no ancestor Tab", .{});
+                    return;
+                };
+                const source_page = tab_view.getPage(source_tab.as(gtk.Widget)) orelse {
+                    log.warn("moveSurfaceInto: source tab page not found", .{});
+                    return;
+                };
+                // Clear the tree first so that the Tab dispose path sees an empty tree.
+                source_tree.setTree(null);
+                tab_view.closePage(source_page);
+            } else {
+                source_tree.setTree(&source_new_tree);
             }
-            // Target was not found (should not happen since source != target).
-            log.warn("moveSurfaceInto: target surface not found after removal", .{});
-            return;
-        };
 
-        // Wrap the source surface in a single-leaf tree for the split call.
-        var source_single_tree = try Surface.Tree.init(alloc, source_surface);
-        defer source_single_tree.deinit();
+            // Find target's handle in the (unmodified) target tree.
+            const new_target_handle = blk: {
+                var it = target_old_tree.iterator();
+                while (it.next()) |e| {
+                    if (e.view == target_surface) break :blk e.handle;
+                }
+                log.warn("moveSurfaceInto: target surface not found", .{});
+                return;
+            };
 
-        // Split at the target, inserting the source surface.
-        var final_tree = try tree_after_remove.split(
-            alloc,
-            new_target_handle,
-            direction,
-            0.5,
-            &source_single_tree,
-        );
-        defer final_tree.deinit();
+            // Wrap source in a single-leaf tree and split into target tree.
+            var source_single_tree = try Surface.Tree.init(alloc, source_surface);
+            defer source_single_tree.deinit();
 
-        self.setTree(&final_tree);
+            var final_target_tree = try target_old_tree.split(
+                alloc,
+                new_target_handle,
+                direction,
+                0.5,
+                &source_single_tree,
+            );
+            defer final_target_tree.deinit();
+            self.setTree(&final_target_tree);
+
+            // Focus the destination tab so the user sees the result.
+            const dest_tab_view = ext.getAncestor(
+                adw.TabView,
+                self.as(gtk.Widget),
+            ) orelse return;
+            const dest_tab = ext.getAncestor(
+                Tab,
+                self.as(gtk.Widget),
+            ) orelse return;
+            const dest_page = dest_tab_view.getPage(dest_tab.as(gtk.Widget)) orelse return;
+            dest_tab_view.setSelectedPage(dest_page);
+        }
     }
 
     pub fn actionZoom(

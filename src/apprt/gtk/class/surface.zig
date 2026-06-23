@@ -2843,24 +2843,30 @@ pub const Surface = extern struct {
         // Verify same process to reject cross-process drops.
         if (payload.pid != @as(i32, @intCast(std.os.linux.getpid()))) return false;
 
-        // P5: find source surface by UUID in the same tree as the drop target.
-        const target_tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return false;
-        const source = findSurfaceInTree(target_tree, payload.uuid) orelse return false;
+        // P6: find source surface by UUID across all windows and tabs.
+        const source = Application.default().findSurfaceByUuid(payload.uuid) orelse return false;
 
         // Refuse self-drop.
         if (source == self) return false;
 
-        // Get source and target handles.
-        const tree_data = target_tree.getTree() orelse return false;
+        // Find source tree and target tree.
+        const source_tree = ext.getAncestor(SplitTree, source.as(gtk.Widget)) orelse return false;
+        const target_tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return false;
+
+        // Get source handle from source tree.
+        const source_tree_data = source_tree.getTree() orelse return false;
         const source_handle = blk: {
-            var it = tree_data.iterator();
+            var it = source_tree_data.iterator();
             while (it.next()) |e| {
                 if (e.view == source) break :blk e.handle;
             }
             return false;
         };
+
+        // Get target handle from target tree.
+        const target_tree_data = target_tree.getTree() orelse return false;
         const target_handle = blk: {
-            var it = tree_data.iterator();
+            var it = target_tree_data.iterator();
             while (it.next()) |e| {
                 if (e.view == self) break :blk e.handle;
             }
@@ -2878,9 +2884,9 @@ pub const Surface = extern struct {
             .right => .right,
         };
 
-        // In P5: only same-tree moves are supported.
+        // P6: cross-tree moves are now supported via moveSurfaceInto.
         target_tree.moveSurfaceInto(
-            target_tree,
+            source_tree,
             source_handle,
             target_handle,
             direction,
