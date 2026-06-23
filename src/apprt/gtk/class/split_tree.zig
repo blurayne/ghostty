@@ -17,7 +17,6 @@ const Application = @import("application.zig").Application;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const Surface = @import("surface.zig").Surface;
 const SurfaceScrolledWindow = @import("surface_scrolled_window.zig").SurfaceScrolledWindow;
-const SplitHeader = @import("split_header.zig").SplitHeader;
 
 const log = std.log.scoped(.gtk_ghostty_split_tree);
 

@@ -96,6 +96,7 @@ pub const SplitHeader = extern struct {
 
         // Bind new surface title to label
         if (surface_) |s| {
+            priv.title_label.as(gtk.Widget).setVisible(true);
             priv.title_binding = s.as(gobject.Object).bindProperty(
                 "title",
                 priv.title_label.as(gobject.Object),
