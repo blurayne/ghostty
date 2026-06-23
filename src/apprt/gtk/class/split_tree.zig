@@ -712,7 +712,6 @@ pub const SplitTree = extern struct {
 
         // Remove source from the tree.
         var tree_after_remove = try old_tree.remove(alloc, source_handle);
-        errdefer tree_after_remove.deinit();
         defer tree_after_remove.deinit();
 
         // Find the target's handle in the post-removal tree by pointer comparison.
