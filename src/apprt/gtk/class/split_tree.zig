@@ -1305,6 +1305,26 @@ const SplitTreeSplit = extern struct {
         );
     }
 
+    fn onDividerClick(
+        gesture: *gtk.GestureClick,
+        n_press: c_int,
+        x: f64,
+        y: f64,
+        self: *Self,
+    ) callconv(.c) void {
+        _ = x;
+        _ = y;
+        // Only act on double-click of primary button
+        if (n_press != 2) return;
+        if (gesture.getCurrentButton() != 1) return;
+        // Walk up to the enclosing SplitTree and fire equalize
+        const split_tree = ext.getAncestor(
+            SplitTree,
+            self.as(gtk.Widget),
+        ) orelse return;
+        _ = split_tree.as(gtk.Widget).activateAction("split-tree.equalize", null);
+    }
+
     //---------------------------------------------------------------
     // Virtual methods
 
@@ -1362,6 +1382,7 @@ const SplitTreeSplit = extern struct {
             // Template Callbacks
             class.bindTemplateCallback("notify_max_position", &propMaxPosition);
             class.bindTemplateCallback("notify_position", &propPosition);
+            class.bindTemplateCallback("on_divider_click", &onDividerClick);
 
             // Virtual methods
             gobject.Object.virtual_methods.dispose.implement(class, &dispose);
