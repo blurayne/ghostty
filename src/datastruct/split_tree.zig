@@ -2527,18 +2527,36 @@ test "SplitTree: zoom transfers on goto" {
     var v2: TestTree.View = .{ .label = "B" };
     var t2: TestTree = try .init(alloc, &v2);
     defer t2.deinit();
+    var v3: TestTree.View = .{ .label = "C" };
+    var t3: TestTree = try .init(alloc, &v3);
+    defer t3.deinit();
 
     // A | B horizontal
-    var split = try t1.split(
+    var splitAB = try t1.split(
         alloc,
         .root, // at root
         .right, // split right
         0.5,
         &t2, // insert t2
     );
+    defer splitAB.deinit();
+
+    // Split at B to add C: A | (B | C)
+    var split = try splitAB.split(
+        alloc,
+        at: {
+            var it = splitAB.iterator();
+            break :at while (it.next()) |entry| {
+                if (std.mem.eql(u8, entry.view.label, "B")) break entry.handle;
+            } else return error.NotFound;
+        },
+        .right, // split right
+        0.5,
+        &t3, // insert t3
+    );
     defer split.deinit();
 
-    // Find handles for A and B
+    // Find handles for A, B, and C
     const handle_a = ha: {
         var it = split.iterator();
         break :ha while (it.next()) |entry| {
@@ -2552,16 +2570,20 @@ test "SplitTree: zoom transfers on goto" {
         } else return error.NotFound;
     };
 
-    // Zoom A
+    // Zoom A: set initial zoom state on leaf A
     split.zoom(handle_a);
     try testing.expectEqual(handle_a, split.zoomed.?);
 
-    // goto next should point to B
-    const target = try split.goto(alloc, handle_a, .next);
-    try testing.expect(target != null);
-    try testing.expectEqual(handle_b, target.?);
+    // goto next from A returns B, but does not itself transfer zoom state
+    // (that is the GTK layer's responsibility)
+    const target_after_goto = try split.goto(alloc, handle_a, .next);
+    try testing.expect(target_after_goto != null);
+    try testing.expectEqual(handle_b, target_after_goto.?);
 
-    // Simulate the GTK goto() zoom transfer: zoom to the goto target
-    split.zoom(target);
+    // Verify zoom is still on A before simulating GTK's zoom transfer
+    try testing.expectEqual(handle_a, split.zoomed.?);
+
+    // Simulate what GTK goto() does: transfer zoom to the new focus pane
+    split.zoom(target_after_goto);
     try testing.expectEqual(handle_b, split.zoomed.?);
 }
