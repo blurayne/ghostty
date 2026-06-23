@@ -2813,18 +2813,6 @@ pub const Surface = extern struct {
         self.as(gtk.Widget).setCursorFromName("text");
     }
 
-    /// Find a surface in a SplitTree by UUID. Returns null if not found.
-    fn findSurfaceInTree(tree: *SplitTree, uuid: [16]u8) ?*Self {
-        const tree_data = tree.getTree() orelse return null;
-        var it = tree_data.iterator();
-        while (it.next()) |entry| {
-            if (std.mem.eql(u8, &entry.view.private().uuid, &uuid)) {
-                return entry.view;
-            }
-        }
-        return null;
-    }
-
     fn onSplitDrop(
         _: *gtk.DropTarget,
         value: *gobject.Value,
@@ -2845,6 +2833,7 @@ pub const Surface = extern struct {
 
         // P6: find source surface by UUID across all windows and tabs.
         const source = Application.default().findSurfaceByUuid(payload.uuid) orelse return false;
+        if (source.isInZoomedTree()) return false;
 
         // Refuse self-drop.
         if (source == self) return false;

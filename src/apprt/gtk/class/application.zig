@@ -1960,7 +1960,7 @@ pub const Application = extern struct {
         return null;
     }
 
-    test "findSurfaceByUuid: UUID comparison logic" {
+    test "findSurfaceByUuid: not found returns null" {
         // We can't instantiate Application in unit tests (requires GTK runtime),
         // so verify the UUID comparison logic used by findSurfaceByUuid directly.
         const uuid_a: [16]u8 = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
