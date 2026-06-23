@@ -177,6 +177,25 @@ label.resize-overlay {
  * Splits
  */
 
+/*
+ * Split DnD target indicators
+ */
+.dnd-target-top {
+  border-top: 4px solid @accent_bg_color;
+}
+
+.dnd-target-bottom {
+  border-bottom: 4px solid @accent_bg_color;
+}
+
+.dnd-target-left {
+  border-left: 4px solid @accent_bg_color;
+}
+
+.dnd-target-right {
+  border-right: 4px solid @accent_bg_color;
+}
+
 .window .split paned > separator {
   background-color: rgba(250, 250, 250, 1);
   /* after GTK 4.16 is a requirement, switch to the following: */

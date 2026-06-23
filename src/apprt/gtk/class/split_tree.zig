@@ -689,6 +689,61 @@ pub const SplitTree = extern struct {
         self.setTree(&new_tree);
     }
 
+    /// Move the surface identified by `source_handle` into a new position
+    /// adjacent to `target_handle` in `source_tree`, splitting in `direction`.
+    ///
+    /// P5: only same-tree moves are supported (source_tree == self is asserted).
+    pub fn moveSurfaceInto(
+        self: *Self,
+        source_tree: *Self,
+        source_handle: Surface.Tree.Node.Handle,
+        target_handle: Surface.Tree.Node.Handle,
+        direction: Surface.Tree.Split.Direction,
+    ) Allocator.Error!void {
+        // P5: only same-tree moves are supported.
+        assert(source_tree == self);
+
+        const old_tree = self.getTree() orelse return;
+        const alloc = Application.default().allocator();
+
+        // Capture the source and target surface pointers before mutating the tree.
+        const source_surface = old_tree.nodes[source_handle.idx()].leaf;
+        const target_surface = old_tree.nodes[target_handle.idx()].leaf;
+
+        // Remove source from the tree.
+        var tree_after_remove = try old_tree.remove(alloc, source_handle);
+        errdefer tree_after_remove.deinit();
+
+        // Find the target's handle in the post-removal tree by pointer comparison.
+        const new_target_handle = blk: {
+            var it = tree_after_remove.iterator();
+            while (it.next()) |e| {
+                if (e.view == target_surface) break :blk e.handle;
+            }
+            // Target was not found (should not happen since source != target).
+            log.warn("moveSurfaceInto: target surface not found after removal", .{});
+            tree_after_remove.deinit();
+            return;
+        };
+
+        // Wrap the source surface in a single-leaf tree for the split call.
+        var source_single_tree = try Surface.Tree.init(alloc, source_surface);
+        defer source_single_tree.deinit();
+
+        // Split at the target, inserting the source surface.
+        var final_tree = try tree_after_remove.split(
+            alloc,
+            new_target_handle,
+            direction,
+            0.5,
+            &source_single_tree,
+        );
+        defer tree_after_remove.deinit();
+        defer final_tree.deinit();
+
+        self.setTree(&final_tree);
+    }
+
     pub fn actionZoom(
         _: *gio.SimpleAction,
         _: ?*glib.Variant,

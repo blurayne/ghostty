@@ -2655,6 +2655,87 @@ test "goto_split_index: iterator creation order" {
     try testing.expect(saw_c);
 }
 
+test "SplitTree: move within tree" {
+    // Build A|B|C, then move A to be right of C.
+    // Expected result: B is adjacent to (C|A) — both C and A appear in the tree.
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+    var vB: TestView = .{ .label = "B" };
+    var tB: TestTree = try .init(alloc, &vB);
+    defer tB.deinit();
+    var vC: TestView = .{ .label = "C" };
+    var tC: TestTree = try .init(alloc, &vC);
+    defer tC.deinit();
+
+    // Build A|B
+    var splitAB = try tA.split(alloc, .root, .right, 0.5, &tB);
+    defer splitAB.deinit();
+
+    // Build A|B|C (split at A to add C right of A)
+    var splitABC = try splitAB.split(
+        alloc,
+        at: {
+            var it = splitAB.iterator();
+            break :at while (it.next()) |e| {
+                if (std.mem.eql(u8, e.view.label, "A")) break e.handle;
+            } else return error.NotFound;
+        },
+        .right,
+        0.5,
+        &tC,
+    );
+    defer splitABC.deinit();
+
+    // Find handle for A in splitABC
+    const handle_a = ha: {
+        var it = splitABC.iterator();
+        break :ha while (it.next()) |e| {
+            if (std.mem.eql(u8, e.view.label, "A")) break e.handle;
+        } else return error.NotFound;
+    };
+
+    // Remove A from tree
+    var tree_after_remove = try splitABC.remove(alloc, handle_a);
+    defer tree_after_remove.deinit();
+
+    // Find C's handle in the post-removal tree
+    const new_handle_c = nhc: {
+        var it = tree_after_remove.iterator();
+        break :nhc while (it.next()) |e| {
+            if (std.mem.eql(u8, e.view.label, "C")) break e.handle;
+        } else return error.NotFound;
+    };
+
+    // Create a single-leaf tree for A
+    var tA2: TestTree = try .init(alloc, &vA);
+    defer tA2.deinit();
+
+    // Insert A right of C
+    var final_tree = try tree_after_remove.split(alloc, new_handle_c, .right, 0.5, &tA2);
+    defer final_tree.deinit();
+
+    // Verify all three leaves are present
+    var it = final_tree.iterator();
+    var saw_a = false;
+    var saw_b = false;
+    var saw_c = false;
+    var count: usize = 0;
+    while (it.next()) |e| {
+        count += 1;
+        if (std.mem.eql(u8, e.view.label, "A")) saw_a = true;
+        if (std.mem.eql(u8, e.view.label, "B")) saw_b = true;
+        if (std.mem.eql(u8, e.view.label, "C")) saw_c = true;
+    }
+    try testing.expectEqual(@as(usize, 3), count);
+    try testing.expect(saw_a);
+    try testing.expect(saw_b);
+    try testing.expect(saw_c);
+}
+
 test "goto_split_index: out of range returns null handle" {
     // Verify iterator correctly exhausts on an out-of-range index (simulates gotoIndex returning false).
     const testing = std.testing;

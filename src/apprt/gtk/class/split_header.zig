@@ -1,12 +1,16 @@
 const std = @import("std");
 const adw = @import("adw");
+const gdk = @import("gdk");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
 
 const configpkg = @import("../../../config.zig");
 const gresource = @import("../build/gresource.zig");
+const ext = @import("../ext.zig");
 const Common = @import("../class.zig").Common;
 const Surface = @import("surface.zig").Surface;
+const SplitTree = @import("split_tree.zig").SplitTree;
+const split_dnd = @import("split_dnd.zig");
 
 const log = std.log.scoped(.gtk_ghostty_split_header);
 
@@ -41,6 +45,7 @@ pub const SplitHeader = extern struct {
 
     const Private = struct {
         // Template children
+        header_box: *gtk.Box,
         title_label: *gtk.Label,
         broadcast_icon: *gtk.Image,
         zoom_button: *gtk.Button,
@@ -58,6 +63,67 @@ pub const SplitHeader = extern struct {
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
         self.updateVisibility();
+        self.initDragSource();
+    }
+
+    fn initDragSource(self: *Self) void {
+        const drag_source = gtk.DragSource.new();
+        drag_source.setActions(.{ .move = true });
+        _ = gtk.DragSource.signals.prepare.connect(
+            drag_source,
+            *Self,
+            onDragPrepare,
+            self,
+            .{},
+        );
+        _ = gtk.DragSource.signals.@"drag-begin".connect(
+            drag_source,
+            *Self,
+            onDragBegin,
+            self,
+            .{},
+        );
+        self.private().header_box.as(gtk.Widget).addController(
+            drag_source.as(gtk.EventController),
+        );
+    }
+
+    fn onDragPrepare(
+        _: *gtk.DragSource,
+        _: f64,
+        _: f64,
+        self: *Self,
+    ) callconv(.c) ?*gdk.ContentProvider {
+        const surface = self.private().surface orelse return null;
+        // Skip drag if tree is zoomed
+        const tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return null;
+        if (tree.getIsZoomed()) return null;
+
+        const payload = split_dnd.Payload{
+            .pid = @intCast(std.os.linux.getpid()),
+            .uuid = surface.getUuid().*,
+        };
+        const bytes = payload.serialize();
+        defer bytes.unref();
+        return gdk.ContentProvider.newForBytes(split_dnd.MIME, bytes);
+    }
+
+    fn onDragBegin(
+        drag_source: *gtk.DragSource,
+        _: *gdk.Drag,
+        self: *Self,
+    ) callconv(.c) void {
+        const surface = self.private().surface orelse return;
+        // Use the terminal surface as the drag icon
+        const paintable = gtk.WidgetPaintable.new(surface.as(gtk.Widget));
+        defer paintable.as(gobject.Object).unref();
+        const w = paintable.as(gdk.Paintable).getIntrinsicWidth();
+        const h = paintable.as(gdk.Paintable).getIntrinsicHeight();
+        drag_source.setIconPaintable(
+            paintable.as(gdk.Paintable),
+            @divTrunc(w, 4),
+            @divTrunc(h, 4),
+        );
     }
 
     fn dispose(self: *Self) callconv(.c) void {
@@ -204,6 +270,7 @@ pub const SplitHeader = extern struct {
             );
 
             // Template children
+            class.bindTemplateChildPrivate("header_box", .{});
             class.bindTemplateChildPrivate("title_label", .{});
             class.bindTemplateChildPrivate("broadcast_icon", .{});
             class.bindTemplateChildPrivate("zoom_button", .{});

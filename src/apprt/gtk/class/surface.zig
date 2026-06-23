@@ -34,6 +34,8 @@ const ClipboardConfirmationDialog = @import("clipboard_confirmation_dialog.zig")
 const TitleDialog = @import("title_dialog.zig").TitleDialog;
 const Window = @import("window.zig").Window;
 const InspectorWindow = @import("inspector_window.zig").InspectorWindow;
+const SplitTree = @import("split_tree.zig").SplitTree;
+const split_dnd = @import("split_dnd.zig");
 const i18n = @import("../../../os/i18n.zig");
 const media = @import("../media.zig");
 
@@ -741,6 +743,9 @@ pub const Surface = extern struct {
             pub const none: @This() = .{};
         } = .none,
 
+        /// Stable UUID for this surface instance, used for DnD identification.
+        uuid: [16]u8 = undefined,
+
         pub var offset: c_int = 0;
     };
 
@@ -771,6 +776,12 @@ pub const Surface = extern struct {
     pub fn rt(self: *Self) *ApprtSurface {
         const priv = self.private();
         return &priv.rt_surface;
+    }
+
+    /// Returns a pointer to this surface's stable UUID, used for DnD
+    /// identification within and across trees.
+    pub fn getUuid(self: *Self) *const [16]u8 {
+        return &self.private().uuid;
     }
 
     /// Set the parent of this surface. This will extract the information
@@ -1815,6 +1826,9 @@ pub const Surface = extern struct {
         // Read GTK primary paste setting
         priv.gtk_enable_primary_paste = gsettings.get(.@"gtk-enable-primary-paste") orelse true;
 
+        // Generate a stable UUID for DnD identification.
+        std.crypto.random.bytes(&priv.uuid);
+
         // Set up to handle items being dropped on our surface. Files can be dropped
         // from Nautilus and strings can be dropped from many programs. The order
         // of these types matter.
@@ -1824,6 +1838,38 @@ pub const Surface = extern struct {
             gobject.ext.types.string,
         };
         priv.drop_target.setGtypes(&drop_target_types, drop_target_types.len);
+
+        // Add a separate drop target for split DnD (payload serialized as GBytes).
+        const split_drop = gtk.DropTarget.new(glib.Bytes.getGObjectType(), .{ .move = true });
+        _ = gtk.DropTarget.signals.drop.connect(
+            split_drop,
+            *Self,
+            onSplitDrop,
+            self,
+            .{},
+        );
+        _ = gtk.DropTarget.signals.enter.connect(
+            split_drop,
+            *Self,
+            onSplitDragEnter,
+            self,
+            .{},
+        );
+        _ = gtk.DropTarget.signals.motion.connect(
+            split_drop,
+            *Self,
+            onSplitDragMotion,
+            self,
+            .{},
+        );
+        _ = gtk.DropTarget.signals.leave.connect(
+            split_drop,
+            *Self,
+            onSplitDragLeave,
+            self,
+            .{},
+        );
+        self.as(gtk.Widget).addController(split_drop.as(gtk.EventController));
 
         // Setup properties we can't set from our Blueprint file.
         self.as(gtk.Widget).setCursorFromName("text");
@@ -2709,6 +2755,141 @@ pub const Surface = extern struct {
         }
 
         return 1;
+    }
+
+    //---------------------------------------------------------------
+    // Split DnD handlers
+
+    fn clearDndClasses(self: *Self) void {
+        self.as(gtk.Widget).removeCssClass("dnd-target-top");
+        self.as(gtk.Widget).removeCssClass("dnd-target-bottom");
+        self.as(gtk.Widget).removeCssClass("dnd-target-left");
+        self.as(gtk.Widget).removeCssClass("dnd-target-right");
+    }
+
+    fn isInZoomedTree(self: *Self) bool {
+        const tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return false;
+        return tree.getIsZoomed();
+    }
+
+    fn onSplitDragEnter(
+        _: *gtk.DropTarget,
+        _: f64,
+        _: f64,
+        self: *Self,
+    ) callconv(.c) gdk.DragAction {
+        if (self.isInZoomedTree()) return .{};
+        self.as(gtk.Widget).setCursorFromName("grabbing");
+        return .{ .move = true };
+    }
+
+    fn onSplitDragMotion(
+        _: *gtk.DropTarget,
+        x: f64,
+        y: f64,
+        self: *Self,
+    ) callconv(.c) gdk.DragAction {
+        if (self.isInZoomedTree()) return .{};
+        // Remove old DnD classes and add the new one based on cursor quadrant.
+        self.clearDndClasses();
+        const w = @as(f64, @floatFromInt(self.as(gtk.Widget).getWidth()));
+        const h = @as(f64, @floatFromInt(self.as(gtk.Widget).getHeight()));
+        const q = split_dnd.quadrantFor(x, y, w, h);
+        const cls = switch (q) {
+            .top => "dnd-target-top",
+            .bottom => "dnd-target-bottom",
+            .left => "dnd-target-left",
+            .right => "dnd-target-right",
+        };
+        self.as(gtk.Widget).addCssClass(cls);
+        return .{ .move = true };
+    }
+
+    fn onSplitDragLeave(
+        _: *gtk.DropTarget,
+        self: *Self,
+    ) callconv(.c) void {
+        self.clearDndClasses();
+        self.as(gtk.Widget).setCursorFromName("text");
+    }
+
+    /// Find a surface in a SplitTree by UUID. Returns null if not found.
+    fn findSurfaceInTree(tree: *SplitTree, uuid: [16]u8) ?*Self {
+        const tree_data = tree.getTree() orelse return null;
+        var it = tree_data.iterator();
+        while (it.next()) |entry| {
+            if (std.mem.eql(u8, &entry.view.private().uuid, &uuid)) {
+                return entry.view;
+            }
+        }
+        return null;
+    }
+
+    fn onSplitDrop(
+        _: *gtk.DropTarget,
+        value: *gobject.Value,
+        x: f64,
+        y: f64,
+        self: *Self,
+    ) callconv(.c) bool {
+        defer self.clearDndClasses();
+        if (self.isInZoomedTree()) return false;
+
+        // Extract GBytes from the gobject.Value.
+        const boxed = value.getBoxed() orelse return false;
+        const bytes: *glib.Bytes = @ptrCast(@alignCast(boxed));
+        const payload = split_dnd.Payload.parse(bytes) orelse return false;
+
+        // Verify same process to reject cross-process drops.
+        if (payload.pid != @as(i32, @intCast(std.os.linux.getpid()))) return false;
+
+        // P5: find source surface by UUID in the same tree as the drop target.
+        const target_tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return false;
+        const source = findSurfaceInTree(target_tree, payload.uuid) orelse return false;
+
+        // Refuse self-drop.
+        if (source == self) return false;
+
+        // Get source and target handles.
+        const tree_data = target_tree.getTree() orelse return false;
+        const source_handle = blk: {
+            var it = tree_data.iterator();
+            while (it.next()) |e| {
+                if (e.view == source) break :blk e.handle;
+            }
+            return false;
+        };
+        const target_handle = blk: {
+            var it = tree_data.iterator();
+            while (it.next()) |e| {
+                if (e.view == self) break :blk e.handle;
+            }
+            return false;
+        };
+
+        // Compute drop direction from cursor position.
+        const w = @as(f64, @floatFromInt(self.as(gtk.Widget).getWidth()));
+        const h = @as(f64, @floatFromInt(self.as(gtk.Widget).getHeight()));
+        const q = split_dnd.quadrantFor(x, y, w, h);
+        const direction: Surface.Tree.Split.Direction = switch (q) {
+            .top => .up,
+            .bottom => .down,
+            .left => .left,
+            .right => .right,
+        };
+
+        // In P5: only same-tree moves are supported.
+        target_tree.moveSurfaceInto(
+            target_tree,
+            source_handle,
+            target_handle,
+            direction,
+        ) catch |err| {
+            log.warn("moveSurfaceInto failed: {}", .{err});
+            return false;
+        };
+
+        return true;
     }
 
     fn ecKeyPressed(
