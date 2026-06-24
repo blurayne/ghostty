@@ -163,7 +163,7 @@ pub const SplitHeader = extern struct {
         defer paintable.as(gobject.Object).unref();
         const w = paintable.as(gdk.Paintable).getIntrinsicWidth();
         const h = paintable.as(gdk.Paintable).getIntrinsicHeight();
-        drag_source.setIconPaintable(
+        drag_source.setIcon(
             paintable.as(gdk.Paintable),
             @divTrunc(w, 4),
             @divTrunc(h, 4),

@@ -865,7 +865,7 @@ pub const SplitTree = extern struct {
                 Tab,
                 self.as(gtk.Widget),
             ) orelse return;
-            const dest_page = dest_tab_view.getPage(dest_tab.as(gtk.Widget)) orelse return;
+            const dest_page = dest_tab_view.getPage(dest_tab.as(gtk.Widget));
             dest_tab_view.setSelectedPage(dest_page);
         }
     }
