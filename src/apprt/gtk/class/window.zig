@@ -405,6 +405,74 @@ pub const Window = extern struct {
         win.as(gtk.Window).present();
     }
 
+    /// Move an entire tab (with its full SplitTree) into a brand-new Window.
+    /// Removes the tab's page from the source TabView; if the source is now
+    /// empty, closes the source window.
+    pub fn newWithTab(app: *Application, source_tab: *Tab) void {
+        // Find the source tab_view using ancestor lookup (Tab.getTabView is private)
+        const source_tv = ext.getAncestor(
+            adw.TabView,
+            source_tab.as(gtk.Widget),
+        ) orelse return;
+        const source_page = source_tv.getPage(source_tab.as(gtk.Widget)) orelse return;
+
+        // Create and wire the new window (same pattern as newWithSurface)
+        const win = Window.new(app, .none);
+        _ = gobject.Object.bindProperty(
+            app.as(gobject.Object),
+            "config",
+            win.as(gobject.Object),
+            "config",
+            .{},
+        );
+
+        // Add the existing tab to the new window's tab_view.
+        // append() must come BEFORE closePageFinish() so GTK can reparent
+        // the Tab widget cleanly before the source page is removed.
+        const new_tv = win.getTabView();
+        const new_page = new_tv.append(source_tab.as(gtk.Widget));
+        new_tv.setSelectedPage(new_page);
+        _ = source_tab.as(gobject.Object).bindProperty(
+            "title",
+            new_page.as(gobject.Object),
+            "title",
+            .{ .sync_create = true },
+        );
+        _ = source_tab.as(gobject.Object).bindProperty(
+            "tooltip",
+            new_page.as(gobject.Object),
+            "tooltip",
+            .{ .sync_create = true },
+        );
+
+        // Wire the split tree changed signal (same as newTabPage / newWithSurface)
+        const split_tree = source_tab.getSplitTree();
+        _ = SplitTree.signals.changed.connect(
+            split_tree,
+            *Window,
+            tabSplitTreeChanged,
+            win,
+            .{},
+        );
+        tabSplitTreeChanged(split_tree, null, split_tree.getTree(), win);
+
+        // Remove the page from the source (force-close, no confirmation).
+        // closePageFinish(page, confirmed=true) immediately removes the page.
+        source_tv.closePageFinish(source_page, @intFromBool(true));
+
+        // If the source window is now empty (no pages), close it
+        if (source_tv.getNPages() == 0) {
+            const source_win = ext.getAncestor(Window, source_tv.as(gtk.Widget)) orelse {
+                log.warn("newWithTab: could not find source window", .{});
+                win.as(gtk.Window).present();
+                return;
+            };
+            source_win.as(gtk.Window).close();
+        }
+
+        win.as(gtk.Window).present();
+    }
+
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
 
@@ -491,6 +559,7 @@ pub const Window = extern struct {
             .init("toggle-command-palette", actionToggleCommandPalette, null),
             .init("toggle-inspector", actionToggleInspector, null),
             .init("move-split-to-new-window", actionMoveToNewWindow, null),
+            .init("detach-tab", actionDetachTab, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -2218,6 +2287,18 @@ pub const Window = extern struct {
         Window.newWithSurface(Application.default(), surface, null);
     }
 
+    fn actionDetachTab(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        const page = priv.context_menu_page orelse return;
+        const child = page.getChild();
+        const tab = gobject.ext.cast(Tab, child) orelse return;
+        Window.newWithTab(Application.default(), tab);
+    }
+
     const C = Common(Self, Private);
     pub const as = C.as;
     pub const ref = C.ref;
@@ -2297,3 +2378,8 @@ pub const Window = extern struct {
         pub const bindTemplateCallback = C.Class.bindTemplateCallback;
     };
 };
+
+test "Window.newWithTab: compile-time existence" {
+    const fn_ptr = Window.newWithTab;
+    _ = fn_ptr;
+}

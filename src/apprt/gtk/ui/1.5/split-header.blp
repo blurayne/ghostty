@@ -62,4 +62,16 @@ menu header_context_menu_model {
       action: "split-header.attach-sourced-pane";
     }
   }
+  section {
+    item {
+      label: _("Split Right");
+      action: "split-tree.new-split";
+      target: "right";
+    }
+    item {
+      label: _("Split Down");
+      action: "split-tree.new-split";
+      target: "down";
+    }
+  }
 }
