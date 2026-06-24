@@ -74,7 +74,7 @@ pub const MirrorBackend = struct {
         _: u64,
     ) !void {}
 
-    pub fn getProcessInfo(_: *MirrorBackend, comptime _: ProcessInfo) ?ProcessInfo.Type(.pid) {
+    pub fn getProcessInfo(_: *MirrorBackend, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
         return null;
     }
 };

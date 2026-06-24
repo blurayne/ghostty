@@ -641,8 +641,6 @@ pub fn init(
             // The handle is already ref'd by the caller; MirrorBackend
             // takes ownership and will call unref in its deinit.
             io_backend = .{ .mirror = .{ .pty_handle = handle } };
-            // If Termio.init fails below, we must clean up the backend.
-            errdefer io_backend.deinit();
         } else {
             // Normal exec path: create a new subprocess.
             var env = rt_surface.defaultTermioEnv() catch |err| env: {
@@ -663,7 +661,7 @@ pub fn init(
             );
 
             // Initialize our IO backend
-            var io_exec = try termio.Exec.init(alloc, .{
+            const io_exec = try termio.Exec.init(alloc, .{
                 .command = command,
                 .env = env,
                 .env_override = config.env,
@@ -676,10 +674,10 @@ pub fn init(
                 .rt_pre_exec_info = .init(config),
                 .rt_post_fork_info = .init(config),
             });
-            errdefer io_exec.deinit();
-
             io_backend = .{ .exec = io_exec };
         }
+        // Clean up the backend if Termio.init fails below (covers both paths).
+        errdefer io_backend.deinit();
 
         try termio.Termio.init(&self.io, alloc, .{
             .size = size,

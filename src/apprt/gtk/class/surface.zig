@@ -3662,6 +3662,8 @@ pub const Surface = extern struct {
             handle.ref();
             break :blk handle;
         } else null;
+        // If surface.init fails below the ref will be leaked; unref on error.
+        errdefer if (mirror_handle) |h| h.unref();
 
         // Initialize the surface
         surface.init(

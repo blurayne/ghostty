@@ -93,11 +93,12 @@ test "PtyHandle: closing one subscriber keeps PTY alive" {
     const handle = try PtyHandle.create(alloc, -1);
     handle.ref(); // now refcount=2
     handle.unref(); // now refcount=1, not destroyed
+    // Assert still alive: refcount must be 1
+    try std.testing.expectEqual(@as(u32, 1), handle.refcount.load(.monotonic));
     // Still alive: verify by calling ref again
     handle.ref();
     handle.unref();
     handle.unref(); // final unref: destroys
-    // No assertion needed -- memory safety tools will catch double-free
 }
 
 test "PtyHandle: subscribe and unsubscribe" {
@@ -119,6 +120,8 @@ test "PtyHandle: closing last subscriber terminates PTY" {
     // Structural: verify unref to 0 deallocates. Memory tools verify.
     const alloc = std.testing.allocator;
     const handle = try PtyHandle.create(alloc, -1);
+    // Assert initial refcount is exactly 1 before the final unref.
+    try std.testing.expectEqual(@as(u32, 1), handle.refcount.load(.monotonic));
     handle.unref(); // refcount -> 0, handle freed
     // If this doesn't crash under leak detection, the test passes.
 }

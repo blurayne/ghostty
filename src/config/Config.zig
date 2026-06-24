@@ -1103,6 +1103,12 @@ palette: Palette = .{},
 /// Available since: 1.3.0
 @"split-preserve-zoom": SplitPreserveZoom = .{},
 
+// Sourced panes share a PTY with another pane. Input from any sourced pane
+// goes to the shared PTY; output from the PTY is broadcast to all sourced
+// views. Resize is controlled by the primary (first attached) pane.
+// Use "Copy as Source" on a split header and "Attach Sourced Pane" on
+// another to create a mirrored view.
+
 /// Per-split header bar visibility.
 ///   - off       never show header (current behavior)
 ///   - auto      show only when the active tab has more than 2 splits (default)

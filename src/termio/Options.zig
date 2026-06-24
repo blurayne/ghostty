@@ -40,8 +40,3 @@ renderer_mailbox: *renderer.Thread.Mailbox,
 /// The mailbox for sending the surface messages.
 surface_mailbox: apprt.surface.Mailbox,
 
-/// If non-null, this surface is a mirror of the given PtyHandle.
-/// In this case, the backend field should be set to a MirrorBackend.
-/// The PtyHandle must already be ref'd by the caller; Termio takes
-/// ownership (via the MirrorBackend which calls unref on deinit).
-mirror_handle: ?*termio.PtyHandle = null,
