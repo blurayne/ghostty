@@ -226,6 +226,27 @@ pub const Tab = extern struct {
         return tab;
     }
 
+    /// Create a new tab that wraps an existing surface without spawning a new PTY.
+    /// The surface is wired directly into the tab's split tree.
+    pub fn newWithSurface(config: ?*Config, surface: *Surface) *Self {
+        const tab = gobject.ext.newInstance(Tab, .{});
+        const priv: *Private = tab.private();
+
+        if (config) |c| priv.config = c.ref();
+        if (priv.config == null) {
+            priv.config = Application.default().getConfig();
+        }
+        tab.as(gobject.Object).notifyByPspec(properties.config.impl.param_spec);
+
+        // Wire the existing surface into this tab's split tree directly
+        const alloc = Application.default().allocator();
+        var single_tree = Surface.Tree.init(alloc, surface) catch @panic("oom");
+        defer single_tree.deinit();
+        priv.split_tree.setTree(&single_tree);
+
+        return tab;
+    }
+
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
 

@@ -292,6 +292,91 @@ pub const Window = extern struct {
         return win;
     }
 
+    /// Create a new window that holds the given surface as the sole leaf in a
+    /// single tab. The surface is removed from its current tree and tab.
+    ///
+    /// Note: Window position cannot be set on Wayland, so the `position`
+    /// parameter is accepted for API symmetry but always ignored.
+    pub fn newWithSurface(
+        app: *Application,
+        surface: *Surface,
+        position: ?struct { x: i32, y: i32 },
+    ) void {
+        _ = position; // Wayland doesn't support arbitrary window positioning
+
+        const alloc = app.allocator();
+
+        // Find and remove the surface from its current tree
+        const source_tree = ext.getAncestor(SplitTree, surface.as(gtk.Widget)) orelse {
+            log.warn("newWithSurface: surface has no parent SplitTree", .{});
+            return;
+        };
+        const old_tree = source_tree.getTree() orelse return;
+        const source_handle = blk: {
+            var it = old_tree.iterator();
+            while (it.next()) |e| {
+                if (e.view == surface) break :blk e.handle;
+            }
+            log.warn("newWithSurface: surface not found in tree", .{});
+            return;
+        };
+
+        var tree_after_remove = old_tree.remove(alloc, source_handle) catch {
+            log.warn("newWithSurface: remove OOM", .{});
+            return;
+        };
+        defer tree_after_remove.deinit();
+
+        // Update source tree; close the source tab if it is now empty
+        if (tree_after_remove.isEmpty()) {
+            const src_tab_view = ext.getAncestor(
+                adw.TabView,
+                source_tree.as(gtk.Widget),
+            );
+            const src_tab = ext.getAncestor(
+                Tab,
+                source_tree.as(gtk.Widget),
+            );
+            if (src_tab_view) |tv| {
+                if (src_tab) |tab_widget| {
+                    if (tv.getPage(tab_widget.as(gtk.Widget))) |page| {
+                        // Clear the tree first so dispose sees it empty
+                        source_tree.setTree(null);
+                        tv.closePage(page);
+                    }
+                }
+            }
+        } else {
+            source_tree.setTree(&tree_after_remove);
+        }
+
+        // Create new window and bind its config to the application config
+        const win = Window.new(app, .none);
+        _ = gobject.Object.bindProperty(
+            app.as(gobject.Object),
+            "config",
+            win.as(gobject.Object),
+            "config",
+            .{},
+        );
+
+        // Create a tab that wraps the existing surface (no new PTY)
+        const tab = Tab.newWithSurface(win.private().config, surface);
+
+        // Add tab to the new window's tab view and select it
+        const tab_view = win.getTabView();
+        const page = tab_view.append(tab.as(gtk.Widget));
+        tab_view.setSelectedPage(page);
+        _ = tab.as(gobject.Object).bindProperty(
+            "title",
+            page.as(gobject.Object),
+            "title",
+            .{ .sync_create = true },
+        );
+
+        win.as(gtk.Window).present();
+    }
+
     fn init(self: *Self, _: *Class) callconv(.c) void {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
 
@@ -377,6 +462,7 @@ pub const Window = extern struct {
             // TODO: accept the surface that toggled the command palette
             .init("toggle-command-palette", actionToggleCommandPalette, null),
             .init("toggle-inspector", actionToggleInspector, null),
+            .init("move-split-to-new-window", actionMoveToNewWindow, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -2080,6 +2166,16 @@ pub const Window = extern struct {
         // TODO: accept the surface that toggled the command palette as a
         // parameter
         self.toggleInspector();
+    }
+
+    fn actionMoveToNewWindow(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        const active = self.getSelectedTab() orelse return;
+        const surface = active.getActiveSurface() orelse return;
+        Window.newWithSurface(Application.default(), surface, null);
     }
 
     const C = Common(Self, Private);

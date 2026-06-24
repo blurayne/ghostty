@@ -38,5 +38,20 @@ template $GhosttySplitHeader: Adw.Bin {
       button: 2;
       pressed => $on_middle_click() swapped;
     }
+
+    Gtk.PopoverMenu context_menu {
+      has-arrow: false;
+      halign: start;
+      menu-model: header_context_menu_model;
+    }
+  }
+}
+
+menu header_context_menu_model {
+  section {
+    item {
+      label: _("Move to New Window");
+      action: "win.move-split-to-new-window";
+    }
   }
 }

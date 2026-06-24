@@ -8,8 +8,10 @@ const configpkg = @import("../../../config.zig");
 const gresource = @import("../build/gresource.zig");
 const ext = @import("../ext.zig");
 const Common = @import("../class.zig").Common;
+const Application = @import("application.zig").Application;
 const Surface = @import("surface.zig").Surface;
 const SplitTree = @import("split_tree.zig").SplitTree;
+const Window = @import("window.zig").Window;
 const split_dnd = @import("split_dnd.zig");
 
 const log = std.log.scoped(.gtk_ghostty_split_header);
@@ -50,6 +52,7 @@ pub const SplitHeader = extern struct {
         broadcast_icon: *gtk.Image,
         zoom_button: *gtk.Button,
         close_button: *gtk.Button,
+        context_menu: *gtk.PopoverMenu,
 
         // State
         surface: ?*Surface = null,
@@ -80,6 +83,13 @@ pub const SplitHeader = extern struct {
             drag_source,
             *Self,
             onDragBegin,
+            self,
+            .{},
+        );
+        _ = gtk.DragSource.signals.@"drag-end".connect(
+            drag_source,
+            *Self,
+            onDragEnd,
             self,
             .{},
         );
@@ -124,6 +134,22 @@ pub const SplitHeader = extern struct {
             @divTrunc(w, 4),
             @divTrunc(h, 4),
         );
+    }
+
+    fn onDragEnd(
+        _: *gtk.DragSource,
+        drag: *gdk.Drag,
+        delete_data: bool,
+        self: *Self,
+    ) callconv(.c) void {
+        // delete_data == true means the drop was accepted; false means cancelled/rejected
+        if (delete_data) return;
+        _ = drag;
+        const surface = self.private().surface orelse return;
+        // Don't tear off if from a zoomed tree (guard consistent with onDragPrepare)
+        const tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return;
+        if (tree.getIsZoomed()) return;
+        Window.newWithSurface(Application.default(), surface, null);
     }
 
     fn dispose(self: *Self) callconv(.c) void {
@@ -217,12 +243,20 @@ pub const SplitHeader = extern struct {
     }
 
     fn onTitleClick(
-        _: *gtk.GestureClick,
+        gesture: *gtk.GestureClick,
         n_press: c_int,
-        _: f64,
-        _: f64,
+        x: f64,
+        y: f64,
         self: *Self,
     ) callconv(.c) void {
+        const button = gesture.getCurrentButton();
+        if (button == 3) {
+            const popover = self.private().context_menu.as(gtk.Popover);
+            const rect = gdk.Rectangle{ .f_x = @intFromFloat(x), .f_y = @intFromFloat(y), .f_width = 1, .f_height = 1 };
+            popover.setPointingTo(&rect);
+            popover.popup();
+            return;
+        }
         if (n_press == 2) {
             _ = self.as(gtk.Widget).activateAction("split-tree.zoom", null);
         }
@@ -275,6 +309,7 @@ pub const SplitHeader = extern struct {
             class.bindTemplateChildPrivate("broadcast_icon", .{});
             class.bindTemplateChildPrivate("zoom_button", .{});
             class.bindTemplateChildPrivate("close_button", .{});
+            class.bindTemplateChildPrivate("context_menu", .{});
 
             // Template callbacks
             class.bindTemplateCallback("on_zoom_clicked", &onZoomClicked);
