@@ -332,21 +332,20 @@ pub const Window = extern struct {
         };
         defer tree_after_remove.deinit();
 
-        // Update source tree; close the source tab if it is now empty
+        // Hold an extra ref on surface so it survives setTree(null) below.
+        // Tab.newWithSurface / the new SplitTree will take ownership; we drop
+        // our manual ref with defer after that call.
+        _ = surface.as(gobject.Object).ref();
+        defer surface.as(gobject.Object).unref();
+
+        // Update source tree; close the source tab if it is now empty.
+        // setTree(null) is called UNCONDITIONALLY so the surface has no old
+        // parent when Tab.newWithSurface reparents it (Fix 2).
         if (tree_after_remove.isEmpty()) {
-            const src_tab_view = ext.getAncestor(
-                adw.TabView,
-                source_tree.as(gtk.Widget),
-            );
-            const src_tab = ext.getAncestor(
-                Tab,
-                source_tree.as(gtk.Widget),
-            );
-            if (src_tab_view) |tv| {
-                if (src_tab) |tab_widget| {
-                    if (tv.getPage(tab_widget.as(gtk.Widget))) |page| {
-                        // Clear the tree first so dispose sees it empty
-                        source_tree.setTree(null);
+            source_tree.setTree(null);
+            if (ext.getAncestor(Tab, source_tree.as(gtk.Widget))) |src_tab| {
+                if (ext.getAncestor(adw.TabView, source_tree.as(gtk.Widget))) |tv| {
+                    if (tv.getPage(src_tab.as(gtk.Widget))) |page| {
                         tv.closePage(page);
                     }
                 }
@@ -426,11 +425,13 @@ pub const Window = extern struct {
             .{},
         );
 
-        // Add the existing tab to the new window's tab_view.
-        // append() must come BEFORE closePageFinish() so GTK can reparent
-        // the Tab widget cleanly before the source page is removed.
+        // Use transferPage to atomically move the Tab widget from source_tv
+        // to new_tv — this avoids the "widget already has parent" GTK critical
+        // that occurs when calling append() while the tab is still a child of
+        // source_tv.
         const new_tv = win.getTabView();
-        const new_page = new_tv.append(source_tab.as(gtk.Widget));
+        source_tv.transferPage(source_page, new_tv, 0);
+        const new_page = new_tv.getNthPage(0) orelse return;
         new_tv.setSelectedPage(new_page);
         _ = source_tab.as(gobject.Object).bindProperty(
             "title",
@@ -474,10 +475,6 @@ pub const Window = extern struct {
             .{},
         );
         tabSplitTreeChanged(split_tree, null, split_tree.getTree(), win);
-
-        // Remove the page from the source (force-close, no confirmation).
-        // closePageFinish(page, confirmed=true) immediately removes the page.
-        source_tv.closePageFinish(source_page, @intFromBool(true));
 
         // If the source window is now empty (no pages), close it
         if (source_tv.getNPages() == 0) {

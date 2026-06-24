@@ -797,6 +797,12 @@ pub const SplitTree = extern struct {
             const source_surface = source_old_tree.nodes[source_handle.idx()].leaf;
             const target_surface = target_old_tree.nodes[target_handle.idx()].leaf;
 
+            // Hold a manual ref so source_surface survives setTree(null) below.
+            // Surface.Tree.init (called further down) will take its own ref;
+            // we release the manual one with defer.
+            _ = source_surface.as(gobject.Object).ref();
+            defer source_surface.as(gobject.Object).unref();
+
             // Remove source from source tree.
             var source_new_tree = try source_old_tree.remove(alloc, source_handle);
             defer source_new_tree.deinit();
