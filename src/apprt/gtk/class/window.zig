@@ -373,6 +373,29 @@ pub const Window = extern struct {
             "title",
             .{ .sync_create = true },
         );
+        _ = tab.as(gobject.Object).bindProperty(
+            "tooltip",
+            page.as(gobject.Object),
+            "tooltip",
+            .{ .sync_create = true },
+        );
+
+        // Wire up split-tree change signal so connectSurfaceHandlers runs
+        // (needed for clipboard, menus, fullscreen, maximize, etc.)
+        const split_tree = tab.getSplitTree();
+        _ = SplitTree.signals.changed.connect(
+            split_tree,
+            *Self,
+            tabSplitTreeChanged,
+            win,
+            .{},
+        );
+        tabSplitTreeChanged(
+            split_tree,
+            null,
+            split_tree.getTree(),
+            win,
+        );
 
         win.as(gtk.Window).present();
     }

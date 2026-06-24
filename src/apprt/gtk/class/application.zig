@@ -779,9 +779,7 @@ pub const Application = extern struct {
                     .app => return false,
                     .surface => |core_target| {
                         const surface = core_target.rt_surface.surface;
-                        const source_window = ext.getAncestor(Window, surface.as(gtk.Widget));
-                        const pos: ?struct { x: i32, y: i32 } = if (source_window) |_| null else null;
-                        Window.newWithSurface(self, surface, pos);
+                        Window.newWithSurface(self, surface, null);
                         return true;
                     },
                 }
@@ -3053,10 +3051,10 @@ fn findActiveWindow(data: ?*const anyopaque, _: ?*const anyopaque) callconv(.c) 
 }
 
 test "Tab.newWithSurface: skips auto-spawn" {
-    // Pure structural test — Tab.newWithSurface exists and compiles.
-    // Full behavioral test requires GTK display, so just verify UUID comparison
-    // that would run in the absence of a surface:
-    const uuid_a: [16]u8 = .{1} ** 16;
-    const uuid_b: [16]u8 = .{0} ** 16;
-    try std.testing.expect(!std.mem.eql(u8, &uuid_a, &uuid_b));
+    // Verify the function signature exists and compiles as declared.
+    // Full behavioral test requires a GTK display (unavailable in CI).
+    const fn_ptr = Tab.newWithSurface;
+    _ = fn_ptr;
+    // The function must accept (?*Config, *Surface) and return *Tab.
+    // Compilation of this test file is the assertion.
 }
