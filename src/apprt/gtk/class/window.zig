@@ -345,9 +345,7 @@ pub const Window = extern struct {
             source_tree.setTree(null);
             if (ext.getAncestor(Tab, source_tree.as(gtk.Widget))) |src_tab| {
                 if (ext.getAncestor(adw.TabView, source_tree.as(gtk.Widget))) |tv| {
-                    if (tv.getPage(src_tab.as(gtk.Widget))) |page| {
-                        tv.closePage(page);
-                    }
+                    tv.closePage(tv.getPage(src_tab.as(gtk.Widget)));
                 }
             }
         } else {
@@ -413,7 +411,7 @@ pub const Window = extern struct {
             adw.TabView,
             source_tab.as(gtk.Widget),
         ) orelse return;
-        const source_page = source_tv.getPage(source_tab.as(gtk.Widget)) orelse return;
+        const source_page = source_tv.getPage(source_tab.as(gtk.Widget));
 
         // Create and wire the new window (same pattern as newWithSurface)
         const win = Window.new(app, .none);
