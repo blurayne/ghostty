@@ -113,14 +113,14 @@ pub const SplitHeader = extern struct {
             self,
             .{},
         );
-        _ = gtk.DragSource.signals.@"drag-begin".connect(
+        _ = gtk.DragSource.signals.drag_begin.connect(
             drag_source,
             *Self,
             onDragBegin,
             self,
             .{},
         );
-        _ = gtk.DragSource.signals.@"drag-end".connect(
+        _ = gtk.DragSource.signals.drag_end.connect(
             drag_source,
             *Self,
             onDragEnd,
@@ -173,11 +173,11 @@ pub const SplitHeader = extern struct {
     fn onDragEnd(
         _: *gtk.DragSource,
         drag: *gdk.Drag,
-        delete_data: bool,
+        delete_data: c_int,
         self: *Self,
     ) callconv(.c) void {
-        // delete_data == true means the drop was accepted; false means cancelled/rejected
-        if (delete_data) return;
+        // delete_data != 0 means the drop was accepted; 0 means cancelled/rejected
+        if (delete_data != 0) return;
         _ = drag;
         const surface = self.private().surface orelse return;
         // Don't tear off if from a zoomed tree (guard consistent with onDragPrepare)
@@ -222,7 +222,7 @@ pub const SplitHeader = extern struct {
 
         // Bind new surface title to label
         if (surface_) |s| {
-            priv.title_label.as(gtk.Widget).setVisible(true);
+            priv.title_label.as(gtk.Widget).setVisible(@intFromBool(true));
             priv.title_binding = s.as(gobject.Object).bindProperty(
                 "title",
                 priv.title_label.as(gobject.Object),
@@ -230,7 +230,7 @@ pub const SplitHeader = extern struct {
                 .{ .sync_create = true },
             );
         } else {
-            priv.title_label.as(gtk.Widget).setVisible(false);
+            priv.title_label.as(gtk.Widget).setVisible(@intFromBool(false));
         }
     }
 
@@ -245,7 +245,7 @@ pub const SplitHeader = extern struct {
     }
 
     pub fn setBroadcastIndicator(self: *Self, active: bool) void {
-        self.private().broadcast_icon.as(gtk.Widget).setVisible(active);
+        self.private().broadcast_icon.as(gtk.Widget).setVisible(@intFromBool(active));
     }
 
     fn updateVisibility(self: *Self) void {
@@ -257,7 +257,7 @@ pub const SplitHeader = extern struct {
             // manual visibility is controlled externally by SplitTree's toggle-header action
             .manual => false,
         };
-        self.as(gtk.Widget).setVisible(visible);
+        self.as(gtk.Widget).setVisible(@intFromBool(visible));
     }
 
     // Template callbacks
@@ -283,7 +283,7 @@ pub const SplitHeader = extern struct {
         y: f64,
         self: *Self,
     ) callconv(.c) void {
-        const button = gesture.getCurrentButton();
+        const button = gesture.as(gtk.GestureSingle).getCurrentButton();
         if (button == 3) {
             const popover = self.private().context_menu.as(gtk.Popover);
             const rect = gdk.Rectangle{ .f_x = @intFromFloat(x), .f_y = @intFromFloat(y), .f_width = 1, .f_height = 1 };
@@ -303,7 +303,7 @@ pub const SplitHeader = extern struct {
         _: f64,
         self: *Self,
     ) callconv(.c) void {
-        if (gesture.getCurrentButton() != 2) return;
+        if (gesture.as(gtk.GestureSingle).getCurrentButton() != 2) return;
         // Check config to see if middle-click-close is enabled
         const app = @import("application.zig").Application.default();
         const config_obj = app.getConfig();

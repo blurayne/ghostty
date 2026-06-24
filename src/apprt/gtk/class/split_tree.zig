@@ -824,10 +824,7 @@ pub const SplitTree = extern struct {
                     log.warn("moveSurfaceInto: source_tree has no ancestor Tab", .{});
                     return;
                 };
-                const source_page = tab_view.getPage(source_tab.as(gtk.Widget)) orelse {
-                    log.warn("moveSurfaceInto: source tab page not found", .{});
-                    return;
-                };
+                const source_page = tab_view.getPage(source_tab.as(gtk.Widget));
                 // Clear the tree first so that the Tab dispose path sees an empty tree.
                 source_tree.setTree(null);
                 tab_view.closePage(source_page);
@@ -938,7 +935,7 @@ pub const SplitTree = extern struct {
             header.setHeaderMode(mode);
             // For manual mode, directly override the visibility
             if (mode == .manual) {
-                header.as(gtk.Widget).setVisible(priv.header_manual_visible);
+                header.as(gtk.Widget).setVisible(@intFromBool(priv.header_manual_visible));
             }
         }
     }
@@ -1569,7 +1566,7 @@ const SplitTreeSplit = extern struct {
         _ = y;
         // Only act on double-click of primary button
         if (n_press != 2) return;
-        if (gesture.getCurrentButton() != 1) return;
+        if (gesture.as(gtk.GestureSingle).getCurrentButton() != 1) return;
         // Walk up to the enclosing SplitTree and fire equalize
         const split_tree = ext.getAncestor(
             SplitTree,

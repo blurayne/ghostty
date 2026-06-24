@@ -2835,47 +2835,47 @@ pub const Surface = extern struct {
         x: f64,
         y: f64,
         self: *Self,
-    ) callconv(.c) bool {
+    ) callconv(.c) c_int {
         defer self.clearDndClasses();
-        if (self.isInZoomedTree()) return false;
+        if (self.isInZoomedTree()) return 0;
 
         // Extract GBytes from the gobject.Value.
-        const boxed = value.getBoxed() orelse return false;
+        const boxed = value.getBoxed() orelse return 0;
         const bytes: *glib.Bytes = @ptrCast(@alignCast(boxed));
-        const payload = split_dnd.Payload.parse(bytes) orelse return false;
+        const payload = split_dnd.Payload.parse(bytes) orelse return 0;
 
         // Verify same process to reject cross-process drops.
-        if (payload.pid != @as(i32, @intCast(std.os.linux.getpid()))) return false;
+        if (payload.pid != @as(i32, @intCast(std.os.linux.getpid()))) return 0;
 
         // P6: find source surface by UUID across all windows and tabs.
-        const source = Application.default().findSurfaceByUuid(payload.uuid) orelse return false;
-        if (source.isInZoomedTree()) return false;
+        const source = Application.default().findSurfaceByUuid(payload.uuid) orelse return 0;
+        if (source.isInZoomedTree()) return 0;
 
         // Refuse self-drop.
-        if (source == self) return false;
+        if (source == self) return 0;
 
         // Find source tree and target tree.
-        const source_tree = ext.getAncestor(SplitTree, source.as(gtk.Widget)) orelse return false;
-        const target_tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return false;
+        const source_tree = ext.getAncestor(SplitTree, source.as(gtk.Widget)) orelse return 0;
+        const target_tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return 0;
 
         // Get source handle from source tree.
-        const source_tree_data = source_tree.getTree() orelse return false;
+        const source_tree_data = source_tree.getTree() orelse return 0;
         const source_handle = blk: {
             var it = source_tree_data.iterator();
             while (it.next()) |e| {
                 if (e.view == source) break :blk e.handle;
             }
-            return false;
+            return 0;
         };
 
         // Get target handle from target tree.
-        const target_tree_data = target_tree.getTree() orelse return false;
+        const target_tree_data = target_tree.getTree() orelse return 0;
         const target_handle = blk: {
             var it = target_tree_data.iterator();
             while (it.next()) |e| {
                 if (e.view == self) break :blk e.handle;
             }
-            return false;
+            return 0;
         };
 
         // Compute drop direction from cursor position.
@@ -2897,10 +2897,10 @@ pub const Surface = extern struct {
             direction,
         ) catch |err| {
             log.warn("moveSurfaceInto failed: {}", .{err});
-            return false;
+            return 0;
         };
 
-        return true;
+        return 1;
     }
 
     fn ecKeyPressed(

@@ -773,7 +773,7 @@ pub const Application = extern struct {
             .search_total => Action.searchTotal(target, value),
             .search_selected => Action.searchSelected(target, value),
 
-            .goto_split_index => |n| return Action.gotoSplitIndex(target, n),
+            .goto_split_index => return Action.gotoSplitIndex(target, value),
             .move_split_to_new_window => {
                 switch (target) {
                     .app => return false,
@@ -1948,7 +1948,7 @@ pub const Application = extern struct {
             const n_pages = tab_view.getNPages();
             var i: c_int = 0;
             while (i < n_pages) : (i += 1) {
-                const page = tab_view.getNthPage(i) orelse continue;
+                const page = tab_view.getNthPage(i);
                 const tab = gobject.ext.cast(
                     Tab,
                     page.getChild(),

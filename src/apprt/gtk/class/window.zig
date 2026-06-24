@@ -429,7 +429,7 @@ pub const Window = extern struct {
         // source_tv.
         const new_tv = win.getTabView();
         source_tv.transferPage(source_page, new_tv, 0);
-        const new_page = new_tv.getNthPage(0) orelse return;
+        const new_page = new_tv.getNthPage(0);
         new_tv.setSelectedPage(new_page);
         _ = source_tab.as(gobject.Object).bindProperty(
             "title",
