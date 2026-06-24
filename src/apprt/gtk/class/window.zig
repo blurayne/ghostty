@@ -447,6 +447,25 @@ pub const Window = extern struct {
 
         // Wire the split tree changed signal (same as newTabPage / newWithSurface)
         const split_tree = source_tab.getSplitTree();
+
+        // Sever the source window's tabSplitTreeChanged connection from this
+        // split_tree before re-wiring to the new window.  Without this the
+        // source window's handler remains connected; when the source window
+        // disposes it fires on a split tree it no longer owns and can
+        // spuriously call disconnectSurfaceHandlers on surfaces now owned by
+        // the new window.
+        if (ext.getAncestor(Window, source_tv.as(gtk.Widget))) |source_win| {
+            _ = gobject.signalHandlersDisconnectMatched(
+                split_tree.as(gobject.Object),
+                .{ .data = true },
+                0,
+                0,
+                null,
+                null,
+                source_win,
+            );
+        }
+
         _ = SplitTree.signals.changed.connect(
             split_tree,
             *Window,
