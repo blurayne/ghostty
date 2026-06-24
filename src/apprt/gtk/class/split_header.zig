@@ -1,6 +1,8 @@
 const std = @import("std");
 const adw = @import("adw");
 const gdk = @import("gdk");
+const gio = @import("gio");
+const glib = @import("glib");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
 
@@ -67,6 +69,38 @@ pub const SplitHeader = extern struct {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
         self.updateVisibility();
         self.initDragSource();
+        self.initActionMap();
+    }
+
+    fn initActionMap(self: *Self) void {
+        const actions = [_]ext.actions.Action(Self){
+            .init("copy-as-source", actionCopyAsSource, null),
+            .init("attach-sourced-pane", actionAttachSourcedPane, null),
+        };
+        _ = ext.actions.addAsGroup(Self, self, "split-header", &actions);
+    }
+
+    fn actionCopyAsSource(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const surface = self.private().surface orelse return;
+        const window = ext.getAncestor(Window, self.as(gtk.Widget)) orelse return;
+        window.setMirrorSource(surface.getUuid().*);
+    }
+
+    fn actionAttachSourcedPane(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const window = ext.getAncestor(Window, self.as(gtk.Widget)) orelse return;
+        const uuid = window.getMirrorSource() orelse return;
+        const split_tree = ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return;
+        split_tree.newSplitMirrored(uuid) catch |err| {
+            log.warn("attach sourced pane failed err={}", .{err});
+        };
     }
 
     fn initDragSource(self: *Self) void {

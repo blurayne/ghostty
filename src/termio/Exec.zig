@@ -43,6 +43,10 @@ const FlatpakHostCommand = if (!build_config.flatpak) struct {
 /// The subprocess state for our exec backend.
 subprocess: Subprocess,
 
+/// Refcounted PTY handle shared with mirror surfaces.
+/// Only valid after threadEnter has been called (i.e. after subprocess start).
+pty_handle: ?*termio.PtyHandle = null,
+
 /// Initialize the exec state. This will NOT start it, this only sets
 /// up the internal state necessary to start it later.
 pub fn init(
@@ -56,6 +60,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Exec) void {
+    if (self.pty_handle) |h| h.unref();
     self.subprocess.deinit();
 }
 
@@ -135,11 +140,22 @@ pub fn threadEnter(
     var termios_timer = try xev.Timer.init();
     errdefer termios_timer.deinit();
 
+    // Create our PtyHandle now that the PTY fd is valid.
+    // This must happen after subprocess.start() since pty_fds are only
+    // valid after that point.
+    const pty_handle = try termio.PtyHandle.create(alloc, pty_fds.read);
+    errdefer pty_handle.unref();
+    self.pty_handle = pty_handle;
+
+    // Subscribe the primary Termio to receive PTY output.
+    try pty_handle.subscribe(io);
+    errdefer pty_handle.unsubscribe(io);
+
     // Start our read thread
     const read_thread = try std.Thread.spawn(
         .{},
         if (builtin.os.tag == .windows) ReadThread.threadMainWindows else ReadThread.threadMainPosix,
-        .{ pty_fds.read, io, pipe[0] },
+        .{ pty_fds.read, pty_handle, pipe[0] },
     );
     read_thread.setName("io-reader") catch {};
 
@@ -192,9 +208,12 @@ pub fn threadEnter(
     }
 }
 
-pub fn threadExit(self: *Exec, td: *termio.Termio.ThreadData) void {
+pub fn threadExit(self: *Exec, io: *termio.Termio, td: *termio.Termio.ThreadData) void {
     assert(td.backend == .exec);
     const exec = &td.backend.exec;
+
+    // Unsubscribe the primary Termio from the PTY handle.
+    if (self.pty_handle) |h| h.unsubscribe(io);
 
     if (exec.exited) self.subprocess.externalExit();
     self.subprocess.stop();
@@ -1257,7 +1276,7 @@ const Subprocess = struct {
 /// fds and this is still much faster and lower overhead than any async
 /// mechanism.
 pub const ReadThread = struct {
-    fn threadMainPosix(fd: posix.fd_t, io: *termio.Termio, quit: posix.fd_t) void {
+    fn threadMainPosix(fd: posix.fd_t, handle: *termio.PtyHandle, quit: posix.fd_t) void {
         // Always close our end of the pipe when we exit.
         defer posix.close(quit);
 
@@ -1268,10 +1287,11 @@ pub const ReadThread = struct {
             internal_os.macos.pthread_setname_np(&"io-reader".*);
         }
 
-        // Setup our crash metadata
+        // Setup our crash metadata. We don't have a single surface to reference
+        // here since the PtyHandle may have multiple subscribers.
         crash.sentry.thread_state = .{
             .type = .io,
-            .surface = io.surface_mailbox.surface,
+            .surface = null,
         };
         defer crash.sentry.thread_state = null;
 
@@ -1335,7 +1355,7 @@ pub const ReadThread = struct {
                 if (n == 0) break;
 
                 // log.info("DATA: {d}", .{n});
-                @call(.always_inline, termio.Termio.processOutput, .{ io, buf[0..n] });
+                handle.broadcast(buf[0..n]);
             }
 
             // Wait for data.
@@ -1359,14 +1379,15 @@ pub const ReadThread = struct {
         }
     }
 
-    fn threadMainWindows(fd: posix.fd_t, io: *termio.Termio, quit: posix.fd_t) void {
+    fn threadMainWindows(fd: posix.fd_t, handle: *termio.PtyHandle, quit: posix.fd_t) void {
         // Always close our end of the pipe when we exit.
         defer posix.close(quit);
 
-        // Setup our crash metadata
+        // Setup our crash metadata. We don't have a single surface to reference
+        // here since the PtyHandle may have multiple subscribers.
         crash.sentry.thread_state = .{
             .type = .io,
-            .surface = io.surface_mailbox.surface,
+            .surface = null,
         };
         defer crash.sentry.thread_state = null;
 
@@ -1387,7 +1408,7 @@ pub const ReadThread = struct {
                     }
                 }
 
-                @call(.always_inline, termio.Termio.processOutput, .{ io, buf[0..n] });
+                handle.broadcast(buf[0..n]);
             }
 
             var quit_bytes: windows.DWORD = 0;

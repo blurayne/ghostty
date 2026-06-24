@@ -27,8 +27,10 @@ pub const ThreadState = struct {
     /// Thread type, used to tag the crash
     type: Type,
 
-    /// The surface that this thread is attached to.
-    surface: *Surface,
+    /// The surface that this thread is attached to. May be null for threads
+    /// that serve multiple surfaces (e.g. the PTY read thread when using
+    /// PtyHandle with multiple subscribers).
+    surface: ?*Surface,
 
     pub const Type = enum { main, renderer, io };
 };
@@ -207,10 +209,10 @@ fn beforeSend(
     // Read the surface data. This is likely unsafe because on a crash
     // other threads can continue running. We don't have race-safe way to
     // access this data so this might be corrupted but it's most likely fine.
-    {
+    // Surface may be null for threads that serve multiple surfaces.
+    if (thr_state.surface) |surface| {
         const obj = sentry.Value.initObject();
         errdefer obj.decref();
-        const surface = thr_state.surface;
         const grid_size = surface.size.grid();
         obj.set(
             "screen-width",

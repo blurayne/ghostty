@@ -291,6 +291,49 @@ pub const SplitTree = extern struct {
         self.setTree(&new_tree);
     }
 
+    /// Create a new split that mirrors the PTY output of the surface
+    /// identified by `source_uuid`. The new surface uses a MirrorBackend
+    /// instead of launching its own subprocess.
+    pub fn newSplitMirrored(self: *Self, source_uuid: [16]u8) Allocator.Error!void {
+        const alloc = Application.default().allocator();
+
+        // Create a new surface widget configured to mirror the source.
+        const surface: *Surface = .new(.{
+            .mirror_source = source_uuid,
+        });
+        defer surface.unref();
+        _ = surface.refSink();
+
+        // Bind is-split property for new surface
+        _ = self.as(gobject.Object).bindProperty(
+            "is-split",
+            surface.as(gobject.Object),
+            "is-split",
+            .{ .sync_create = true },
+        );
+
+        // Create our tree
+        var single_tree = try Surface.Tree.init(alloc, surface);
+        defer single_tree.deinit();
+
+        // Move focus to the new surface.
+        const old_last_focused = self.private().last_focused.get();
+        defer if (old_last_focused) |v| v.unref();
+        self.private().last_focused.set(surface);
+        errdefer self.private().last_focused.set(old_last_focused);
+
+        // If we have no tree yet, this becomes our tree.
+        const old_tree = self.getTree() orelse {
+            self.setTree(&single_tree);
+            return;
+        };
+
+        const handle = self.getActiveSurfaceHandle() orelse .root;
+        var new_tree = try old_tree.split(alloc, handle, .right, 0.5, &single_tree);
+        defer new_tree.deinit();
+        self.setTree(&new_tree);
+    }
+
     pub fn resize(
         self: *Self,
         direction: Surface.Tree.Split.Direction,

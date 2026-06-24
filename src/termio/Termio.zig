@@ -354,7 +354,7 @@ pub fn threadEnter(
 
     // Setup our backend
     try self.backend.threadEnter(self.alloc, self, data);
-    errdefer self.backend.threadExit(data);
+    errdefer self.backend.threadExit(self, data);
 
     // If we have inputs, then queue them all up.
     for (inputs orelse &.{}) |input| switch (input) {
@@ -380,7 +380,7 @@ pub fn threadEnter(
 }
 
 pub fn threadExit(self: *Termio, data: *ThreadData) void {
-    self.backend.threadExit(data);
+    self.backend.threadExit(self, data);
 }
 
 /// Send a message to the mailbox. Depending on the mailbox type in use

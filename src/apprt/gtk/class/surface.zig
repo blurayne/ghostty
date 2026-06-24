@@ -10,6 +10,7 @@ const gtk = @import("gtk");
 
 const apprt = @import("../../../apprt.zig");
 const build_config = @import("../../../build_config.zig");
+const termio = @import("../../../termio.zig");
 const configpkg = @import("../../../config.zig");
 const datastruct = @import("../../../datastruct/main.zig");
 const font = @import("../../../font/main.zig");
@@ -743,6 +744,11 @@ pub const Surface = extern struct {
             pub const none: @This() = .{};
         } = .none,
 
+        /// UUID of the source surface this surface should mirror.
+        /// If set, this surface will attach to the source's PtyHandle
+        /// instead of launching a new subprocess.
+        mirror_source_uuid: ?[16]u8 = null,
+
         /// Stable UUID for this surface instance, used for DnD identification.
         uuid: [16]u8 = undefined,
 
@@ -753,6 +759,7 @@ pub const Surface = extern struct {
         command: ?configpkg.Command = null,
         working_directory: ?[:0]const u8 = null,
         title: ?[:0]const u8 = null,
+        mirror_source: ?[16]u8 = null,
 
         pub const none: @This() = .{};
     }) *Self {
@@ -765,6 +772,9 @@ pub const Surface = extern struct {
             .command = if (overrides.command) |c| c.clone(alloc) catch null else null,
             .working_directory = if (overrides.working_directory) |wd| alloc.dupeZ(u8, wd) catch null else null,
         };
+        if (overrides.mirror_source) |uuid| {
+            priv.mirror_source_uuid = uuid;
+        }
         return self;
     }
 
@@ -782,6 +792,12 @@ pub const Surface = extern struct {
     /// identification within and across trees.
     pub fn getUuid(self: *Self) *const [16]u8 {
         return &self.private().uuid;
+    }
+
+    /// Set the UUID of the source surface this surface should mirror.
+    /// Must be called before the surface is realized (before initSurface).
+    pub fn setMirrorSource(self: *Self, uuid: ?[16]u8) void {
+        self.private().mirror_source_uuid = uuid;
     }
 
     /// Set the parent of this surface. This will extract the information
@@ -3637,6 +3653,16 @@ pub const Surface = extern struct {
             config.@"working-directory" = wd_val;
         }
 
+        // Resolve mirror handle if this is a sourced pane.
+        const mirror_handle: ?*termio.PtyHandle = if (priv.mirror_source_uuid) |uuid| blk: {
+            const src = Application.default().findSurfaceByUuid(uuid) orelse break :blk null;
+            const src_core = src.core() orelse break :blk null;
+            const handle = src_core.getPtyHandle() orelse break :blk null;
+            // Surface.init takes ownership via the MirrorBackend; ref before passing.
+            handle.ref();
+            break :blk handle;
+        } else null;
+
         // Initialize the surface
         surface.init(
             alloc,
@@ -3644,6 +3670,7 @@ pub const Surface = extern struct {
             app.core(),
             app.rt(),
             &priv.rt_surface,
+            mirror_handle,
         ) catch |err| {
             log.warn("failed to initialize surface err={}", .{err});
             return error.SurfaceError;

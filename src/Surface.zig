@@ -464,6 +464,7 @@ pub fn init(
     app: *App,
     rt_app: *apprt.runtime.App,
     rt_surface: *apprt.runtime.Surface,
+    mirror_pty_handle: ?*termio.PtyHandle,
 ) !void {
     // Apply our conditional state. If we fail to apply the conditional state
     // then we log and attempt to move forward with the old config.
@@ -628,48 +629,63 @@ pub fn init(
     // This separate block ({}) is important because our errdefers must
     // be scoped here to be valid.
     {
-        var env = rt_surface.defaultTermioEnv() catch |err| env: {
-            // If an error occurs, we don't want to block surface startup.
-            log.warn("error getting env map for surface err={}", .{err});
-            break :env internal_os.getEnvMap(alloc) catch
-                std.process.EnvMap.init(alloc);
-        };
-        errdefer env.deinit();
-
-        // don't leak GHOSTTY_LOG to any subprocesses
-        env.remove("GHOSTTY_LOG");
-
-        var buf: [18]u8 = undefined;
-        try env.put(
-            "GHOSTTY_SURFACE_ID",
-            std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable,
-        );
-
-        // Initialize our IO backend
-        var io_exec = try termio.Exec.init(alloc, .{
-            .command = command,
-            .env = env,
-            .env_override = config.env,
-            .shell_integration = config.@"shell-integration",
-            .shell_integration_features = config.@"shell-integration-features",
-            .cursor_blink = config.@"cursor-style-blink",
-            .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
-            .resources_dir = global_state.resources_dir.host(),
-            .term = config.term,
-            .rt_pre_exec_info = .init(config),
-            .rt_post_fork_info = .init(config),
-        });
-        errdefer io_exec.deinit();
-
-        // Initialize our IO mailbox
+        // Initialize our IO mailbox (needed for both exec and mirror paths)
         var io_mailbox = try termio.Mailbox.initSPSC(alloc);
         errdefer io_mailbox.deinit(alloc);
+
+        // Build our backend. For mirror surfaces we attach to an existing
+        // PTY handle; for normal surfaces we create a new subprocess.
+        var io_backend: termio.Backend = undefined;
+        if (mirror_pty_handle) |handle| {
+            // Mirror path: attach to an existing PTY handle.
+            // The handle is already ref'd by the caller; MirrorBackend
+            // takes ownership and will call unref in its deinit.
+            io_backend = .{ .mirror = .{ .pty_handle = handle } };
+            // If Termio.init fails below, we must clean up the backend.
+            errdefer io_backend.deinit();
+        } else {
+            // Normal exec path: create a new subprocess.
+            var env = rt_surface.defaultTermioEnv() catch |err| env: {
+                // If an error occurs, we don't want to block surface startup.
+                log.warn("error getting env map for surface err={}", .{err});
+                break :env internal_os.getEnvMap(alloc) catch
+                    std.process.EnvMap.init(alloc);
+            };
+            errdefer env.deinit();
+
+            // don't leak GHOSTTY_LOG to any subprocesses
+            env.remove("GHOSTTY_LOG");
+
+            var buf: [18]u8 = undefined;
+            try env.put(
+                "GHOSTTY_SURFACE_ID",
+                std.fmt.bufPrint(&buf, "0x{x:0>16}", .{self.id}) catch unreachable,
+            );
+
+            // Initialize our IO backend
+            var io_exec = try termio.Exec.init(alloc, .{
+                .command = command,
+                .env = env,
+                .env_override = config.env,
+                .shell_integration = config.@"shell-integration",
+                .shell_integration_features = config.@"shell-integration-features",
+                .cursor_blink = config.@"cursor-style-blink",
+                .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
+                .resources_dir = global_state.resources_dir.host(),
+                .term = config.term,
+                .rt_pre_exec_info = .init(config),
+                .rt_post_fork_info = .init(config),
+            });
+            errdefer io_exec.deinit();
+
+            io_backend = .{ .exec = io_exec };
+        }
 
         try termio.Termio.init(&self.io, alloc, .{
             .size = size,
             .full_config = config,
             .config = try termio.Termio.DerivedConfig.init(alloc, config),
-            .backend = .{ .exec = io_exec },
+            .backend = io_backend,
             .mailbox = io_mailbox,
             .renderer_state = &self.renderer_state,
             .renderer_wakeup = render_thread.wakeup,
@@ -835,6 +851,16 @@ pub fn deinit(self: *Surface) void {
     self.config.deinit();
 
     log.info("surface closed addr={x}", .{@intFromPtr(self)});
+}
+
+/// Returns the PtyHandle if this surface owns or mirrors one, null otherwise.
+/// The PtyHandle is only valid after the IO thread has started (i.e. after
+/// Surface.init completes and threadEnter has been called for Exec backend).
+pub fn getPtyHandle(self: *Surface) ?*termio.PtyHandle {
+    return switch (self.io.backend) {
+        .exec => |*exec| exec.pty_handle,
+        .mirror => |*m| m.pty_handle,
+    };
 }
 
 /// Close this surface. This will trigger the runtime to start the
@@ -1313,6 +1339,8 @@ fn childExitedAbnormally(
     // Build up our command for the error message
     const command = try std.mem.join(alloc, " ", switch (self.io.backend) {
         .exec => |*exec| exec.subprocess.args,
+        // Mirror surfaces don't own the subprocess; use a placeholder.
+        .mirror => &[_][:0]const u8{"(mirrored)"},
     });
     const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
 

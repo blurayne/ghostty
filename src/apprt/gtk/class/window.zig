@@ -252,6 +252,11 @@ pub const Window = extern struct {
         /// See tabOverviewOpen for why we have this.
         tab_overview_focus_timer: ?c_uint = null,
 
+        /// UUID of the surface that was "copied as source" for sourced-pane
+        /// creation. Set by the "copy-as-source" split-header action, consumed
+        /// by the "attach-sourced-pane" action.
+        mirror_source: ?[16]u8 = null,
+
         /// A weak reference to a command palette.
         command_palette: WeakRef(CommandPalette) = .empty,
 
@@ -1023,6 +1028,18 @@ pub const Window = extern struct {
     /// Get the tab view for this window.
     pub fn getTabView(self: *Self) *adw.TabView {
         return self.private().tab_view;
+    }
+
+    /// Store the UUID of the surface to use as the mirror source.
+    /// Used by split-header "copy-as-source" action.
+    pub fn setMirrorSource(self: *Self, uuid: [16]u8) void {
+        self.private().mirror_source = uuid;
+    }
+
+    /// Retrieve the stored mirror-source UUID, or null if not set.
+    /// Used by split-header "attach-sourced-pane" action.
+    pub fn getMirrorSource(self: *Self) ?[16]u8 {
+        return self.private().mirror_source;
     }
 
     /// Get the current window decoration value for this window.
