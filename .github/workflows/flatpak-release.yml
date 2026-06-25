@@ -59,4 +59,4 @@ jobs:
             ```
             flatpak install --user --bundle com.mitchellh.ghostty.flatpak
             ```
-          files: com.mitchellh.ghostty.flatpak
+          files: com.mitchellh.ghostty-x86_64.flatpak
