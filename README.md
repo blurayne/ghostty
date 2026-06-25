@@ -2,6 +2,15 @@
 > It is updated occasionally, only when changes are needed for personal use.
 > No support is offered, no PRs will be merged, and there is no commitment to track upstream.
 > If you are looking for Ghostty, use upstream.
+>
+> **Changes from upstream:**
+> - **Split titlebars** — per-pane header bars showing a configurable title template (`split-title-format`), shown automatically when more than N splits are open (`split-header-auto-threshold`)
+> - **Split rename** — double-click the title bar or use the right-click context menu to rename a split; the window/tab title follows the active split when no title bar is visible
+> - **Zoom icon** — the title bar icon reflects whether the split is zoomed or restored
+> - **Color customization** — right-click a split title bar to customize its foreground, background, and text colors
+> - **Drop overlay** — directional highlight (top/bottom/left/right) when dragging a split over another pane
+> - **Build timestamp** — UTC build date shown in the About dialog
+> - **New config keys** — `split-title-format`, `split-header-auto-threshold`, `split-title-doubleclick-action`
 
 <!-- LOGO -->
 <h1>
