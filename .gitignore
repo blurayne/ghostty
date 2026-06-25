@@ -31,3 +31,11 @@ glad.zip
 vgcore.*
 
 .superpowers/
+
+# Local scratch from agent test runs
+test-results.txt
+test_pid
+
+# Per-user Claude state (project-shared settings.json IS tracked)
+.claude/settings.local.json
+.claude/worktrees/
