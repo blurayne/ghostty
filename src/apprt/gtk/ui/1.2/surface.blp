@@ -202,6 +202,22 @@ Overlay terminal_page {
   }
 
   [overlay]
+  // Split DnD drop-zone visual overlay. Revealed programmatically on drag-enter.
+  Revealer dnd_zone_revealer {
+    transition-type: crossfade;
+    transition-duration: 100;
+    can-focus: false;
+    can-target: false;
+    focusable: false;
+
+    DrawingArea dnd_zone_overlay {
+      hexpand: true;
+      vexpand: true;
+      can-target: false;
+    }
+  }
+
+  [overlay]
   // Apply unfocused-split-fill and unfocused-split-opacity to current surface
   // this is only applied when a tab has more than one surface
   Revealer {

@@ -719,6 +719,8 @@ pub const Surface = extern struct {
         progress_bar_overlay: *gtk.ProgressBar,
         error_page: *adw.StatusPage,
         terminal_page: *gtk.Overlay,
+        dnd_zone_revealer: *gtk.Revealer,
+        dnd_zone_overlay: *gtk.DrawingArea,
 
         /// The context for this surface (window, tab, or split)
         context: apprt.surface.NewSurfaceContext = .window,
@@ -2781,6 +2783,12 @@ pub const Surface = extern struct {
         self.as(gtk.Widget).removeCssClass("dnd-target-bottom");
         self.as(gtk.Widget).removeCssClass("dnd-target-left");
         self.as(gtk.Widget).removeCssClass("dnd-target-right");
+        // Clear overlay zone classes
+        const overlay_widget = self.private().dnd_zone_overlay.as(gtk.Widget);
+        overlay_widget.removeCssClass("dnd-zone-top");
+        overlay_widget.removeCssClass("dnd-zone-bottom");
+        overlay_widget.removeCssClass("dnd-zone-left");
+        overlay_widget.removeCssClass("dnd-zone-right");
     }
 
     fn isInZoomedTree(self: *Self) bool {
@@ -2796,6 +2804,8 @@ pub const Surface = extern struct {
     ) callconv(.c) gdk.DragAction {
         if (self.isInZoomedTree()) return .{};
         self.as(gtk.Widget).setCursorFromName("grabbing");
+        // Show the drop-zone overlay.
+        self.private().dnd_zone_revealer.setRevealChild(1);
         return .{ .move = true };
     }
 
@@ -2806,6 +2816,8 @@ pub const Surface = extern struct {
         self: *Self,
     ) callconv(.c) gdk.DragAction {
         if (self.isInZoomedTree()) return .{};
+        // Ensure revealer is revealed (belt-and-suspenders: enter may have raced).
+        self.private().dnd_zone_revealer.setRevealChild(1);
         // Remove old DnD classes and add the new one based on cursor quadrant.
         self.clearDndClasses();
         const w = @as(f64, @floatFromInt(self.as(gtk.Widget).getWidth()));
@@ -2818,6 +2830,14 @@ pub const Surface = extern struct {
             .right => "dnd-target-right",
         };
         self.as(gtk.Widget).addCssClass(cls);
+        // Mirror the zone to the overlay DrawingArea for the gradient fill.
+        const zone_cls = switch (q) {
+            .top => "dnd-zone-top",
+            .bottom => "dnd-zone-bottom",
+            .left => "dnd-zone-left",
+            .right => "dnd-zone-right",
+        };
+        self.private().dnd_zone_overlay.as(gtk.Widget).addCssClass(zone_cls);
         return .{ .move = true };
     }
 
@@ -2826,6 +2846,8 @@ pub const Surface = extern struct {
         self: *Self,
     ) callconv(.c) void {
         self.clearDndClasses();
+        // Hide the drop-zone overlay.
+        self.private().dnd_zone_revealer.setRevealChild(0);
         self.as(gtk.Widget).setCursorFromName("text");
     }
 
@@ -2836,7 +2858,10 @@ pub const Surface = extern struct {
         y: f64,
         self: *Self,
     ) callconv(.c) c_int {
-        defer self.clearDndClasses();
+        defer {
+            self.clearDndClasses();
+            self.private().dnd_zone_revealer.setRevealChild(0);
+        }
         if (self.isInZoomedTree()) return 0;
 
         // Extract GBytes from the gobject.Value.
@@ -3822,6 +3847,8 @@ pub const Surface = extern struct {
             class.bindTemplateChildPrivate("key_state_overlay", .{});
             class.bindTemplateChildPrivate("terminal_page", .{});
             class.bindTemplateChildPrivate("drop_target", .{});
+            class.bindTemplateChildPrivate("dnd_zone_revealer", .{});
+            class.bindTemplateChildPrivate("dnd_zone_overlay", .{});
             class.bindTemplateChildPrivate("im_context", .{});
 
             // Template Callbacks

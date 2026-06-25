@@ -178,22 +178,61 @@ label.resize-overlay {
  */
 
 /*
- * Split DnD target indicators
+ * Split DnD target indicators — edge border on the surface root widget
  */
 .dnd-target-top {
-  border-top: 4px solid @accent_bg_color;
+  border-top: 3px solid @accent_bg_color;
 }
 
 .dnd-target-bottom {
-  border-bottom: 4px solid @accent_bg_color;
+  border-bottom: 3px solid @accent_bg_color;
 }
 
 .dnd-target-left {
-  border-left: 4px solid @accent_bg_color;
+  border-left: 3px solid @accent_bg_color;
 }
 
 .dnd-target-right {
-  border-right: 4px solid @accent_bg_color;
+  border-right: 3px solid @accent_bg_color;
+}
+
+/*
+ * Split DnD zone overlay — gradient fill on the DrawingArea overlay.
+ * Each class highlights the active drop zone with a directional gradient.
+ * Uses rgba() for broad GTK4 compatibility (alpha() inside linear-gradient()
+ * is not reliably parsed by all GTK4 versions).
+ * Accent blue rgba(53,132,228) approximates Adwaita @accent_bg_color.
+ */
+.dnd-zone-top {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(53, 132, 228, 0.40) 0%,
+    rgba(53, 132, 228, 0.00) 60%
+  );
+}
+
+.dnd-zone-bottom {
+  background-image: linear-gradient(
+    to top,
+    rgba(53, 132, 228, 0.40) 0%,
+    rgba(53, 132, 228, 0.00) 60%
+  );
+}
+
+.dnd-zone-left {
+  background-image: linear-gradient(
+    to right,
+    rgba(53, 132, 228, 0.40) 0%,
+    rgba(53, 132, 228, 0.00) 60%
+  );
+}
+
+.dnd-zone-right {
+  background-image: linear-gradient(
+    to left,
+    rgba(53, 132, 228, 0.40) 0%,
+    rgba(53, 132, 228, 0.00) 60%
+  );
 }
 
 .window .split paned > separator {
