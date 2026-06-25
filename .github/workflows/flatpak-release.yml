@@ -1,0 +1,62 @@
+name: Flatpak Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One build at a time; a new push cancels the in-progress one.
+concurrency:
+  group: flatpak-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & publish tip
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    timeout-minutes: 120
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # flatpak-builder detects .git and tries git operations inside the
+      # sandbox, which fail because it can't resolve the remote. Hide it for
+      # the duration of the build — same workaround used by the local Docker
+      # build script.
+      - name: Hide .git from flatpak-builder
+        run: mv .git .git.ci-bak
+
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6.5
+        with:
+          bundle: com.mitchellh.ghostty
+          manifest-path: flatpak/com.mitchellh.ghostty.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          arch: x86_64
+          verbose: true
+
+      - name: Restore .git
+        if: always()
+        run: mv .git.ci-bak .git 2>/dev/null || true
+
+      - name: Publish tip release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Ghostty Personal Fork — Tip
+          prerelease: true
+          tag_name: tip
+          target_commitish: ${{ github.sha }}
+          body: |
+            Automated build from `main` — ${{ github.sha }}
+
+            **Install**
+            ```
+            flatpak install --user --bundle com.mitchellh.ghostty.flatpak
+            ```
+          files: com.mitchellh.ghostty.flatpak

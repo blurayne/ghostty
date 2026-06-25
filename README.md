@@ -11,6 +11,14 @@
 > - **Drop overlay** — directional highlight (top/bottom/left/right) when dragging a split over another pane
 > - **Build timestamp** — UTC build date shown in the About dialog
 > - **New config keys** — `split-title-format`, `split-header-auto-threshold`, `split-title-doubleclick-action`
+>
+> **Install (Linux Flatpak)**
+>
+> Download `com.mitchellh.ghostty.flatpak` from the [latest tip release](../../releases/tag/tip), then:
+> ```
+> flatpak install --user --bundle com.mitchellh.ghostty.flatpak
+> ```
+> The tip release is rebuilt automatically on every push to `main`.
 
 <!-- LOGO -->
 <h1>
