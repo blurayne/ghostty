@@ -530,6 +530,20 @@ extension Ghostty {
             case GHOSTTY_ACTION_EQUALIZE_SPLITS:
                 equalizeSplits(app, target: target)
 
+            case GHOSTTY_ACTION_GOTO_SPLIT_INDEX:
+                return gotoSplitIndex(app, target: target, index: action.action.goto_split_index)
+
+            case GHOSTTY_ACTION_MOVE_SPLIT_TO_NEW_WINDOW:
+                // TODO: implement — move_split_to_new_window on macOS
+                // The Swift side already has drag-to-new-window infrastructure; this action
+                // would detach the active split programmatically via the same path.
+                Ghostty.logger.warning("move_split_to_new_window is not yet implemented on macOS")
+
+            case GHOSTTY_ACTION_TOGGLE_SPLIT_HEADER:
+                // Not applicable on macOS: Ghostty for macOS does not use a GTK-style
+                // header bar widget, so this action is a no-op on this platform.
+                Ghostty.logger.debug("toggle_split_header is a no-op on macOS")
+
             case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
                 return toggleSplitZoom(app, target: target)
 
@@ -1219,6 +1233,44 @@ extension Ghostty {
                         object: surfaceView,
                         userInfo: [
                             Notification.SplitDirectionKey: splitDirection as Any,
+                        ]
+                    )
+
+                    return true
+
+                default:
+                    assertionFailure()
+                    return false
+                }
+        }
+
+        private static func gotoSplitIndex(
+            _ app: ghostty_app_t,
+            target: ghostty_target_s,
+            index: size_t) -> Bool {
+                switch target.tag {
+                case GHOSTTY_TARGET_APP:
+                    Ghostty.logger.warning("goto split index does nothing with an app target")
+                    return false
+
+                case GHOSTTY_TARGET_SURFACE:
+                    guard let surface = target.target.surface else { return false }
+                    guard let surfaceView = self.surfaceView(from: surface) else { return false }
+                    guard let controller = surfaceView.window?.windowController as? BaseTerminalController else { return false }
+
+                    // If the window has no splits, the action is not performable.
+                    guard controller.surfaceTree.isSplit else { return false }
+
+                    // goto_split_index is 1-indexed; convert to 0-indexed.
+                    guard index >= 1 else { return false }
+                    let zeroIndex = index - 1
+                    guard zeroIndex < controller.surfaceTree.endIndex else { return false }
+
+                    NotificationCenter.default.post(
+                        name: Notification.ghosttyGotoSplitIndex,
+                        object: surfaceView,
+                        userInfo: [
+                            Notification.GotoSplitIndexKey: zeroIndex,
                         ]
                     )
 

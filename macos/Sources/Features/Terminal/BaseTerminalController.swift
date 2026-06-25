@@ -195,6 +195,11 @@ class BaseTerminalController: NSWindowController,
             object: nil)
         center.addObserver(
             self,
+            selector: #selector(ghosttyDidGotoSplitIndex(_:)),
+            name: Ghostty.Notification.ghosttyGotoSplitIndex,
+            object: nil)
+        center.addObserver(
+            self,
             selector: #selector(ghosttyDidToggleSplitZoom(_:)),
             name: Ghostty.Notification.didToggleSplitZoom,
             object: nil)
@@ -669,6 +674,36 @@ class BaseTerminalController: NSWindowController,
         }
 
         // Move focus to the next surface
+        DispatchQueue.main.async {
+            Ghostty.moveFocus(to: nextSurface, from: target)
+        }
+    }
+
+    @objc private func ghosttyDidGotoSplitIndex(_ notification: Notification) {
+        // The sending object must be a surface view within our tree.
+        guard let target = notification.object as? Ghostty.SurfaceView else { return }
+        guard surfaceTree.root?.node(view: target) != nil else { return }
+
+        // Extract the 0-indexed split index from the notification.
+        guard let indexAny = notification.userInfo?[Ghostty.Notification.GotoSplitIndexKey] else { return }
+        guard let index = indexAny as? Int else { return }
+        guard index >= 0 && index < surfaceTree.endIndex else { return }
+
+        // Look up the leaf at the given index using the SplitTree Collection subscript.
+        let nextSurface = surfaceTree[index]
+
+        // Unzoom if needed.
+        if surfaceTree.zoomed != nil {
+            if derivedConfig.splitPreserveZoom.contains(.navigation) {
+                surfaceTree = SplitTree(
+                    root: surfaceTree.root,
+                    zoomed: surfaceTree.root?.node(view: nextSurface))
+            } else {
+                surfaceTree = SplitTree(root: surfaceTree.root, zoomed: nil)
+            }
+        }
+
+        // Move focus to the selected split.
         DispatchQueue.main.async {
             Ghostty.moveFocus(to: nextSurface, from: target)
         }
