@@ -23,6 +23,7 @@ const Common = @import("../class.zig").Common;
 const Config = @import("config.zig").Config;
 const Application = @import("application.zig").Application;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
+const split_dnd = @import("split_dnd.zig");
 const SplitTree = @import("split_tree.zig").SplitTree;
 const Surface = @import("surface.zig").Surface;
 const Tab = @import("tab.zig").Tab;
@@ -540,6 +541,20 @@ pub const Window = extern struct {
         // config and such can affect our bindings which are setup initially
         // in initTemplate.
         self.syncAppearance();
+
+        // Register the tab bar as a drop target for split drag-and-drop.
+        // GBytes is the boxed type carrying our split payload.
+        // This makes ADW automatically highlight individual tabs while dragging
+        // and emit extra-drag-drop when content is dropped on a tab.
+        var bytes_gtypes = [_]usize{glib.Bytes.getGObjectType()};
+        priv.tab_bar.setupExtraDropTarget(.{ .move = true }, &bytes_gtypes, 1);
+        _ = adw.TabBar.signals.extra_drag_drop.connect(
+            priv.tab_bar,
+            *Self,
+            onTabBarExtraDrop,
+            self,
+            .{},
+        );
 
         // We need to do this so that the title initializes properly,
         // I think because its a dynamic getter.
@@ -1981,6 +1996,171 @@ pub const Window = extern struct {
         }
     }
 
+    /// Handle a split drag-and-drop onto an existing tab in the tab bar.
+    ///
+    /// Called by AdwTabBar when content of a registered type is dropped on a
+    /// specific tab.  We verify the payload, resolve the source surface, then
+    /// move it into the target tab's split tree as the rightmost leaf.
+    ///
+    /// Self-drop (source already lives in the target tab) is a no-op.
+    ///
+    /// Returns 1 (true) on success, 0 (false) on any failure so that ADW
+    /// can handle the result correctly.
+    fn onTabBarExtraDrop(
+        _: *adw.TabBar,
+        page: *adw.TabPage,
+        value: *gobject.Value,
+        self: *Self,
+    ) callconv(.c) c_int {
+        const priv = self.private();
+
+        // Extract GBytes from the GValue.
+        const boxed = value.getBoxed() orelse return 0;
+        const bytes: *glib.Bytes = @ptrCast(@alignCast(boxed));
+
+        // Parse the split payload.
+        const payload = split_dnd.Payload.parse(bytes) orelse return 0;
+
+        // Reject cross-process drops.
+        if (payload.pid != @as(i32, @intCast(std.os.linux.getpid()))) return 0;
+
+        // Resolve the source surface by UUID across all windows / tabs.
+        const source_surface = Application.default().findSurfaceByUuid(payload.uuid) orelse return 0;
+
+        // Get the source SplitTree.
+        const source_tree = ext.getAncestor(SplitTree, source_surface.as(gtk.Widget)) orelse return 0;
+
+        // Get the target Tab and its SplitTree from the drop page.
+        const child = page.getChild();
+        const target_tab = gobject.ext.cast(Tab, child) orelse return 0;
+        const target_tree = target_tab.getSplitTree();
+
+        // Self-drop guard: no-op if source already lives in the target tab.
+        if (source_tree == target_tree) return 0;
+
+        // Get source handle from the source tree.
+        const source_tree_data = source_tree.getTree() orelse return 0;
+        const source_handle = blk: {
+            var it = source_tree_data.iterator();
+            while (it.next()) |e| {
+                if (e.view == source_surface) break :blk e.handle;
+            }
+            log.warn("onTabBarExtraDrop: source surface not found in source tree", .{});
+            return 0;
+        };
+
+        // Get the last (rightmost in iteration order) leaf handle in the
+        // target tree so we can append the surface there.
+        const target_tree_data = target_tree.getTree() orelse return 0;
+        const target_handle = blk: {
+            var last: ?Surface.Tree.Node.Handle = null;
+            var it = target_tree_data.iterator();
+            while (it.next()) |e| last = e.handle;
+            break :blk last orelse {
+                log.warn("onTabBarExtraDrop: target tree is empty", .{});
+                return 0;
+            };
+        };
+
+        // Move the source surface into the target tree as a right-split of
+        // the last leaf.
+        target_tree.moveSurfaceInto(
+            source_tree,
+            source_handle,
+            target_handle,
+            .right,
+        ) catch |err| {
+            log.warn("onTabBarExtraDrop: moveSurfaceInto failed: {}", .{err});
+            return 0;
+        };
+
+        // Bring the target tab into view.
+        priv.tab_view.setSelectedPage(page);
+
+        return 1;
+    }
+
+    /// Add a new tab to this window that wraps an existing surface.
+    ///
+    /// The surface is removed from its current tree/tab (closing the source
+    /// tab if it becomes empty) and placed into a fresh tab appended at the
+    /// end of this window's tab view.
+    ///
+    /// Used when a split is dropped onto the empty area of the tab bar so
+    /// that the drop creates a new tab rather than a new window.
+    fn addTabWithSurface(self: *Self, surface: *Surface) void {
+        const app = Application.default();
+        const alloc = app.allocator();
+        const priv = self.private();
+
+        // Find and remove the surface from its current tree.
+        const source_tree = ext.getAncestor(SplitTree, surface.as(gtk.Widget)) orelse {
+            log.warn("addTabWithSurface: surface has no parent SplitTree", .{});
+            return;
+        };
+        const old_tree = source_tree.getTree() orelse return;
+        const source_handle = blk: {
+            var it = old_tree.iterator();
+            while (it.next()) |e| {
+                if (e.view == surface) break :blk e.handle;
+            }
+            log.warn("addTabWithSurface: surface not found in tree", .{});
+            return;
+        };
+
+        var tree_after_remove = old_tree.remove(alloc, source_handle) catch {
+            log.warn("addTabWithSurface: remove OOM", .{});
+            return;
+        };
+        defer tree_after_remove.deinit();
+
+        // Hold an extra ref so the surface survives setTree(null).
+        _ = surface.as(gobject.Object).ref();
+        defer surface.as(gobject.Object).unref();
+
+        // Update or clear the source tree.
+        if (tree_after_remove.isEmpty()) {
+            source_tree.setTree(null);
+            if (ext.getAncestor(Tab, source_tree.as(gtk.Widget))) |src_tab| {
+                if (ext.getAncestor(adw.TabView, source_tree.as(gtk.Widget))) |tv| {
+                    tv.closePage(tv.getPage(src_tab.as(gtk.Widget)));
+                }
+            }
+        } else {
+            source_tree.setTree(&tree_after_remove);
+        }
+
+        // Create a new tab wrapping the existing surface.
+        const tab = Tab.newWithSurface(priv.config, surface);
+
+        // Append the tab and select it.
+        const page = priv.tab_view.append(tab.as(gtk.Widget));
+        priv.tab_view.setSelectedPage(page);
+        _ = tab.as(gobject.Object).bindProperty(
+            "title",
+            page.as(gobject.Object),
+            "title",
+            .{ .sync_create = true },
+        );
+        _ = tab.as(gobject.Object).bindProperty(
+            "tooltip",
+            page.as(gobject.Object),
+            "tooltip",
+            .{ .sync_create = true },
+        );
+
+        // Wire up split-tree change signal so surface handlers are connected.
+        const split_tree = tab.getSplitTree();
+        _ = SplitTree.signals.changed.connect(
+            split_tree,
+            *Self,
+            tabSplitTreeChanged,
+            self,
+            .{},
+        );
+        tabSplitTreeChanged(split_tree, null, split_tree.getTree(), self);
+    }
+
     fn tabSplitTreeChanged(
         _: *SplitTree,
         old_tree: ?*const Surface.Tree,
@@ -2399,5 +2579,18 @@ pub const Window = extern struct {
 
 test "Window.newWithTab: compile-time existence" {
     const fn_ptr = Window.newWithTab;
+    _ = fn_ptr;
+}
+
+test "Window.onTabBarExtraDrop: compile-time existence" {
+    // Verify the handler exists and has the expected type.
+    // Runtime behavior (self-drop no-op, cross-tree move) requires a live
+    // GDK session and is covered by manual integration testing.
+    const fn_ptr = Window.onTabBarExtraDrop;
+    _ = fn_ptr;
+}
+
+test "Window.addTabWithSurface: compile-time existence" {
+    const fn_ptr = Window.addTabWithSurface;
     _ = fn_ptr;
 }
