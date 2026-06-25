@@ -99,6 +99,16 @@ pub fn build(b: *std.Build) !void {
     const webdata = try buildpkg.GhosttyWebdata.init(b, &deps);
     if (config.emit_webdata) webdata.install();
 
+    // Config schema
+    {
+        const schema = try buildpkg.GhosttySchema.init(b, &deps);
+        const schema_step = b.step(
+            "emit-config-schema",
+            "Emit config.schema.json to zig-out/share/ghostty/schema/",
+        );
+        schema_step.dependOn(schema.step);
+    }
+
     // Ghostty bench tools
     const bench = try buildpkg.GhosttyBench.init(b, &deps);
     if (config.emit_bench) bench.install();
