@@ -923,6 +923,7 @@ pub const SplitTree = extern struct {
         while (it.next()) |_| count += 1;
 
         // Update each leaf's header
+        var pane_number: u32 = 1;
         var it2 = tree.iterator();
         while (it2.next()) |entry| {
             const surface = entry.view;
@@ -933,6 +934,8 @@ pub const SplitTree = extern struct {
             const header = ssw.getHeader();
             header.setSplitCount(count);
             header.setHeaderMode(mode);
+            header.setPaneNumber(pane_number);
+            pane_number += 1;
             // For manual mode, directly override the visibility
             if (mode == .manual) {
                 header.as(gtk.Widget).setVisible(@intFromBool(priv.header_manual_visible));

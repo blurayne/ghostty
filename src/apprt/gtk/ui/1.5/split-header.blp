@@ -50,6 +50,16 @@ template $GhosttySplitHeader: Adw.Bin {
 menu header_context_menu_model {
   section {
     item {
+      label: _("Rename…");
+      action: "split-header.rename";
+    }
+    item {
+      label: _("Customize Colors…");
+      action: "split-header.customize";
+    }
+  }
+  section {
+    item {
       label: _("Move to New Window");
       action: "win.move-split-to-new-window";
     }

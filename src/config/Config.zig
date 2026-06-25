@@ -1119,6 +1119,35 @@ palette: Palette = .{},
 /// Middle-click anywhere on the split header closes the split.
 @"split-header-middle-click-close": bool = false,
 
+/// Minimum number of leaf panes required before `split-header = auto` shows
+/// headers. The count is the number of leaf panes in the tab's split tree.
+/// Values <= 1 behave like 2 (show as soon as any split exists). Default is
+/// 2, matching the built-in auto behaviour.
+///
+/// This option has no effect when `split-header` is not `auto`.
+@"split-header-auto-threshold": u32 = 2,
+
+/// Action to perform when double-clicking the split header title bar.
+///
+///   - rename    open the rename popover (default)
+///   - zoom      toggle zoom on the split
+///   - none      do nothing
+@"split-title-doubleclick-action": SplitTitleDoubleclickAction = .rename,
+
+/// The format string for the split pane title displayed in the split header.
+///
+/// Supported placeholders:
+///
+///   - `{number}` — 1-indexed pane number within the tab (left-to-right,
+///     top-to-bottom traversal order of the split tree)
+///   - `{title}` — effective title of the pane: the user's custom rename
+///     if set, otherwise the auto-derived shell/command title
+///
+/// Use `\{` to emit a literal `{` character.
+///
+/// Available since: 1.2.0 on GTK
+@"split-title-format": [:0]const u8 = "#{number}: {title}",
+
 /// The foreground and background color for search matches. This only applies
 /// to non-focused search matches, also known as candidate matches.
 ///
@@ -8734,12 +8763,21 @@ pub const SplitPreserveZoom = packed struct {
 pub const SplitHeaderMode = enum {
     /// Never show the header bar (current behavior if not set).
     off,
-    /// Show only when the active tab has more than 2 splits.
+    /// Show only when the active tab has more than 1 split (i.e., any split exists).
     auto,
     /// Always show on every split.
     always,
     /// Per-tab; user toggles via `toggle_split_header`. Initial state hidden.
     manual,
+};
+
+pub const SplitTitleDoubleclickAction = enum {
+    /// Open the rename popover.
+    rename,
+    /// Toggle zoom on the split.
+    zoom,
+    /// Do nothing.
+    none,
 };
 
 pub const RepeatableCommand = struct {
