@@ -14,11 +14,13 @@
 >
 > **Install (Linux Flatpak)**
 >
-> Download `com.mitchellh.ghostty.flatpak` from the [latest tip release](../../releases/tag/tip), then:
+> Download the bundle for your architecture from the [latest tip release](../../releases/tag/tip), then:
 > ```
-> flatpak install --user --bundle com.mitchellh.ghostty.flatpak
+> flatpak install --user --bundle com.mitchellh.ghostty-x86_64.flatpak
+> # or on ARM:
+> flatpak install --user --bundle com.mitchellh.ghostty-aarch64.flatpak
 > ```
-> The tip release is rebuilt automatically on every push to `main`.
+> The tip release is rebuilt automatically for x86_64 and ARM64 on every push to `main`.
 
 <!-- LOGO -->
 <h1>

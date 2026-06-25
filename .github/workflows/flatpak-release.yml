@@ -12,14 +12,20 @@ concurrency:
 
 jobs:
   build:
-    name: Build & publish tip
-    runs-on: ubuntu-latest
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
       options: --privileged
     timeout-minutes: 120
-    permissions:
-      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
 
     steps:
       - uses: actions/checkout@v4
@@ -37,16 +43,33 @@ jobs:
         with:
           bundle: com.mitchellh.ghostty
           manifest-path: flatpak/com.mitchellh.ghostty.yml
-          cache-key: flatpak-builder-${{ github.sha }}
-          arch: x86_64
+          cache-key: flatpak-builder-${{ github.sha }}-${{ matrix.arch }}
+          arch: ${{ matrix.arch }}
           verbose: true
 
       - name: Restore .git
         if: always()
         run: mv .git.ci-bak .git 2>/dev/null || true
 
-      - name: Publish tip release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-${{ matrix.arch }}
+          path: com.mitchellh.ghostty-${{ matrix.arch }}.flatpak
+
+  release:
+    name: Publish tip release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: flatpak-*
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
         with:
           name: Ghostty Personal Fork — Tip
           prerelease: true
@@ -55,8 +78,14 @@ jobs:
           body: |
             Automated build from `main` — ${{ github.sha }}
 
-            **Install**
+            **Install (x86_64)**
             ```
-            flatpak install --user --bundle com.mitchellh.ghostty.flatpak
+            flatpak install --user --bundle com.mitchellh.ghostty-x86_64.flatpak
             ```
-          files: com.mitchellh.ghostty-x86_64.flatpak
+            **Install (ARM64)**
+            ```
+            flatpak install --user --bundle com.mitchellh.ghostty-aarch64.flatpak
+            ```
+          files: |
+            com.mitchellh.ghostty-x86_64.flatpak
+            com.mitchellh.ghostty-aarch64.flatpak
