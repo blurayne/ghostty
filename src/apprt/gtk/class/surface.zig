@@ -1857,6 +1857,13 @@ pub const Surface = extern struct {
         };
         priv.drop_target.setGtypes(&drop_target_types, drop_target_types.len);
 
+        // On X11, GtkDropTarget advertises accepted MIME types by looking up
+        // registered GDK deserializers for its GType (GBytes). Without a
+        // registered deserializer for our custom MIME type, the X11 XDND
+        // negotiation fails and the enter/motion signals never fire. Register
+        // once per process so the DropTarget's formats include our MIME type.
+        registerSplitDndDeserializer();
+
         // Add a separate drop target for split DnD (payload serialized as GBytes).
         const split_drop = gtk.DropTarget.new(glib.Bytes.getGObjectType(), .{ .move = true });
         _ = gtk.DropTarget.signals.drop.connect(
@@ -2773,6 +2780,51 @@ pub const Surface = extern struct {
         }
 
         return 1;
+    }
+
+    //---------------------------------------------------------------
+    // Split DnD deserializer registration
+
+    /// Deserializer for application/x-ghostty-split → GBytes.
+    /// Called by GTK (once per drop on X11) to convert the raw X11 selection
+    /// data into a GBytes GValue that the DropTarget drop signal receives.
+    fn splitDndDeserialize(deserializer: *gdk.ContentDeserializer) callconv(.c) void {
+        const stream = deserializer.getInputStream();
+        const bytes = stream.readBytes(
+            @sizeOf(split_dnd.Payload),
+            deserializer.getCancellable(),
+            null,
+        ) orelse {
+            // Data unreadable — return empty bytes; the drop handler will reject
+            // it when payload parse fails (wrong size).
+            const empty = glib.Bytes.new(null, 0);
+            defer empty.unref();
+            deserializer.getValue().setBoxed(empty);
+            deserializer.returnSuccess();
+            return;
+        };
+        defer bytes.unref();
+        deserializer.getValue().setBoxed(bytes);
+        deserializer.returnSuccess();
+    }
+
+    /// Register the split DnD deserializer exactly once per process.
+    /// GTK's content formats for GBytes are built from registered deserializers,
+    /// so this must run before the DropTarget is created.
+    fn registerSplitDndDeserializer() void {
+        // All GTK calls happen on the main thread, so a plain bool is safe.
+        const S = struct {
+            var done: bool = false;
+        };
+        if (S.done) return;
+        S.done = true;
+        gdk.contentRegisterDeserializer(
+            split_dnd.MIME,
+            glib.Bytes.getGObjectType(),
+            splitDndDeserialize,
+            null,
+            null,
+        );
     }
 
     //---------------------------------------------------------------
