@@ -566,6 +566,27 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
             break :channel .tip;
         },
     );
+
+    // UTC build timestamp captured at zig build time.
+    var ts_buf: [32]u8 = undefined;
+    step.addOption([:0]const u8, "build_timestamp", try buildTimestamp(&ts_buf));
+}
+
+/// Format the current UTC time as "YYYY-MM-DD HH:MM:SS UTC" into buf.
+fn buildTimestamp(buf: []u8) ![:0]const u8 {
+    const unix_secs: u64 = @intCast(std.time.timestamp());
+    const epoch_day = std.time.epoch.EpochSeconds{ .secs = unix_secs };
+    const day_seconds = epoch_day.getDaySeconds();
+    const year_day = epoch_day.getEpochDay().calculateYearDay();
+    const month_day = year_day.calculateMonthDay();
+    return std.fmt.bufPrintZ(buf, "{d:0>4}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2} UTC", .{
+        year_day.year,
+        month_day.month.numeric(),
+        month_day.day_index + 1,
+        day_seconds.getHoursIntoDay(),
+        day_seconds.getMinutesIntoHour(),
+        day_seconds.getSecondsIntoMinute(),
+    });
 }
 
 /// Returns the build options for the terminal module. This assumes a

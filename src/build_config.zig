@@ -17,6 +17,9 @@ pub const ReleaseChannel = BuildConfig.ReleaseChannel;
 pub const version = options.app_version;
 pub const version_string = options.app_version_string;
 
+/// UTC timestamp of when this binary was compiled, e.g. "2026-06-25 11:30:00 UTC".
+pub const build_timestamp = options.build_timestamp;
+
 /// The release channel for this build.
 pub const release_channel = std.meta.stringToEnum(ReleaseChannel, @tagName(options.release_channel)).?;
 

@@ -2020,6 +2020,8 @@ pub const Window = extern struct {
                 "https://github.com/ghostty-org/ghostty/issues",
                 "website",
                 website,
+                "comments",
+                comptime ("Built: " ++ build_config.build_timestamp).ptr,
                 @as(?*anyopaque, null),
             );
         } else {
@@ -2035,6 +2037,8 @@ pub const Window = extern struct {
                 build_config.version_string.ptr,
                 "website",
                 website,
+                "comments",
+                comptime ("Built: " ++ build_config.build_timestamp).ptr,
                 @as(?*anyopaque, null),
             );
         }
