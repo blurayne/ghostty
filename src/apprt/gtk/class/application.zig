@@ -40,6 +40,7 @@ const Window = @import("window.zig").Window;
 const Tab = @import("tab.zig").Tab;
 const CloseConfirmationDialog = @import("close_confirmation_dialog.zig").CloseConfirmationDialog;
 const ConfigErrorsDialog = @import("config_errors_dialog.zig").ConfigErrorsDialog;
+const ConfigEditorWindow = @import("config_editor_window.zig").ConfigEditorWindow;
 const GlobalShortcuts = @import("global_shortcuts.zig").GlobalShortcuts;
 const OpenURI = @import("../portal.zig").OpenURI;
 
@@ -201,6 +202,10 @@ pub const Application = extern struct {
         /// This is a WeakRef because the dialog can close on its own
         /// outside of our own lifecycle and that's okay.
         config_errors_dialog: WeakRef(ConfigErrorsDialog) = .empty,
+
+        /// If non-null, the config editor window is currently open.
+        /// Singleton: only one editor window is allowed at a time.
+        config_editor: ?*ConfigEditorWindow = null,
 
         /// glib source for our signal handler.
         signal_source: ?c_uint = null,
@@ -1445,6 +1450,7 @@ pub const Application = extern struct {
             .init("new-window", actionNewWindow, null),
             .init("new-window-command", actionNewWindow, as_variant_type),
             .init("open-config", actionOpenConfig, null),
+            .init("open-config-editor", actionOpenConfigEditor, null),
             .init("present-surface", actionPresentSurface, t_variant_type),
             .init("quit", actionQuit, null),
             .init("reload-config", actionReloadConfig, null),
@@ -1505,6 +1511,15 @@ pub const Application = extern struct {
             diag.unref(); // strong ref from get()
         }
         priv.config_errors_dialog.set(null);
+        if (priv.config_editor) |editor| {
+            // Remove our weak ref before destroying to avoid a dangling callback.
+            editor.as(gobject.Object).weakUnref(
+                configEditorWeakNotify,
+                self,
+            );
+            priv.config_editor = null;
+            editor.as(gtk.Window).destroy();
+        }
         if (priv.signal_source) |v| {
             if (glib.Source.remove(v) == 0) {
                 log.warn("unable to remove signal source", .{});
@@ -1840,6 +1855,41 @@ pub const Application = extern struct {
         self: *Self,
     ) callconv(.c) void {
         _ = self.core().mailbox.push(.open_config, .forever);
+    }
+
+    fn actionOpenConfigEditor(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        if (priv.config_editor) |editor| {
+            // Already open — just bring it to the front.
+            editor.present();
+            return;
+        }
+
+        const editor = ConfigEditorWindow.new(self);
+        priv.config_editor = editor;
+
+        // We use a weak ref to the editor so that when the window GObject
+        // is about to be finalized (after the user closes it), we can clear
+        // our singleton pointer — just like surface.zig does for the
+        // inspector window.
+        editor.as(gobject.Object).weakRef(
+            configEditorWeakNotify,
+            self,
+        );
+
+        editor.present();
+    }
+
+    fn configEditorWeakNotify(
+        ud: ?*anyopaque,
+        _: *gobject.Object,
+    ) callconv(.c) void {
+        const self: *Self = @ptrCast(@alignCast(ud orelse return));
+        self.private().config_editor = null;
     }
 
     fn actionPresentSurface(

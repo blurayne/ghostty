@@ -1,0 +1,81 @@
+using Gtk 4.0;
+using Gio 2.0;
+using Adw 1;
+
+template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
+  title: _("Ghostty Configuration Editor");
+  default-width: 900;
+  default-height: 700;
+
+  content: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      title-widget: Gtk.SearchEntry search_entry {
+        hexpand: true;
+        placeholder-text: _("Filter config keys…");
+        search-changed => $on_search_changed();
+      };
+    }
+
+    Gtk.Box {
+      orientation: vertical;
+
+      Gtk.Box {
+        orientation: horizontal;
+        margin-top: 6;
+        margin-bottom: 6;
+        margin-start: 12;
+        margin-end: 12;
+        spacing: 18;
+
+        Gtk.CheckButton instant_reload_check {
+          label: _("Instantly reload");
+          active: true;
+          toggled => $on_instant_reload_toggled();
+        }
+
+        Gtk.CheckButton persist_check {
+          label: _("Persist changes");
+          toggled => $on_persist_toggled();
+        }
+      }
+
+      Gtk.Separator {
+        orientation: horizontal;
+      }
+
+      Gtk.ScrolledWindow {
+        vexpand: true;
+        hexpand: true;
+
+        Gtk.ListView config_list {
+          show-separators: true;
+          single-click-activate: false;
+
+          model: Gtk.SingleSelection {
+            model: Gtk.FilterListModel filter_model {
+              incremental: true;
+
+              filter: Gtk.StringFilter string_filter {
+                expression: expr item as <$GhosttyConfigEntryObject>.key-name;
+                search: bind search_entry.text;
+                match-mode: substring;
+                ignore-case: true;
+              };
+
+              model: Gio.ListStore entry_store {
+                item-type: typeof<$GhosttyConfigEntryObject>;
+              };
+            };
+          };
+
+          factory: Gtk.SignalListItemFactory {
+            setup => $factory_setup();
+            bind => $factory_bind();
+            unbind => $factory_unbind();
+          };
+        }
+      }
+    }
+  };
+}

@@ -4,6 +4,7 @@ const file_load = @import("config/file_load.zig");
 const formatter = @import("config/formatter.zig");
 const formatter_file = @import("config/formatter_file.zig");
 pub const Config = @import("config/Config.zig");
+pub const metadata = @import("config/metadata.zig");
 pub const conditional = @import("config/conditional.zig");
 pub const io = @import("config/io.zig");
 pub const string = @import("config/string.zig");
