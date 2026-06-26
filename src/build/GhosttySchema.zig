@@ -34,6 +34,10 @@ pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
     // schemagen also needs the generated help_strings module for doc strings.
     deps.help_strings.addImport(exe);
 
+    // Config transitively imports input/Binding.zig which imports uucode.
+    // Use Debug optimize to keep memory usage low — schemagen is a build tool.
+    deps.addUucode(b, exe.root_module, b.graph.host, .Debug);
+
     const run = b.addRunArtifact(exe);
     const json_out = run.captureStdOut();
 
