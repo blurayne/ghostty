@@ -1,6 +1,10 @@
 [tasks.build]
 description = "Build Ghostty Flatpak inside dev container"
-run = "docker compose run --build --rm builder mise run _flatpak-build"
+run = """
+set -e
+printf '%s' "$(git rev-parse --short HEAD 2>/dev/null || echo '0000000')" > .git-sha
+docker compose run --build --rm builder mise run _flatpak-build
+"""
 
 [tasks.install]
 description = "Install the built Flatpak locally on host"
@@ -179,17 +183,9 @@ printf "         %s\\n" "$OUR_HEAD_MSG"
 description = "Build flatpak bundle — run inside container only"
 run = """
 set -e
-# The workspace is a git worktree whose .git file points to an absolute host path
-# unavailable in the container. flatpak-builder's type:dir source sees the .git
-# file, treats the dir as a git repo, and tries to fetch from it — which fails.
-# Fix: rename .git for the duration of the build so flatpak-builder treats it as
-# a plain directory. trap restores it even on failure.
-# Write the commit SHA to a file before hiding .git so the flatpak
-# sandbox can read it and pass it to zig build as -Dversion-string.
-printf '%s' "$(git rev-parse --short HEAD 2>/dev/null || echo '0000000')" > .git-sha
-
-mv .git .git.worktree-bak
-trap 'mv .git.worktree-bak .git 2>/dev/null || true; rm -f .git-sha' EXIT INT TERM
+# .git is hidden from flatpak-builder via a tmpfs mount in docker-compose.yml
+# so flatpak-builder treats the workspace as a plain directory and skips git ops.
+# .git-sha is written on the host by the `build` task before this runs.
 
 # Start system D-Bus if not already running.
 # machine-id and messagebus user are set up in the Dockerfile.

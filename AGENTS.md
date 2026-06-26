@@ -18,6 +18,8 @@ Never run `zig build` or `flatpak-builder` directly on the host.
 Build artifacts land in `dist/build/` after a successful build.
 First build downloads the GNOME 50 runtime (~1 GB) into a named Docker volume — subsequent builds reuse it.
 
+**Disk management:** Only keep 4 flatpak build cache entries. Run `mise run clean` to wipe all build artifacts and reclaim space when disk is low.
+
 ## Commands
 
 - **Build:** `zig build`
