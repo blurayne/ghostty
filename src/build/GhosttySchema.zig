@@ -1,11 +1,11 @@
-//! GhosttySchema generates config.schema.json — a machine-readable
-//! description of every user-facing Ghostty configuration field.
+//! GhosttySchema generates config.schema.json and derived editor completion
+//! files (Sublime Text, VS Code) from Ghostty's comptime config metadata.
 const GhosttySchema = @This();
 
 const std = @import("std");
 const SharedDeps = @import("SharedDeps.zig");
 
-/// The install step that produces zig-out/share/ghostty/schema/config.schema.json.
+/// Top-level step; depends on all three install steps (JSON + Sublime + VS Code).
 step: *std.Build.Step,
 
 pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
@@ -37,12 +37,51 @@ pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
     const run = b.addRunArtifact(exe);
     const json_out = run.captureStdOut();
 
-    const install = b.addInstallFile(
+    // Primary output: config.schema.json
+    const install_json = b.addInstallFile(
         json_out,
         "share/ghostty/schema/config.schema.json",
     );
 
-    return .{ .step = &install.step };
+    // Derived output: Sublime Text completions
+    const run_sublime = b.addSystemCommand(&.{
+        "python3",
+        "src/build/schema/gen_sublime_completions.py",
+    });
+    run_sublime.addFileArg(json_out);
+    const sublime_out = run_sublime.captureStdOut();
+    const install_sublime = b.addInstallFile(
+        sublime_out,
+        "share/ghostty/schema/ghostty.sublime-completions",
+    );
+
+    // Derived output: VS Code snippets
+    const run_vscode = b.addSystemCommand(&.{
+        "python3",
+        "src/build/schema/gen_vscode_snippets.py",
+    });
+    run_vscode.addFileArg(json_out);
+    const vscode_out = run_vscode.captureStdOut();
+    const install_vscode = b.addInstallFile(
+        vscode_out,
+        "share/ghostty/schema/ghostty-vscode-snippets.json",
+    );
+
+    // Aggregate step: all three installs must complete
+    const all = b.allocator.create(std.Build.Step) catch @panic("OOM");
+    all.* = std.Build.Step.init(.{
+        .id = .custom,
+        .name = "schema-all",
+        .owner = b,
+        .makeFn = struct {
+            fn make(_: *std.Build.Step, _: std.Build.Step.MakeOptions) anyerror!void {}
+        }.make,
+    });
+    all.dependOn(&install_json.step);
+    all.dependOn(&install_sublime.step);
+    all.dependOn(&install_vscode.step);
+
+    return .{ .step = all };
 }
 
 pub fn install(self: *const GhosttySchema) void {
