@@ -35,7 +35,7 @@ docker compose down -v
 """
 
 [tasks.remotes-setup]
-description = "Configure git remotes: origin=ghostty-org/ghostty, blurayne=blurayne/ghostty"
+description = "Configure git remotes: upstream=ghostty-org/ghostty, origin=blurayne/ghostty"
 run = """
 set -e
 
@@ -53,8 +53,8 @@ setup_remote() {
   fi
 }
 
-setup_remote origin   git@github.com:ghostty-org/ghostty.git
-setup_remote blurayne git@github.com:blurayne/ghostty.git
+setup_remote upstream git@github.com:ghostty-org/ghostty.git
+setup_remote origin   git@github.com:blurayne/ghostty.git
 
 echo ""
 git remote -v
@@ -65,9 +65,9 @@ description = "Fetch upstream (ghostty-org/ghostty) and merge into fork main, th
 run = """
 set -e
 
-git fetch origin -q
-MERGE_BASE=$(git merge-base HEAD origin/main)
-UPSTREAM_AHEAD=$(git rev-list --count "${MERGE_BASE}"..origin/main)
+git fetch upstream -q
+MERGE_BASE=$(git merge-base HEAD upstream/main)
+UPSTREAM_AHEAD=$(git rev-list --count "${MERGE_BASE}"..upstream/main)
 
 if [ "$UPSTREAM_AHEAD" -eq 0 ]; then
   echo "Already up to date with upstream."
@@ -75,21 +75,21 @@ if [ "$UPSTREAM_AHEAD" -eq 0 ]; then
 fi
 
 echo "$UPSTREAM_AHEAD new commit(s) from upstream:"
-git log --oneline --format="  %h  %ci  %s" "${MERGE_BASE}"..origin/main
+git log --oneline --format="  %h  %ci  %s" "${MERGE_BASE}"..upstream/main
 echo ""
 
 # Attempt the merge; on conflict, abort and give clear instructions
-if ! git merge origin/main --no-edit -m "chore: merge upstream ghostty-org/ghostty $(git rev-parse --short origin/main)"; then
+if ! git merge upstream/main --no-edit -m "chore: merge upstream ghostty-org/ghostty $(git rev-parse --short upstream/main)"; then
   echo ""
   echo "ERROR: merge conflict — resolve manually, then:"
   echo "  git add <files>"
   echo "  git merge --continue"
-  echo "  git push blurayne main"
+  echo "  git push origin main"
   exit 1
 fi
 
 echo ""
-git push blurayne main
+git push origin main
 echo ""
 echo "Done. Merged $UPSTREAM_AHEAD upstream commit(s) and pushed."
 """
@@ -98,13 +98,13 @@ echo "Done. Merged $UPSTREAM_AHEAD upstream commit(s) and pushed."
 description = "Show commits on upstream (ghostty-org/ghostty) since our fork point"
 run = """
 set -e
-git fetch origin -q 2>/dev/null || echo "[using cached refs]"
-MERGE_BASE=$(git merge-base HEAD origin/main)
-AHEAD=$(git rev-list --count "${MERGE_BASE}"..origin/main)
+git fetch upstream -q 2>/dev/null || echo "[using cached refs]"
+MERGE_BASE=$(git merge-base HEAD upstream/main)
+AHEAD=$(git rev-list --count "${MERGE_BASE}"..upstream/main)
 echo "Upstream has $AHEAD new commit(s) since fork point ($(git log -1 --format='%h %ci' "$MERGE_BASE")):"
 echo ""
 git log --oneline --format="%C(yellow)%h%Creset  %C(dim)%ci%Creset  %s" \
-    "${MERGE_BASE}"..origin/main
+    "${MERGE_BASE}"..upstream/main
 """
 
 [tasks.fork-status]
@@ -114,11 +114,11 @@ set -e
 
 # Fetch latest refs (non-fatal — works offline with cached refs)
 echo "Fetching remotes..."
-git fetch origin --tags -q 2>/dev/null && echo "  origin  OK" || echo "  origin  [skipped — using cached refs]"
-git fetch blurayne --tags -q 2>/dev/null && echo "  blurayne OK" || echo "  blurayne [skipped — using cached refs]"
+git fetch upstream --tags -q 2>/dev/null && echo "  upstream  OK" || echo "  upstream  [skipped — using cached refs]"
+git fetch origin --tags -q 2>/dev/null && echo "  origin    OK" || echo "  origin    [skipped — using cached refs]"
 
 # ── Last common commit ───────────────────────────────────────────────────────
-MERGE_BASE=$(git merge-base HEAD origin/main)
+MERGE_BASE=$(git merge-base HEAD upstream/main)
 MB_SHORT=$(git log -1 --format="%h" "$MERGE_BASE")
 MB_DATE=$(git log -1 --format="%ci" "$MERGE_BASE")
 MB_MSG=$(git log -1 --format="%s" "$MERGE_BASE")
@@ -146,9 +146,9 @@ if [ -n "$UPSTREAM_TAG" ]; then
     echo "│  fork point is $DELTA commit(s) ahead of this tag on upstream main"
   fi
   # How far upstream has moved since fork point
-  UPSTREAM_AHEAD=$(git rev-list --count "${MERGE_BASE}"..origin/main)
-  UPSTREAM_HEAD_DATE=$(git log -1 --format="%ci" origin/main)
-  UPSTREAM_LATEST_TAG=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "(none)")
+  UPSTREAM_AHEAD=$(git rev-list --count "${MERGE_BASE}"..upstream/main)
+  UPSTREAM_HEAD_DATE=$(git log -1 --format="%ci" upstream/main)
+  UPSTREAM_LATEST_TAG=$(git describe --tags --abbrev=0 upstream/main 2>/dev/null || echo "(none)")
   printf "│  upstream has %s new commit(s) since fork point\\n" "$UPSTREAM_AHEAD"
   printf "│  upstream latest tag  %s  (HEAD %s)\\n" "$UPSTREAM_LATEST_TAG" "$UPSTREAM_HEAD_DATE"
 else
