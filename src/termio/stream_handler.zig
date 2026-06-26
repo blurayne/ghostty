@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const xev = @import("../global.zig").xev;
 const apprt = @import("../apprt.zig");
 const build_config = @import("../build_config.zig");
+const terminal_options = @import("terminal_options");
 const configpkg = @import("../config.zig");
 const internal_os = @import("../os/main.zig");
 const renderer = @import("../renderer.zig");
@@ -358,10 +359,96 @@ pub const StreamHandler = struct {
             .apc_end => try self.apcEnd(),
             .apc_put => self.apc.feed(self.alloc, value),
 
+            .iterm2_inline_image => try self.iterm2InlineImage(value),
+
             // Unimplemented
             .title_push,
             .title_pop,
             => {},
+        }
+    }
+
+    /// Handle an OSC 1337 `File=` inline image by injecting it into the
+    /// Kitty graphics protocol pipeline.  This reuses all of the existing
+    /// image-loading, storage, placement, and rendering infrastructure.
+    ///
+    /// The `img` value is a copy of the OSC Command data; ownership of
+    /// `img.data` remains with the OSC parser's reset() path and must NOT be
+    /// freed here.
+    fn iterm2InlineImage(
+        self: *StreamHandler,
+        img: terminal.osc.Command.Iterm2InlineImage,
+    ) !void {
+        if (comptime !terminal_options.kitty_graphics) {
+            log.debug("iterm2 inline image: kitty_graphics feature disabled", .{});
+            return;
+        }
+
+        // The remainder of this function references types from the Kitty
+        // graphics module which only exists when kitty_graphics=true.  The
+        // comptime early-return above ensures we never reach here when the
+        // feature is compiled out.  We wrap the body in a comptime block to
+        // prevent the Zig compiler from attempting to resolve
+        // terminal.kitty.graphics.Command when kitty_graphics=false.
+        if (comptime terminal_options.kitty_graphics) {
+            if (!self.terminal.screens.active.kitty_images.enabled()) {
+                log.debug("iterm2 inline image: kitty image storage disabled, skipping", .{});
+                return;
+            }
+
+            if (img.data.len == 0) {
+                log.debug("iterm2 inline image: empty data, skipping", .{});
+                return;
+            }
+
+            log.debug(
+                "iterm2 inline image: size={} columns={} rows={} width_px={} height_px={}",
+                .{ img.data.len, img.columns, img.rows, img.width_px, img.height_px },
+            );
+
+            // Build a synthetic Kitty transmit-and-display command.
+            //
+            // We must copy img.data because the Kitty command takes ownership of
+            // its data slice and will free it via cmd.deinit(alloc).  The original
+            // img.data is still owned by the OSC parser and will be freed when the
+            // parser resets — freeing it twice would be a bug.
+            //
+            // format=png: the Kitty LoadingImage path treats this as PNG data and
+            // will pass it through the sys.decode_png decoder (wuffs by default).
+            // Only PNG images are decoded; JPEG, GIF, WebP, BMP etc. will fail with
+            // "EINVAL: invalid data" which is logged but not fatal.
+            // Supporting additional formats would require format-detection here and
+            // additional decoders in sys.zig.
+            //
+            // image_id=0 → Ghostty auto-assigns an ID.
+            const data_copy = try self.alloc.dupe(u8, img.data);
+            var cmd: terminal.kitty.graphics.Command = .{
+                .control = .{ .transmit_and_display = .{
+                    .transmission = .{
+                        .format = .png,
+                        .medium = .direct,
+                        .image_id = 0,
+                        .image_number = 0,
+                    },
+                    .display = .{
+                        .columns = img.columns,
+                        .rows = img.rows,
+                        // Move the cursor to just below the image after rendering.
+                        .cursor_movement = .after,
+                    },
+                } },
+                .data = data_copy,
+            };
+            defer cmd.deinit(self.alloc);
+
+            if (self.terminal.kittyGraphics(self.alloc, &cmd)) |resp| {
+                if (!resp.ok()) {
+                    log.warn("iterm2 inline image: kitty graphics error: {s}", .{resp.message});
+                }
+                // We do not send a wire response to the pty for OSC 1337.
+            }
+
+            try self.queueRender();
         }
     }
 

@@ -8,6 +8,121 @@ const Command = @import("../../osc.zig").Command;
 
 const log = std.log.scoped(.osc_iterm2);
 
+/// Parse the `File=` argument string of an OSC 1337 inline-image command.
+///
+/// The format is:
+///   [key=val;key=val...]:base64encodeddata
+///
+/// Returns a populated `Command.Iterm2InlineImage` on success, or null if the
+/// sequence is malformed or `inline=1` is absent.  The caller is responsible
+/// for freeing `result.data` with the provided allocator.
+fn parseFile(alloc: std.mem.Allocator, value: []const u8) ?Command.Iterm2InlineImage {
+    // The colon that separates the argument list from the base64 payload is
+    // *required* by the spec and by every real implementation we've seen.
+    const colon_idx = std.mem.indexOfScalar(u8, value, ':') orelse {
+        log.debug("OSC 1337 File= missing colon separator", .{});
+        return null;
+    };
+
+    const args_str = value[0..colon_idx];
+    const b64_str = value[colon_idx + 1 ..];
+
+    if (b64_str.len == 0) {
+        log.debug("OSC 1337 File= empty image data", .{});
+        return null;
+    }
+
+    // Parse the semicolon-separated key=value argument list.
+    var result: Command.Iterm2InlineImage = .{ .data = "" };
+    var inline_flag: bool = false;
+
+    var it = std.mem.splitScalar(u8, args_str, ';');
+    while (it.next()) |pair| {
+        if (pair.len == 0) continue;
+        const eq = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
+        const k = pair[0..eq];
+        const v = pair[eq + 1 ..];
+
+        // Case-insensitive key comparison.
+        if (std.ascii.eqlIgnoreCase(k, "inline")) {
+            inline_flag = std.mem.eql(u8, v, "1");
+        } else if (std.ascii.eqlIgnoreCase(k, "width")) {
+            result.columns, result.width_px = parseDimension(v);
+        } else if (std.ascii.eqlIgnoreCase(k, "height")) {
+            result.rows, result.height_px = parseDimension(v);
+        } else if (std.ascii.eqlIgnoreCase(k, "preserveAspectRatio")) {
+            result.preserve_aspect_ratio = !std.mem.eql(u8, v, "0");
+        }
+        // name= and size= are intentionally ignored: name is cosmetic and
+        // size= is just a pre-allocation hint that the parser doesn't need.
+    }
+
+    if (!inline_flag) {
+        // The spec says inline=1 is required for inline display.  When
+        // it is absent the image is intended to be "downloaded", which we
+        // cannot do — so we just ignore the sequence entirely.
+        log.debug("OSC 1337 File= without inline=1, ignoring", .{});
+        return null;
+    }
+
+    // Decode the base64 payload into a freshly-allocated buffer.
+    const decoded = decodeBase64(alloc, b64_str) orelse return null;
+    result.data = decoded;
+    return result;
+}
+
+/// Parse a dimension value such as "80", "80px", or "auto".
+/// Returns { columns_or_rows, pixels } where exactly one is non-zero (or
+/// both zero for "auto").
+fn parseDimension(v: []const u8) struct { u32, u32 } {
+    if (std.ascii.eqlIgnoreCase(v, "auto") or v.len == 0) return .{ 0, 0 };
+
+    if (std.mem.endsWith(u8, v, "px")) {
+        const n = std.fmt.parseInt(u32, v[0 .. v.len - 2], 10) catch return .{ 0, 0 };
+        return .{ 0, n };
+    }
+
+    // Plain integer → terminal columns/rows.
+    const n = std.fmt.parseInt(u32, v, 10) catch return .{ 0, 0 };
+    return .{ n, 0 };
+}
+
+/// Decode a standard base64 string into a freshly-allocated byte slice.
+/// Returns null on error; caller owns the returned memory.
+fn decodeBase64(alloc: std.mem.Allocator, b64: []const u8) ?[]u8 {
+    if (b64.len == 0) return null;
+
+    const max_decoded = simd.base64.maxLen(b64);
+    if (max_decoded == 0) {
+        log.debug("OSC 1337 File= base64 max length is 0", .{});
+        return null;
+    }
+
+    // Allocate a mutable working buffer, decode in place, then shrink.
+    var buf = alloc.alloc(u8, b64.len) catch {
+        log.warn("OSC 1337 File= OOM allocating decode buffer size={}", .{b64.len});
+        return null;
+    };
+
+    // Copy b64 into buf so we can decode in-place (simd decoder may mutate).
+    @memcpy(buf[0..b64.len], b64);
+
+    const decoded = simd.base64.decode(buf[0..b64.len], buf[0..max_decoded]) catch |err| {
+        log.warn("OSC 1337 File= base64 decode error: {}", .{err});
+        alloc.free(buf);
+        return null;
+    };
+
+    // Shrink the allocation to the actual decoded length.
+    const n = decoded.len;
+    if (n == 0) {
+        alloc.free(buf);
+        return null;
+    }
+    buf = alloc.realloc(buf, n) catch buf; // best-effort shrink
+    return buf[0..n];
+}
+
 const Key = enum {
     AddAnnotation,
     AddHiddenAnnotation,
@@ -154,6 +269,28 @@ pub fn parse(parser: *Parser, _: ?u8) ?*Command {
             return &parser.command;
         },
 
+        .File => {
+            const value = value_ orelse {
+                log.debug("OSC 1337 File= missing value", .{});
+                parser.command = .invalid;
+                return null;
+            };
+
+            const alloc = parser.alloc orelse {
+                log.warn("OSC 1337 File= requires an allocator but none was provided", .{});
+                parser.command = .invalid;
+                return null;
+            };
+
+            const img = parseFile(alloc, value) orelse {
+                parser.command = .invalid;
+                return null;
+            };
+
+            parser.command = .{ .iterm2_inline_image = img };
+            return &parser.command;
+        },
+
         .AddAnnotation,
         .AddHiddenAnnotation,
         .Block,
@@ -165,7 +302,6 @@ pub fn parse(parser: *Parser, _: ?u8) ?*Command {
         .Custom,
         .Disinter,
         .EndCopy,
-        .File,
         .FileEnd,
         .FilePart,
         .HighlightCursorLine,
@@ -432,4 +568,122 @@ test "OSC: 1337: test CurrentDir with non-empty value" {
     const cmd = p.end('\x1b').?.*;
     try testing.expect(cmd == .report_pwd);
     try testing.expectEqualStrings("abc123", cmd.report_pwd.value);
+}
+
+test "OSC: 1337: File= without inline=1 is ignored" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "aGVsbG8=" is base64 for "hello"
+    const input = "1337;File=name=test.png;size=5:aGVsbG8=";
+    for (input) |ch| p.next(ch);
+
+    // inline=1 is absent, should be null
+    try testing.expect(p.end('\x1b') == null);
+}
+
+test "OSC: 1337: File= missing colon separator is invalid" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    const input = "1337;File=inline=1aGVsbG8=";
+    for (input) |ch| p.next(ch);
+
+    try testing.expect(p.end('\x1b') == null);
+}
+
+test "OSC: 1337: File= with inline=1 parses image data" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "aGVsbG8=" is base64 for "hello"
+    const input = "1337;File=inline=1:aGVsbG8=";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .iterm2_inline_image);
+    const img = cmd.iterm2_inline_image;
+    try testing.expectEqualStrings("hello", img.data);
+    try testing.expectEqual(0, img.columns);
+    try testing.expectEqual(0, img.rows);
+    try testing.expectEqual(true, img.preserve_aspect_ratio);
+}
+
+test "OSC: 1337: File= with width/height columns" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "dGVzdA==" is base64 for "test"
+    const input = "1337;File=inline=1;width=80;height=24:dGVzdA==";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .iterm2_inline_image);
+    const img = cmd.iterm2_inline_image;
+    try testing.expectEqualStrings("test", img.data);
+    try testing.expectEqual(80, img.columns);
+    try testing.expectEqual(24, img.rows);
+    try testing.expectEqual(0, img.width_px);
+    try testing.expectEqual(0, img.height_px);
+}
+
+test "OSC: 1337: File= with pixel dimensions" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "dGVzdA==" is base64 for "test"
+    const input = "1337;File=inline=1;width=640px;height=480px:dGVzdA==";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .iterm2_inline_image);
+    const img = cmd.iterm2_inline_image;
+    try testing.expectEqual(0, img.columns);
+    try testing.expectEqual(0, img.rows);
+    try testing.expectEqual(640, img.width_px);
+    try testing.expectEqual(480, img.height_px);
+}
+
+test "OSC: 1337: File= with preserveAspectRatio=0" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "dGVzdA==" is base64 for "test"
+    const input = "1337;File=inline=1;preserveAspectRatio=0:dGVzdA==";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .iterm2_inline_image);
+    try testing.expectEqual(false, cmd.iterm2_inline_image.preserve_aspect_ratio);
+}
+
+test "OSC: 1337: File= auto dimensions" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "dGVzdA==" is base64 for "test"
+    const input = "1337;File=inline=1;width=auto;height=auto:dGVzdA==";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .iterm2_inline_image);
+    const img = cmd.iterm2_inline_image;
+    try testing.expectEqual(0, img.columns);
+    try testing.expectEqual(0, img.rows);
+    try testing.expectEqual(0, img.width_px);
+    try testing.expectEqual(0, img.height_px);
 }

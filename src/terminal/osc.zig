@@ -160,6 +160,48 @@ pub const Command = union(Key) {
     /// https://uapi-group.org/specifications/specs/osc_context/
     context_signal: parsers.context_signal.Command,
 
+    /// OSC 1337 File= inline image (iTerm2 Inline Image Protocol).
+    /// https://iterm2.com/documentation-escape-codes.html
+    ///
+    /// The `data` field holds the raw (already base64-decoded) image bytes.
+    /// The caller owns this memory and must free it with the allocator that
+    /// was used when the OSC parser was initialised.
+    ///
+    /// `columns` / `rows` are zero when the application left them unspecified
+    /// (meaning "auto-size"). `width_px` / `height_px` are pixel dimensions
+    /// when the application specified `width=<N>px` / `height=<N>px` — they
+    /// are zero otherwise and the cell-column / cell-row counts should be used
+    /// instead. A zero in both the cell and pixel dimension means "auto".
+    iterm2_inline_image: Iterm2InlineImage,
+
+    pub const Iterm2InlineImage = struct {
+        /// Raw decoded image bytes (PNG, JPEG, GIF, WebP, BMP …).
+        /// Owned by the caller; must be freed with the OSC parser allocator.
+        data: []const u8,
+
+        /// Requested display width in terminal columns (0 = auto).
+        columns: u32 = 0,
+        /// Requested display height in terminal rows (0 = auto).
+        rows: u32 = 0,
+        /// Requested display width in pixels (0 = use columns instead).
+        width_px: u32 = 0,
+        /// Requested display height in pixels (0 = use rows instead).
+        height_px: u32 = 0,
+        /// Whether to preserve the image aspect ratio when scaling.
+        preserve_aspect_ratio: bool = true,
+
+        pub fn deinit(self: *Iterm2InlineImage, alloc: ?Allocator) void {
+            const a = alloc orelse return;
+            if (self.data.len > 0) a.free(self.data);
+        }
+
+        /// This type is not C ABI compatible; use void to indicate that.
+        pub const C = void;
+        pub fn cval(_: Iterm2InlineImage) C {
+            return {};
+        }
+    };
+
     pub const SemanticPrompt = parsers.semantic_prompt.Command;
 
     pub const KittyClipboardProtocol = parsers.kitty_clipboard_protocol.OSC;
@@ -193,6 +235,7 @@ pub const Command = union(Key) {
             "kitty_text_sizing",
             "kitty_clipboard_protocol",
             "context_signal",
+            "iterm2_inline_image",
         },
     );
 
@@ -398,6 +441,7 @@ pub const Parser = struct {
             .kitty_color_protocol => |*v| kitty_color_protocol: {
                 v.deinit(self.alloc orelse break :kitty_color_protocol);
             },
+            .iterm2_inline_image => |*v| v.deinit(self.alloc),
             .change_window_icon,
             .change_window_title,
             .clipboard_contents,
@@ -714,7 +758,7 @@ pub const Parser = struct {
 
             .@"1337",
             => switch (c) {
-                ';' => self.captureTrailing(.fixed),
+                ';' => self.captureTrailing(.allocating),
                 else => self.state = .invalid,
             },
 
