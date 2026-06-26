@@ -1645,12 +1645,14 @@ const SplitTreeSplit = extern struct {
         );
     }
 
+    // Template callback uses `swapped`, so arg1 = template instance (Self),
+    // arg5 = signal source (GestureClick).
     fn onDividerClick(
-        gesture: *gtk.GestureClick,
+        self: *Self,
         n_press: c_int,
         x: f64,
         y: f64,
-        self: *Self,
+        gesture: *gtk.GestureClick,
     ) callconv(.c) void {
         _ = x;
         _ = y;

@@ -729,25 +729,28 @@ pub const SplitHeader = extern struct {
     // Template callbacks
 
     fn onZoomClicked(
-        _: *gtk.Button,
         self: *Self,
+        _: *gtk.Button,
     ) callconv(.c) void {
         _ = self.as(gtk.Widget).activateAction("split-tree.zoom", null);
     }
 
     fn onCloseClicked(
-        _: *gtk.Button,
         self: *Self,
+        _: *gtk.Button,
     ) callconv(.c) void {
         _ = self.as(gtk.Widget).activateAction("split-tree.close-split", null);
     }
 
+    // Template callbacks use `swapped`, so arg1 = template instance (Self),
+    // arg5 = signal source (GestureClick). Without this swap the type casts
+    // below would run on the wrong pointer and crash.
     fn onTitleClick(
-        gesture: *gtk.GestureClick,
+        self: *Self,
         n_press: c_int,
         x: f64,
         y: f64,
-        self: *Self,
+        gesture: *gtk.GestureClick,
     ) callconv(.c) void {
         const button = gesture.as(gtk.GestureSingle).getCurrentButton();
         if (button == 3) {
@@ -771,11 +774,11 @@ pub const SplitHeader = extern struct {
     }
 
     fn onMiddleClick(
-        gesture: *gtk.GestureClick,
+        self: *Self,
         _: c_int,
         _: f64,
         _: f64,
-        self: *Self,
+        gesture: *gtk.GestureClick,
     ) callconv(.c) void {
         if (gesture.as(gtk.GestureSingle).getCurrentButton() != 2) return;
         // Check config to see if middle-click-close is enabled

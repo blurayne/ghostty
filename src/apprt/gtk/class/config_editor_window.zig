@@ -264,8 +264,8 @@ pub const ConfigEditorWindow = extern struct {
         self: *Self,
     ) callconv(.c) void {
         const list_item = gobject.ext.cast(gtk.ListItem, list_item_obj) orelse return;
+        // getItem() is transfer-none; do not unref — the model owns the entry.
         const entry_obj = list_item.getItem() orelse return;
-        defer entry_obj.unref();
         const entry = gobject.ext.cast(ConfigEntryObject, entry_obj) orelse return;
 
         const row_box_widget = list_item.getChild() orelse return;

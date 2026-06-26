@@ -2042,6 +2042,15 @@ pub const Window = extern struct {
             menu.appendSection(null, sec.as(gio.MenuModel));
         }
 
+        {
+            const sec = gio.Menu.new();
+            defer sec.unref();
+            sec.append(i18n._("Open Config Editor"), "app.open-config-editor");
+            sec.append(i18n._("Open Configuration"), "app.open-config");
+            sec.append(i18n._("Reload Configuration"), "app.reload-config");
+            menu.appendSection(null, sec.as(gio.MenuModel));
+        }
+
         return menu;
     }
 
