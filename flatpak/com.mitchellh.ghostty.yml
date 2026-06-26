@@ -53,6 +53,7 @@ modules:
         -Dcpu=baseline
         -Dflatpak=true
         -Dstrip=false
+        -Demit-config-schema=false
         -fno-sys=oniguruma
         --prefix /app
         --search-prefix /app

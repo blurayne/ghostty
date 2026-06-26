@@ -60,6 +60,7 @@ emit_test_exe: bool = false,
 emit_themes: bool = false,
 emit_xcframework: bool = false,
 emit_webdata: bool = false,
+emit_config_schema: bool = true,
 emit_unicode_table_gen: bool = false,
 
 /// True when Ghostty is being built as a dependency of another project
@@ -440,6 +441,12 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8, forkP
         "emit-webdata",
         "Build the website data for the website.",
     ) orelse false;
+
+    config.emit_config_schema = b.option(
+        bool,
+        "emit-config-schema",
+        "Build and install config.schema.json and editor completion files.",
+    ) orelse true;
 
     config.emit_xcframework = b.option(
         bool,

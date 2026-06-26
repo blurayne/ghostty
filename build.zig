@@ -103,10 +103,10 @@ pub fn build(b: *std.Build) !void {
     const webdata = try buildpkg.GhosttyWebdata.init(b, &deps);
     if (config.emit_webdata) webdata.install();
 
-    // Config schema — always installed; also exposed as a named step
+    // Config schema — installed by default, skippable with -Demit-config-schema=false
     {
         const schema = try buildpkg.GhosttySchema.init(b, &deps);
-        schema.install();
+        if (config.emit_config_schema) schema.install();
         const schema_step = b.step(
             "emit-config-schema",
             "Emit config.schema.json (and editor completion files) to zig-out/share/ghostty/schema/",
