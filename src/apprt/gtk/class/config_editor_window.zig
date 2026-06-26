@@ -9,12 +9,14 @@ const std = @import("std");
 const adw = @import("adw");
 const gdk = @import("gdk");
 const gio = @import("gio");
+const glib = @import("glib");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
 const pango = @import("pango");
 
 const build_config = @import("../../../build_config.zig");
 const configpkg = @import("../../../config.zig");
+const config_edit = @import("../../../config/edit.zig");
 const metadata = configpkg.metadata;
 const gresource = @import("../build/gresource.zig");
 const Common = @import("../class.zig").Common;
@@ -211,7 +213,7 @@ pub const ConfigEditorWindow = extern struct {
     fn factorySetup(
         _: *gtk.SignalListItemFactory,
         list_item_obj: *gobject.Object,
-        _: *Self,
+        self_win: *Self,
     ) callconv(.c) void {
         const list_item = gobject.ext.cast(gtk.ListItem, list_item_obj) orelse return;
 
@@ -242,6 +244,19 @@ pub const ConfigEditorWindow = extern struct {
         doc_label.setMaxWidthChars(60);
         info_box.append(doc_label.as(gtk.Widget));
 
+        // Info button (opens docs URL for this field).
+        const info_btn = gtk.Button.newFromIconName("dialog-information-symbolic");
+        info_btn.as(gtk.Widget).setValign(.center);
+        info_btn.as(gtk.Widget).addCssClass("flat");
+        info_btn.as(gtk.Widget).addCssClass("circular");
+        _ = gtk.Button.signals.clicked.connect(
+            info_btn,
+            *Self,
+            onInfoBtnClicked,
+            self_win,
+            .{},
+        );
+
         // Edit box (right): placeholder for the value widget.
         // The edit widget will be prepended in factoryBind.
         const edit_box = gtk.Box.new(.horizontal, 4);
@@ -255,6 +270,7 @@ pub const ConfigEditorWindow = extern struct {
         edit_box.append(reset_btn.as(gtk.Widget));
 
         row_box.append(info_box.as(gtk.Widget));
+        row_box.append(info_btn.as(gtk.Widget));
         row_box.append(edit_box.as(gtk.Widget));
 
         list_item.setChild(row_box.as(gtk.Widget));
@@ -298,6 +314,20 @@ pub const ConfigEditorWindow = extern struct {
                 } else {
                     lbl.setLabel(&.{});
                     lbl.as(gtk.Widget).setVisible(0);
+                }
+            }
+        }
+
+        // Navigate to info_btn (sits between info_box and edit_box in row_box).
+        if (info_box_widget.getNextSibling()) |sibling| {
+            if (gobject.ext.cast(gtk.Button, sibling)) |info_btn| {
+                // Store field name so click handler can open the right URL.
+                info_btn.as(gtk.Widget).setName(field.name.ptr);
+                // Full docs as tooltip.
+                if (entry.getDocsFull()) |docs| {
+                    info_btn.as(gtk.Widget).setTooltipText(docs.ptr);
+                } else {
+                    info_btn.as(gtk.Widget).setTooltipText("No documentation available.");
                 }
             }
         }
@@ -679,6 +709,117 @@ pub const ConfigEditorWindow = extern struct {
     }
 
     //---------------------------------------------------------------
+    // Info button — opens the docs URL for the field
+
+    fn onInfoBtnClicked(
+        btn: *gtk.Button,
+        self: *Self,
+    ) callconv(.c) void {
+        _ = self;
+        const name_ptr = btn.as(gtk.Widget).getName();
+        const name = std.mem.span(name_ptr);
+        const app = Application.default();
+        const alloc = app.allocator();
+        const url = std.fmt.allocPrint(alloc, "https://ghostty.org/docs/config/{s}", .{name}) catch return;
+        defer alloc.free(url);
+        app.openUrlFallback(.text, url);
+    }
+
+    //---------------------------------------------------------------
+    // Save / Restart
+
+    fn saveConfigToDisk(self: *Self) !void {
+        const priv = self.private();
+        const app = Application.default();
+        const alloc = app.allocator();
+
+        const path = try config_edit.openPath(alloc);
+        defer alloc.free(path);
+
+        const file = try std.fs.openFileAbsoluteZ(path, .{ .mode = .write_only });
+        defer file.close();
+        try file.seekFromEnd(0);
+
+        var wbuf: [4096]u8 = undefined;
+        var file_writer = file.writer(&wbuf);
+        const writer = &file_writer.interface;
+
+        const model = priv.entry_store.as(gio.ListModel);
+        const n = model.getNItems();
+        var dirty_count: usize = 0;
+        for (0..@as(usize, @intCast(n))) |i| {
+            const raw = model.getItem(@intCast(i)) orelse continue;
+            const obj: *gobject.Object = @ptrCast(@alignCast(raw));
+            defer obj.unref();
+            const entry = gobject.ext.cast(ConfigEntryObject, obj) orelse continue;
+            if (!entry.getDirty()) continue;
+            dirty_count += 1;
+        }
+
+        if (dirty_count == 0) return;
+
+        try writer.writeAll("\n# --- config editor ---\n");
+
+        for (0..@as(usize, @intCast(n))) |i| {
+            const raw = model.getItem(@intCast(i)) orelse continue;
+            const obj: *gobject.Object = @ptrCast(@alignCast(raw));
+            defer obj.unref();
+            const entry = gobject.ext.cast(ConfigEntryObject, obj) orelse continue;
+            if (!entry.getDirty()) continue;
+            const field = entry.getFieldMeta();
+            const val = entry.getCurrentValue() orelse "";
+            try writer.print("{s} = {s}\n", .{ field.name, val });
+            entry.setDirty(false);
+        }
+    }
+
+    fn onSaveClicked(
+        _: *gtk.Button,
+        self: *Self,
+    ) callconv(.c) void {
+        self.saveConfigToDisk() catch |err| {
+            log.err("failed to save config: {}", .{err});
+            const dialog = adw.AlertDialog.new(
+                "Could not save config",
+                if (err == error.ReadOnlyFileSystem)
+                    "The config file is on a read-only filesystem.\n\nIf you're running the Flatpak, the config may be a symlink to a read-only location. Remove the symlink and copy the file to ~/.var/app/com.mitchellh.ghostty/config/ghostty/config.ghostty, or run: flatpak override --user --filesystem=~/.config/ghostty:rw com.mitchellh.ghostty"
+                else
+                    "An error occurred writing the config file. Check the Ghostty log for details.",
+            );
+            dialog.addResponse("ok", "_OK");
+            dialog.as(adw.Dialog).present(self.as(gtk.Widget));
+            return;
+        };
+        log.info("config saved successfully", .{});
+    }
+
+    fn getStatePath() ![]u8 {
+        const state_home = glib.getenv("XDG_STATE_HOME") orelse {
+            const home = glib.getenv("HOME") orelse return error.NoHome;
+            return try std.fmt.allocPrint(std.heap.c_allocator, "{s}/.local/state/ghostty/.reopen-config-editor", .{std.mem.span(home)});
+        };
+        return try std.fmt.allocPrint(std.heap.c_allocator, "{s}/ghostty/.reopen-config-editor", .{std.mem.span(state_home)});
+    }
+
+    fn writeSentinelFile() void {
+        const path = getStatePath() catch return;
+        defer std.heap.c_allocator.free(path);
+        const f = std.fs.createFileAbsolute(path, .{}) catch return;
+        f.close();
+    }
+
+    fn onRestartClicked(
+        _: *gtk.Button,
+        self: *Self,
+    ) callconv(.c) void {
+        self.saveConfigToDisk() catch |err| {
+            log.warn("save before restart failed: {}", .{err});
+        };
+        writeSentinelFile();
+        Application.default().as(gio.Application).quit();
+    }
+
+    //---------------------------------------------------------------
     // Boilerplate
 
     const C = Common(Self, Private);
@@ -715,6 +856,8 @@ pub const ConfigEditorWindow = extern struct {
             class.bindTemplateCallback("on_search_changed", &onSearchChanged);
             class.bindTemplateCallback("on_instant_reload_toggled", &onInstantReloadToggled);
             class.bindTemplateCallback("on_persist_toggled", &onPersistToggled);
+            class.bindTemplateCallback("on_save_clicked", &onSaveClicked);
+            class.bindTemplateCallback("on_restart_clicked", &onRestartClicked);
             class.bindTemplateCallback("factory_setup", &factorySetup);
             class.bindTemplateCallback("factory_bind", &factoryBind);
             class.bindTemplateCallback("factory_unbind", &factoryUnbind);

@@ -1491,6 +1491,11 @@ pub const Application = extern struct {
     fn activate(self: *Self) callconv(.c) void {
         log.debug("activate", .{});
 
+        // Reopen config editor if sentinel file was left by a previous restart.
+        if (self.checkAndClearSentinel()) {
+            self.actionOpenConfigEditorDirect();
+        }
+
         // Queue a new window
         const priv = self.private();
         _ = priv.core_app.mailbox.push(.{
@@ -1862,6 +1867,10 @@ pub const Application = extern struct {
         _: ?*glib.Variant,
         self: *Self,
     ) callconv(.c) void {
+        self.actionOpenConfigEditorDirect();
+    }
+
+    fn actionOpenConfigEditorDirect(self: *Self) void {
         const priv = self.private();
         if (priv.config_editor) |editor| {
             // Already open — just bring it to the front.
@@ -1882,6 +1891,22 @@ pub const Application = extern struct {
         );
 
         editor.present();
+    }
+
+    fn getSentinelPath(alloc: std.mem.Allocator) ![]u8 {
+        const state_home = glib.getenv("XDG_STATE_HOME") orelse {
+            const home = glib.getenv("HOME") orelse return error.NoHome;
+            return try std.fmt.allocPrint(alloc, "{s}/.local/state/ghostty/.reopen-config-editor", .{std.mem.span(home)});
+        };
+        return try std.fmt.allocPrint(alloc, "{s}/ghostty/.reopen-config-editor", .{std.mem.span(state_home)});
+    }
+
+    fn checkAndClearSentinel(self: *Self) bool {
+        const alloc = self.allocator();
+        const path = getSentinelPath(alloc) catch return false;
+        defer alloc.free(path);
+        std.fs.deleteFileAbsolute(path) catch return false;
+        return true;
     }
 
     fn configEditorWeakNotify(

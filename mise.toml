@@ -38,6 +38,18 @@ rm -rf dist/build flatpak/builddir flatpak/repo .flatpak-builder
 docker compose down -v
 """
 
+[tasks.install-terminfo]
+description = "Copy the ghostty terminfo entry to a remote host via SSH (usage: HOST=user@host mise run install-terminfo)"
+run = """
+set -e
+if [ -z "$HOST" ]; then
+  echo "Usage: HOST=user@host mise run install-terminfo"
+  exit 1
+fi
+infocmp ghostty | ssh "$HOST" 'tic -x -'
+echo "ghostty terminfo installed on $HOST"
+"""
+
 [tasks.remotes-setup]
 description = "Configure git remotes: upstream=ghostty-org/ghostty, origin=blurayne/ghostty"
 run = """

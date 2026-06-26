@@ -29,7 +29,7 @@ template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
         spacing: 18;
 
         Gtk.CheckButton instant_reload_check {
-          label: _("Instantly reload");
+          label: _("Apply immediately");
           active: true;
           toggled => $on_instant_reload_toggled();
         }
@@ -37,6 +37,22 @@ template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
         Gtk.CheckButton persist_check {
           label: _("Persist changes");
           toggled => $on_persist_toggled();
+        }
+
+        Gtk.Box {
+          hexpand: true;
+        }
+
+        Gtk.Button save_btn {
+          label: _("Save");
+          clicked => $on_save_clicked();
+
+          styles ["suggested-action"]
+        }
+
+        Gtk.Button restart_btn {
+          label: _("Restart");
+          clicked => $on_restart_clicked();
         }
       }
 

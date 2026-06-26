@@ -115,21 +115,15 @@ following to reach parity:
 - **Tear-off to new window** — when AppKit reports `NSDragOperationNone`
   outside any window, invoke the existing new-window factory and reparent
   the surface.
-- **Terminal mirroring (P11)** — the PTY refactor in `src/Surface.zig` /
-  `src/termio/` is shared core. Once that lands, the AppKit `TerminalView`
-  needs to subscribe to the shared `PtyHandle` the same way the GTK
-  `Surface` does. Menu entries land in `MainMenu.xib` and the tab/pane
-  context menus.
-
 ### Tests
 
 - `macos/Tests/Splits/SplitTreeTests.swift` already exercises the datastructure;
-  extend it for any new operations introduced (zoom-swap, mirroring).
+  extend it for any new operations introduced (zoom-swap).
 - New tests for AppKit DnD logic (probably manual-only — UI test harness on
   macOS is heavyweight).
 
 ### Priority
 
 Plumbing first (low cost, high reach). Header bar + DnD are next once we
-have user demand. Tear-off after DnD. Mirroring last because it depends on
+have user demand. Tear-off after DnD.
 the cross-platform PTY refactor.

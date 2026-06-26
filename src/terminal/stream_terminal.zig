@@ -284,32 +284,11 @@ pub const Handler = struct {
             .dcs_unhook,
             => {},
 
-            .iterm2_inline_image => |img| if (comptime build_options.kitty_graphics) {
-                const KittyCmd = @import("kitty/graphics_command.zig").Command;
-                const alloc = self.terminal.gpa();
-                if (img.data.len > 0 and self.terminal.screens.active.kitty_images.enabled()) {
-                    if (alloc.dupe(u8, img.data)) |data_copy| {
-                        var cmd: KittyCmd = .{
-                            .control = .{ .transmit_and_display = .{
-                                .transmission = .{
-                                    .format = .png,
-                                    .medium = .direct,
-                                    .image_id = 0,
-                                    .image_number = 0,
-                                },
-                                .display = .{
-                                    .columns = img.columns,
-                                    .rows = img.rows,
-                                    .cursor_movement = .after,
-                                },
-                            } },
-                            .data = data_copy,
-                        };
-                        defer cmd.deinit(alloc);
-                        _ = self.terminal.kittyGraphics(alloc, &cmd);
-                    } else |_| {}
-                }
-            },
+            // No-op here: this handler is test-only. Real rendering goes through
+            // stream_handler.zig, which converts OSC 1337 data into a synthetic
+            // Kitty transmit_and_display command and feeds it through the Kitty
+            // graphics pipeline.
+            .iterm2_inline_image => {},
 
             // Have no terminal-modifying effect
             .show_desktop_notification,

@@ -21,6 +21,16 @@
 > flatpak install --user --bundle com.mitchellh.ghostty-aarch64.flatpak
 > ```
 > The tip release is rebuilt automatically for x86_64 and ARM64 on every push to `main`.
+>
+> **Terminal type (`TERM`)**
+>
+> Ghostty ships its own `ghostty` terminfo entry and installs it automatically.
+> Set `term = ghostty` in `~/.config/ghostty/config` to enable it.
+> For SSH hosts that don't have the entry, copy it over with:
+> ```
+> mise run install-terminfo HOST=user@host
+> ```
+> Fall back to `term = xterm-256color` for hosts where you can't install terminfo.
 
 <!-- LOGO -->
 <h1>

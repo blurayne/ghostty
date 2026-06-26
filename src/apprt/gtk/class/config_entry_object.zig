@@ -119,6 +119,9 @@ pub const ConfigEntryObject = extern struct {
         /// Cached sentinel-terminated doc summary (allocated from arena).
         doc_summary_z: ?[:0]const u8 = null,
 
+        /// Cached sentinel-terminated full docs (allocated from arena).
+        doc_full_z: ?[:0]const u8 = null,
+
         /// The current serialized value (sentinel-terminated, allocated from arena).
         current_value_z: ?[:0]const u8 = null,
 
@@ -230,6 +233,17 @@ pub const ConfigEntryObject = extern struct {
 
     pub fn getFieldIndex(self: *Self) usize {
         return self.private().field_index;
+    }
+
+    pub fn getDocsFull(self: *Self) ?[:0]const u8 {
+        const priv = self.private();
+        if (priv.doc_full_z) |v| return v;
+
+        const field = metadata.fields[priv.field_index];
+        if (field.docs.len == 0) return null;
+
+        priv.doc_full_z = priv.arena.allocator().dupeZ(u8, field.docs) catch return null;
+        return priv.doc_full_z;
     }
 
     pub fn getCurrentValue(self: *Self) ?[:0]const u8 {

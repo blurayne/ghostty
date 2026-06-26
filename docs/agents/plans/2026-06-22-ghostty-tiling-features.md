@@ -3,7 +3,7 @@ date: 2026-06-22T14:19:08+00:00
 git_commit: 4749c4e93731067049bfbf2e4572061cef2bdd17
 branch: main
 topic: "Ghostty Tiling Features (Linux GTK)"
-tags: [plan, gtk, splits, tiling, dnd, header-bar, terminal-mirroring]
+tags: [plan, gtk, splits, tiling, dnd, header-bar]
 status: draft
 ---
 
@@ -11,7 +11,7 @@ status: draft
 
 ## Overview
 
-Implement the tiling, split header bar, drag-and-drop, indexed split navigation, zoom-swap, tear-off, and pane-mirroring behavior described in `GHOSTTY_TILING_SPEC.md` (sections §1–§17). Targets the Linux GTK app runtime (`src/apprt/gtk/`). Broadcast input (P8), layout save/restore (P9), and macOS feature parity are deferred to `IDEAS.md`.
+Implement the tiling, split header bar, drag-and-drop, indexed split navigation, zoom-swap, and tear-off behavior described in `GHOSTTY_TILING_SPEC.md` (sections §1–§17). Targets the Linux GTK app runtime (`src/apprt/gtk/`). Broadcast input (P8), layout save/restore (P9), and macOS feature parity are deferred to `IDEAS.md`.
 
 ## Current State Analysis
 
@@ -38,13 +38,12 @@ After this plan ships:
 - Splits can be drag-and-dropped by the header bar onto other splits (with quadrant detection), into other tabs, into other windows of the same Ghostty instance, or torn off to create a new window.
 - `move_split_to_new_window` exists and is reachable from the header context menu and (in P7+P12) the tab context menu (whole-tab tear-off is in P12).
 - When a tab is zoomed, `goto_split:*` / `goto_split_index` transfers the zoom rather than un-zoom/re-zoom.
-- Two surfaces can be attached to a single PTY (terminal mirroring) via "Copy as Source" / "Attach Sourced Pane" header menu entries.
 
 ## What We're NOT Doing
 
 - Broadcast input (`P8`) — deferred to `IDEAS.md`.
 - Save / restore tab layout JSON (`P9`) — deferred to `IDEAS.md`.
-- macOS parity for the new actions, header bar, DnD, tear-off, mirroring — deferred to `IDEAS.md`.
+- macOS parity for the new actions, header bar, DnD, tear-off — deferred to `IDEAS.md`.
 - New keybinds that would collide with existing Ghostty defaults (the spec §14 ledger is honored exactly).
 - Action plumbing for `toggle_broadcast_input` / `toggle_broadcast_opt_out` / `save_tab_layout` / `load_tab_layout` — registered only when the deferred phases land.
 - Touching the `goto_window:next|prev` action.
@@ -90,7 +89,7 @@ Hovering over target split, accent border shows direction:
       bottom quadrant → "insert below"
 ```
 
-### Split header context menu (P4 + P11)
+### Split header context menu (P4)
 
 ```
 ┌─────────────────────────────┐
@@ -100,9 +99,6 @@ Hovering over target split, accent border shows direction:
 │ Move to New Window          │  ← P4 (was P7 wiring)
 │ Toggle Read-Only            │
 │ Equalize Splits             │
-├─────────────────────────────┤
-│ Copy as Source              │  ← P11
-│ Attach Sourced Pane         │  ← P11 (greyed if no source captured)
 ├─────────────────────────────┤
 │ Close                       │
 └─────────────────────────────┘
@@ -119,14 +115,14 @@ existing items + new "Detach into New Window"
 The plan reuses three existing systems:
 
 1. **Immutable split tree** (`src/datastruct/split_tree.zig`) — every mutation already produces a new tree which the `SplitTree` widget swaps in via `setTree()`. DnD detach + drop becomes "remove leaf from source tree, split target tree, insert leaf" — both are existing operations (`remove`, `split`).
-2. **GAction map on `SplitTree`** (`split_tree.zig:186-200`) — new GActions (`equalize`, `toggle_header`, `move-to-new-window`, `copy-as-source`, `attach-sourced`) follow the existing `ext.actions.Action` pattern.
+2. **GAction map on `SplitTree`** (`split_tree.zig:186-200`) — new GActions (`equalize`, `toggle_header`, `move-to-new-window`) follow the existing `ext.actions.Action` pattern.
 3. **`apprt.performAction` switch** (`application.zig:674-794`) — new variants in `Binding.Action` are dispatched here with the same wrapping pattern as `equalizeSplits` / `gotoSplit`.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ src/input/Binding.zig            Action union: + 3 variants  │
 │ src/apprt/action.zig             apprt.Action: + 3 variants  │
-│ src/datastruct/split_tree.zig    +zoom-swap, +mirror refs    │
+│ src/datastruct/split_tree.zig    +zoom-swap                  │
 │ src/apprt/gtk/class/                                          │
 │   application.zig                +dispatch arms              │
 │   split_tree.zig                 +DnD, +header glue          │
@@ -158,7 +154,6 @@ Affected files at a glance:
   - Add `newWindowWithSurface()` factory (P7)
 - `src/datastruct/split_tree.zig`
   - Add `splitInto(at, direction, leaf_tree)` semantic helper if not already covered by `split()` (already covered — confirmed at `505-569`)
-  - Add a counter-based view-ref helper for terminal mirroring (P11)
 - `src/apprt/gtk/class/split_tree.zig`
   - New GActions, DnD source/target wiring, header insertion, "detach into new window" wiring
 - New: `src/apprt/gtk/class/split_header.zig` (P4)
@@ -173,7 +168,6 @@ Affected files at a glance:
 - Drag icon screenshot: capture once at drag-begin via `gtk_widget_paintable_new` (no render-per-frame). Scale to ~25% via the `Gdk.Paintable` API.
 - Header bar widget: one extra GObject per leaf. `auto` mode (default) shows the header only when the tab has 3+ splits, so single-split common case has zero header overhead.
 - Tree clone on each split / remove / drop: already the existing cost model (immutable tree), no change.
-- Terminal mirroring (P11): PTY output now fan-outs to N surfaces' renderers. Worst case = duplicate per-frame glyph render. Acceptable for the 1–2 mirror count expected; gated by user explicitly attaching a sourced pane.
 
 ## Migration Notes
 
@@ -566,39 +560,6 @@ When a DnD ends with no valid drop target (drop on desktop / foreign app), creat
 
 ---
 
-## Phase P11: Terminal Mirroring (Sourced Pane)
-
-Per §16, allow attaching a second view onto an existing PTY: "Copy as Source" stores the source surface UUID in a per-window slot; "Attach Sourced Pane" replaces (or appends as a new split) a fresh view bound to that same PTY. PTY output fan-outs to all attached views; PTY input from any view goes to the single PTY.
-
-This is the largest refactor in the plan. PTY ownership becomes 1:N view.
-
-**Tasks**:
-- [ ] In `src/Surface.zig` / `src/termio/`, identify the current 1:1 binding between `Surface` and PTY/termio. Introduce a refcounted `PtyHandle` type that owns the PTY + termio thread + screen state. The `Surface` becomes a thin renderer that holds a `*PtyHandle` (refcounted) and a per-surface viewport/scroll state.
-- [ ] In `PtyHandle`, the read loop now broadcasts new output to a registered set of subscribers (`std.ArrayList(*Surface)`). Each `Surface` keeps its own renderer state but the underlying terminal `Screen` is shared. (Caveat: scrollback is a single shared buffer; selection state is per-surface.)
-- [ ] In `src/apprt/gtk/class/split_header.zig` context menu, wire two new menu items:
-  - "Copy as Source" — store `self.surface.uuid` into a per-window `mirror_source: ?[16]u8` slot.
-  - "Attach Sourced Pane" — if `mirror_source` is set, resolve the source Surface via `findSurfaceByUuid`, create a new `Surface` with `PtyHandle = source.pty_handle.ref()`, then call `split_tree.newSplit(.right, source_surface, .{ .pty = handle })` (`newSplit` extended to accept an optional pre-attached `PtyHandle`, skipping the fresh-shell spawn).
-- [ ] Extend `split_tree.zig` `newSplit` to accept an optional `pty_handle: ?*PtyHandle` in `overrides`. When set, the new `Surface` reuses that handle instead of spawning a shell.
-- [ ] Update close behavior: closing a mirror view drops the refcount on `PtyHandle`. The PTY itself terminates only when the refcount reaches 0.
-- [ ] Surface refresh: when one mirror's user types, all mirror views' renderers are damaged and re-rendered.
-
-**Automated Verification**:
-- [ ] `zig build` passes.
-- [ ] `zig build test -Dtest-filter="PtyHandle"` passes — covers refcount lifecycle, multi-subscriber output broadcast, single-PTY input.
-- [ ] New test `PtyHandle: closing one subscriber keeps PTY alive` — two subscribers, drop one, assert PTY still readable.
-- [ ] New test `PtyHandle: closing last subscriber terminates PTY` — single subscriber, drop, assert PTY fd closed.
-- [ ] New test `PtyHandle: resize negotiation across subscribers` — two subscribers with different surface dimensions; assert the PTY winsize is set to the agreed strategy (smallest of all subscribers — chosen so no subscriber's renderer is asked for cells the PTY won't drive) and that re-resizing one subscriber updates the PTY accordingly.
-- [ ] Documentation task: the new section on terminal mirroring is added to `src/config/Config.zig`'s relevant doc comments and the user-facing docs (look for the existing per-field doc-comment pattern at `Config.zig:1063-1103` for splits). Verify a doc-comment exists describing the resize semantics decided above. Verified by `grep -q "Sourced Pane" src/config/Config.zig` and a manual eyeball of the rendered help via `ghostty +show-config`.
-- [ ] Existing surface/termio tests continue to pass.
-
-**Manual Verification**:
-- [ ] Open a split, run `top` or `htop`. Right-click header → "Copy as Source". Right-click another split's header → "Attach Sourced Pane" — both panes now show the running `top`. Type in either pane → input echoes in both.
-- [ ] Close the source pane → the mirror pane continues to render and accept input (PTY alive).
-- [ ] Close the mirror pane → the source pane is unaffected.
-- [ ] Resize either mirror pane — both views update; the underlying PTY size is the smallest dimension (or first attached pane's — implementation choice, must be documented in the user-facing config docs).
-
----
-
 ## Phase P12: §16 Right-Click Menu Items
 
 Add the §16 menu entries that don't already exist:
@@ -606,7 +567,7 @@ Add the §16 menu entries that don't already exist:
 - Tab context menu: **"Detach into New Window"** — moves the entire tab (with its full split tree) into a new window.
 - Split header context menu: explicit **"Split Right"** / **"Split Down"** entries (current keybind-only).
 
-(Header "Move to New Window" already lands in P4; "Copy as Source" / "Attach Sourced Pane" land in P11.)
+(Header "Move to New Window" already lands in P4.)
 
 **Tasks**:
 - [ ] In `src/apprt/gtk/class/window.zig`, add a tab context menu action `detach-tab` that:
