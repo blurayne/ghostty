@@ -39,3 +39,6 @@ test_pid
 # Per-user Claude state (project-shared settings.json IS tracked)
 .claude/settings.local.json
 .claude/worktrees/
+
+# Ephemeral build metadata written by mise _flatpak-build
+.git-sha

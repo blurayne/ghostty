@@ -184,8 +184,12 @@ set -e
 # file, treats the dir as a git repo, and tries to fetch from it — which fails.
 # Fix: rename .git for the duration of the build so flatpak-builder treats it as
 # a plain directory. trap restores it even on failure.
+# Write the commit SHA to a file before hiding .git so the flatpak
+# sandbox can read it and pass it to zig build as -Dversion-string.
+printf '%s' "$(git rev-parse --short HEAD 2>/dev/null || echo '0000000')" > .git-sha
+
 mv .git .git.worktree-bak
-trap 'mv .git.worktree-bak .git 2>/dev/null || true' EXIT INT TERM
+trap 'mv .git.worktree-bak .git 2>/dev/null || true; rm -f .git-sha' EXIT INT TERM
 
 # Start system D-Bus if not already running.
 # machine-id and messagebus user are set up in the Dockerfile.

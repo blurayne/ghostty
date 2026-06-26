@@ -36,7 +36,19 @@ modules:
     build-options:
       append-path: /app/zig
     build-commands:
+      # Derive -Dversion-string from .git-sha written by the mise build task.
+      # Falls back silently (no flag) when the file is absent, giving "0000000".
+      - |
+        if [ -f .git-sha ]; then
+          ZON_VER=$(grep '\.version' build.zig.zon | grep -o '"[0-9][^"]*"' | tr -d '"')
+          BASE=${ZON_VER%%-*}
+          PRE=$(echo "$ZON_VER" | sed 's/^[^-]*-//' | sed 's/+.*//')
+          printf -- '-Dversion-string=%s-%s+%s' "$BASE" "$PRE" "$(cat .git-sha)" > /tmp/ghostty-vsn
+        else
+          printf '' > /tmp/ghostty-vsn
+        fi
       - zig build
+        $(cat /tmp/ghostty-vsn)
         -Doptimize=ReleaseFast
         -Dcpu=baseline
         -Dflatpak=true
