@@ -34,6 +34,74 @@ rm -rf dist/build flatpak/builddir flatpak/repo .flatpak-builder
 docker compose down -v
 """
 
+[tasks.fork-status]
+description = "Show last common commit with upstream + version tags for upstream and fork"
+run = """
+set -e
+
+# Fetch latest refs (non-fatal — works offline with cached refs)
+echo "Fetching remotes..."
+git fetch origin --tags -q 2>/dev/null && echo "  origin  OK" || echo "  origin  [skipped — using cached refs]"
+git fetch blurayne --tags -q 2>/dev/null && echo "  blurayne OK" || echo "  blurayne [skipped — using cached refs]"
+
+# ── Last common commit ───────────────────────────────────────────────────────
+MERGE_BASE=$(git merge-base HEAD origin/main)
+MB_SHORT=$(git log -1 --format="%h" "$MERGE_BASE")
+MB_DATE=$(git log -1 --format="%ci" "$MERGE_BASE")
+MB_MSG=$(git log -1 --format="%s" "$MERGE_BASE")
+
+echo ""
+echo "┌─ Last common commit ─────────────────────────────────────────────────"
+printf "│  hash    %s\\n" "$MB_SHORT ($MERGE_BASE)"
+printf "│  date    %s\\n" "$MB_DATE"
+printf "│  subject %s\\n" "$MB_MSG"
+echo "│"
+
+# ── Upstream version at fork point ──────────────────────────────────────────
+UPSTREAM_TAG=$(git describe --tags --abbrev=0 "$MERGE_BASE" 2>/dev/null || true)
+
+echo "├─ Upstream (ghostty-org/ghostty) ────────────────────────────────────"
+if [ -n "$UPSTREAM_TAG" ]; then
+  TAG_COMMIT=$(git rev-list -n 1 "$UPSTREAM_TAG")
+  TAG_DATE=$(git log -1 --format="%ci" "$UPSTREAM_TAG")
+  printf "│  tag     %s\\n" "$UPSTREAM_TAG"
+  printf "│  tagged  %s  (%s)\\n" "$TAG_DATE" "$(git log -1 --format='%h' "$UPSTREAM_TAG")"
+  if [ "$TAG_COMMIT" = "$MERGE_BASE" ]; then
+    echo "│  fork branches from exactly this tag"
+  else
+    DELTA=$(git rev-list --count "${UPSTREAM_TAG}".."${MERGE_BASE}")
+    echo "│  fork point is $DELTA commit(s) ahead of this tag on upstream main"
+  fi
+  # How far upstream has moved since fork point
+  UPSTREAM_AHEAD=$(git rev-list --count "${MERGE_BASE}"..origin/main)
+  UPSTREAM_HEAD_DATE=$(git log -1 --format="%ci" origin/main)
+  UPSTREAM_LATEST_TAG=$(git describe --tags --abbrev=0 origin/main 2>/dev/null || echo "(none)")
+  printf "│  upstream has %s new commit(s) since fork point\\n" "$UPSTREAM_AHEAD"
+  printf "│  upstream latest tag  %s  (HEAD %s)\\n" "$UPSTREAM_LATEST_TAG" "$UPSTREAM_HEAD_DATE"
+else
+  echo "│  (no tag found reachable from fork point)"
+fi
+echo "│"
+
+# ── Fork status ─────────────────────────────────────────────────────────────
+OUR_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
+OUR_AHEAD=$(git rev-list --count "${MERGE_BASE}"..HEAD)
+OUR_HEAD_SHORT=$(git log -1 --format="%h" HEAD)
+OUR_HEAD_DATE=$(git log -1 --format="%ci" HEAD)
+OUR_HEAD_MSG=$(git log -1 --format="%s" HEAD)
+
+echo "└─ Fork (blurayne/ghostty) ────────────────────────────────────────────"
+if [ -n "$OUR_TAG" ]; then
+  OUR_TAG_DATE=$(git log -1 --format="%ci" "$OUR_TAG")
+  printf "   latest tag  %s  (%s)\\n" "$OUR_TAG" "$OUR_TAG_DATE"
+else
+  echo "   latest tag  (none)"
+fi
+printf "   %s commit(s) ahead of fork point\\n" "$OUR_AHEAD"
+printf "   HEAD  %s  %s\\n" "$OUR_HEAD_SHORT" "$OUR_HEAD_DATE"
+printf "         %s\\n" "$OUR_HEAD_MSG"
+"""
+
 [tasks._flatpak-build]
 description = "Build flatpak bundle — run inside container only"
 run = """
