@@ -403,6 +403,11 @@ pub const Window = extern struct {
             win,
         );
 
+        // Mark the tree as torn-off so the split header is forced visible in
+        // auto mode even when there is only one pane (below the threshold).
+        split_tree.markTornOff();
+        split_tree.updateHeaderVisibility();
+
         win.as(gtk.Window).present();
     }
 

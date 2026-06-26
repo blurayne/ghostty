@@ -178,6 +178,11 @@ pub const SplitTree = extern struct {
         /// via the split context menu (independent of split-header config).
         header_override_active: bool = false,
 
+        /// Set when this tree was created by tearing off a single pane into a
+        /// new window. In auto mode, forces the split header visible so the
+        /// pane still has navigation chrome even though count < threshold.
+        torn_off: bool = false,
+
         pub var offset: c_int = 0;
     };
 
@@ -964,6 +969,12 @@ pub const SplitTree = extern struct {
         return false;
     }
 
+    /// Mark this tree as hosting a lone torn-off pane. In auto mode the split
+    /// header stays visible even when count is below the threshold.
+    pub fn markTornOff(self: *Self) void {
+        self.private().torn_off = true;
+    }
+
     /// Walk all leaves in the tree and update their SplitHeader visibility
     /// based on the current config split-header mode and split count.
     pub fn updateHeaderVisibility(self: *Self) void {
@@ -975,9 +986,15 @@ pub const SplitTree = extern struct {
         const mode = config.@"split-header";
         const priv = self.private();
 
-        // Determine the effective mode: when chrome is completely hidden and the
-        // user has chosen "auto", force "always" so the split headers remain
-        // the only navigation chrome.
+        // Count leaves first — needed by the effective_mode calculation below.
+        var count: u32 = 0;
+        var it = tree.iterator();
+        while (it.next()) |_| count += 1;
+
+        // Determine the effective mode. Two overrides apply in auto mode:
+        // 1. Chromeless window (no header bar, no tab bar) → always show.
+        // 2. Single pane torn off into its own window → always show so the
+        //    pane still has navigation chrome even when count < threshold.
         const effective_mode: configpkg.Config.SplitHeaderMode = effective: {
             if (mode == .auto) {
                 const window = ext.getAncestor(
@@ -985,14 +1002,10 @@ pub const SplitTree = extern struct {
                     self.as(gtk.Widget),
                 ) orelse break :effective mode;
                 if (window.isChromelessMode()) break :effective .always;
+                if (priv.torn_off and count == 1) break :effective .always;
             }
             break :effective mode;
         };
-
-        // Count leaves in the tree
-        var count: u32 = 0;
-        var it = tree.iterator();
-        while (it.next()) |_| count += 1;
 
         // Update each leaf's header
         var pane_number: u32 = 1;
