@@ -712,6 +712,11 @@ pub const Surface = extern struct {
         key_sequence: std.ArrayListUnmanaged([:0]const u8) = .empty,
         key_tables: std.ArrayListUnmanaged([:0]const u8) = .empty,
 
+        /// The original menu model set on the context_menu popover by the
+        /// Blueprint template. Saved after initTemplate so Window can restore
+        /// it after swapping in the no-decoration flat menu.
+        context_menu_original_model: ?*gio.MenuModel = null,
+
         // Template binds
         child_exited_overlay: *ChildExited,
         context_menu: *gtk.PopoverMenu,
@@ -1818,6 +1823,11 @@ pub const Surface = extern struct {
 
         const priv = self.private();
 
+        // Save the original context menu model set by the Blueprint template so
+        // that Window.surfaceMenu can restore it after swapping in the
+        // no-decoration flat menu.
+        priv.context_menu_original_model = priv.context_menu.getMenuModel();
+
         // Initialize some private fields so they aren't undefined
         priv.rt_surface = .{ .surface = self };
         priv.precision_scroll = false;
@@ -2060,6 +2070,19 @@ pub const Surface = extern struct {
 
     //---------------------------------------------------------------
     // Properties
+
+    /// Returns the context menu popover for this surface.
+    /// Used by the Window to swap the menu model based on decoration state.
+    pub fn getContextMenu(self: *Self) *gtk.PopoverMenu {
+        return self.private().context_menu;
+    }
+
+    /// Returns the original menu model set by the Blueprint template on the
+    /// context_menu popover. Used by Window to restore the default menu after
+    /// swapping in the no-decoration flat menu.
+    pub fn getContextMenuOriginalModel(self: *Self) ?*gio.MenuModel {
+        return self.private().context_menu_original_model;
+    }
 
     /// Returns the title property without a copy.
     pub fn getTitle(self: *Self) ?[:0]const u8 {
@@ -3059,6 +3082,9 @@ pub const Surface = extern struct {
         self: *Self,
     ) callconv(.c) void {
         const event = gesture.as(gtk.EventController).getCurrentEvent() orelse return;
+
+        // Dismiss any open context menu before processing this click.
+        self.private().context_menu.as(gtk.Popover).popdown();
 
         // Bell stops ringing if any mouse button is pressed.
         self.setBellRinging(false);

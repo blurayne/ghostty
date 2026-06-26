@@ -42,6 +42,7 @@ Overlay terminal_page {
       flags: nested;
       halign: start;
       has-arrow: false;
+      autohide: true;
     }
 
     EventControllerFocus {
@@ -285,7 +286,7 @@ menu context_menu_model {
     }
 
     item {
-      label: _("Notify on Next Command Finish");
+      label: _("Notify on Command Exit");
       action: "surface.notify-on-next-command-finish";
     }
   }
