@@ -172,7 +172,7 @@ pub const ConfigEditorWindow = extern struct {
         _ = search;
         // gtk.FilterListModel refilters automatically when the filter changes
         // (our StringFilter is bound to search_entry.text via the blueprint).
-        priv.string_filter.changed(.different);
+        @as(*gtk.Filter, @alignCast(@ptrCast(priv.string_filter))).changed(.different);
     }
 
     /// Toggle instant-reload behaviour.
@@ -526,10 +526,10 @@ pub const ConfigEditorWindow = extern struct {
     ) callconv(.c) void {
         const dropdown = gobject.ext.cast(gtk.DropDown, dd) orelse return;
         const selected = dropdown.getSelected();
-        const str_obj_ = dropdown.as(gio.ListModel).getObject(selected);
-        defer if (str_obj_) |o| o.unref();
-        const str_obj = gobject.ext.cast(gtk.StringObject, str_obj_ orelse return) orelse return;
-        const text = str_obj.getString() orelse return;
+        const model = dropdown.getModel() orelse return;
+        const str_obj_ = gobject.ext.cast(gtk.StringObject, @as(*gobject.Object, @alignCast(@ptrCast(model.getItem(selected) orelse return))));
+        const str_obj = str_obj_ orelse return;
+        const text = str_obj.getString();
         entry.setCurrentValue(std.mem.span(text));
         entry.setDirty(true);
     }
@@ -561,7 +561,7 @@ pub const ConfigEditorWindow = extern struct {
         entry_widget: *gtk.Entry,
         entry: *ConfigEntryObject,
     ) callconv(.c) void {
-        const text = entry_widget.as(gtk.Editable).getText() orelse return;
+        const text = entry_widget.as(gtk.Editable).getText();
         entry.setCurrentValue(std.mem.span(text));
         entry.setDirty(true);
     }
