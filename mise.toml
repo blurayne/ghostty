@@ -34,6 +34,32 @@ rm -rf dist/build flatpak/builddir flatpak/repo .flatpak-builder
 docker compose down -v
 """
 
+[tasks.remotes-setup]
+description = "Configure git remotes: origin=ghostty-org/ghostty, blurayne=blurayne/ghostty"
+run = """
+set -e
+
+setup_remote() {
+  local name=$1 url=$2 current
+  current=$(git remote get-url "$name" 2>/dev/null) || true
+  if [ -z "$current" ]; then
+    git remote add "$name" "$url"
+    echo "  $name  added → $url"
+  elif [ "$current" = "$url" ]; then
+    echo "  $name  ok    $url"
+  else
+    git remote set-url "$name" "$url"
+    echo "  $name  fixed $current → $url"
+  fi
+}
+
+setup_remote origin   git@github.com:ghostty-org/ghostty.git
+setup_remote blurayne git@github.com:blurayne/ghostty.git
+
+echo ""
+git remote -v
+"""
+
 [tasks.upstream-merge]
 description = "Fetch upstream (ghostty-org/ghostty) and merge into fork main, then push"
 run = """
