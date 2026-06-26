@@ -69,7 +69,7 @@ is_dep: bool = false,
 /// Environmental properties
 env: std.process.EnvMap,
 
-pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Config {
+pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8, forkPatch: []const u8) !Config {
     // Setup our standard Zig target and optimize options, i.e.
     // `-Doptimize` and `-Dtarget`.
     const optimize = b.standardOptimizeOption(.{});
@@ -260,7 +260,7 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
                 .minor = app_version.minor,
                 .patch = app_version.patch,
                 .pre = "dev",
-                .build = "0000000",
+                .build = b.fmt("blurayne.{s}", .{"0000000"}),
             },
 
             else => return err,
@@ -282,6 +282,7 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
                     .major = app_version.major,
                     .minor = app_version.minor,
                     .patch = app_version.patch,
+                    .build = b.fmt("blurayne.{s}.{s}", .{ forkPatch, vsn.short_hash }),
                 };
             }
         }
@@ -290,8 +291,8 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8) !Conf
             .major = app_version.major,
             .minor = app_version.minor,
             .patch = app_version.patch,
-            .pre = vsn.branch,
-            .build = vsn.short_hash,
+            .pre = app_version.pre orelse "dev",
+            .build = b.fmt("blurayne.{s}", .{vsn.short_hash}),
         };
     };
 
@@ -549,6 +550,12 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
         &app_version_buf,
         "{f}",
         .{self.version},
+    ));
+    var version_build_buf: [256]u8 = undefined;
+    step.addOption([:0]const u8, "version_build", try std.fmt.bufPrintZ(
+        &version_build_buf,
+        "{s}",
+        .{self.version.build orelse "unknown"},
     ));
     var lib_version_buf: [1024]u8 = undefined;
     step.addOption(std.SemanticVersion, "lib_version", self.lib_version);

@@ -17,6 +17,9 @@ pub const ReleaseChannel = BuildConfig.ReleaseChannel;
 pub const version = options.app_version;
 pub const version_string = options.app_version_string;
 
+/// Build metadata from the version (fork identifier + commit hash, e.g. "blurayne.a1b2c3d").
+pub const version_build: [:0]const u8 = options.version_build;
+
 /// UTC timestamp of when this binary was compiled, e.g. "2026-06-25 11:30:00 UTC".
 pub const build_timestamp = options.build_timestamp;
 

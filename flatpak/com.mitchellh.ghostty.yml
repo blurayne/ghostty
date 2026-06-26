@@ -43,7 +43,7 @@ modules:
           ZON_VER=$(grep '\.version' build.zig.zon | grep -o '"[0-9][^"]*"' | tr -d '"')
           BASE=${ZON_VER%%-*}
           PRE=$(echo "$ZON_VER" | sed 's/^[^-]*-//' | sed 's/+.*//')
-          printf -- '-Dversion-string=%s-%s+%s' "$BASE" "$PRE" "$(cat .git-sha)" > /tmp/ghostty-vsn
+          printf -- '-Dversion-string=%s-%s+blurayne.%s' "$BASE" "$PRE" "$(cat .git-sha)" > /tmp/ghostty-vsn
         else
           printf '' > /tmp/ghostty-vsn
         fi

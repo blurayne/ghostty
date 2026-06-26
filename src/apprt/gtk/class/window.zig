@@ -265,6 +265,9 @@ pub const Window = extern struct {
         /// setup by `setup-menu`.
         context_menu_page: ?*adw.TabPage = null,
 
+        /// Whether the user has manually hidden the tab bar via the tab menu.
+        tab_bar_hidden: bool = false,
+
         // Template bindings
         tab_overview: *adw.TabOverview,
         tab_bar: *adw.TabBar,
@@ -474,6 +477,9 @@ pub const Window = extern struct {
             .{},
         );
         tabSplitTreeChanged(split_tree, null, split_tree.getTree(), win);
+        // Force header visibility refresh: the tree didn't change (no setTree
+        // call), so onRebuild won't fire automatically.
+        split_tree.updateHeaderVisibility();
 
         // If the source window is now empty (no pages), close it
         if (source_tv.getNPages() == 0) {
@@ -589,6 +595,9 @@ pub const Window = extern struct {
             .init("toggle-inspector", actionToggleInspector, null),
             .init("move-split-to-new-window", actionMoveToNewWindow, null),
             .init("detach-tab", actionDetachTab, null),
+            .init("toggle-tab-bar", actionToggleTabBar, null),
+            .init("toggle-decoration", actionToggleDecoration, null),
+            .init("toggle-tab-overview", actionToggleTabOverview, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -919,6 +928,23 @@ pub const Window = extern struct {
         priv.winproto.syncAppearance() catch |err| {
             log.warn("failed to sync winproto appearance error={}", .{err});
         };
+
+        // Re-evaluate split header visibility in case the decoration / chrome
+        // state changed (e.g. headerbar hidden → force auto→always).
+        self.syncAllSplitHeaders();
+    }
+
+    /// Call updateHeaderVisibility on every SplitTree in all tabs.
+    fn syncAllSplitHeaders(self: *Self) void {
+        const priv = self.private();
+        const n = priv.tab_view.getNPages();
+        var i: c_int = 0;
+        while (i < n) : (i += 1) {
+            const page = priv.tab_view.getNthPage(i);
+            const child = page.getChild();
+            const tab = gobject.ext.cast(Tab, child) orelse continue;
+            tab.getSplitTree().updateHeaderVisibility();
+        }
     }
 
     /// Sync the state of any actions on this window.
@@ -1179,6 +1205,33 @@ pub const Window = extern struct {
         self.syncAppearance();
     }
 
+    /// Returns true when both the header bar and the tab bar are
+    /// effectively hidden — i.e. there is no window chrome visible.
+    /// This is used by SplitTree to decide whether to force split headers on.
+    pub fn isChromelessMode(self: *Self) bool {
+        const priv = self.private();
+
+        // Header bar hidden?
+        const headerbar_hidden = !self.getHeaderbarVisible();
+
+        // Tab bar hidden? (covers: explicit hide, never, or auto with 1 tab)
+        const tab_bar_hidden = tab_bar_blk: {
+            if (priv.tab_bar_hidden) break :tab_bar_blk true;
+            const config = if (priv.config) |v| v.get() else break :tab_bar_blk false;
+            switch (config.@"gtk-titlebar-style") {
+                // tabs style: tab bar IS the titlebar — never truly "hidden"
+                .tabs => break :tab_bar_blk false,
+                .native => break :tab_bar_blk switch (config.@"window-show-tab-bar") {
+                    .never => true,
+                    .always => false,
+                    .auto => priv.tab_view.getNPages() <= 1,
+                },
+            }
+        };
+
+        return headerbar_hidden and tab_bar_hidden;
+    }
+
     /// Get the currently selected tab as a Tab object.
     fn getSelectedTab(self: *Self) ?*Tab {
         const priv = self.private();
@@ -1272,6 +1325,7 @@ pub const Window = extern struct {
 
     fn getTabsVisible(self: *Self) bool {
         const priv = self.private();
+        if (priv.tab_bar_hidden) return false;
         const config = if (priv.config) |v| v.get() else return true;
 
         switch (config.@"gtk-titlebar-style") {
@@ -1784,6 +1838,30 @@ pub const Window = extern struct {
         if (tab.getSurfaceTree()) |tree| {
             self.connectSurfaceHandlers(tree);
         }
+
+        // Wire split-tree changes to this window and force an immediate
+        // header-visibility refresh so that tear-off windows show headers
+        // per config. Disconnect first to avoid double-connections when this
+        // fires for a tab created by newTabPage (which already wires the signal).
+        const split_tree = tab.getSplitTree();
+        _ = gobject.signalHandlersDisconnectMatched(
+            split_tree.as(gobject.Object),
+            .{ .data = true },
+            0,
+            0,
+            null,
+            null,
+            self,
+        );
+        _ = SplitTree.signals.changed.connect(
+            split_tree,
+            *Self,
+            tabSplitTreeChanged,
+            self,
+            .{},
+        );
+        // Force header refresh; the tree hasn't changed so onRebuild won't fire.
+        split_tree.updateHeaderVisibility();
     }
 
     fn tabViewPageDetached(
@@ -1797,6 +1875,18 @@ pub const Window = extern struct {
         const tab = gobject.ext.cast(Tab, child) orelse return;
         _ = gobject.signalHandlersDisconnectMatched(
             tab.as(gobject.Object),
+            .{ .data = true },
+            0,
+            0,
+            null,
+            null,
+            self,
+        );
+
+        // Also disconnect from the SplitTree (connected in tabViewPageAttached).
+        const split_tree = tab.getSplitTree();
+        _ = gobject.signalHandlersDisconnectMatched(
+            split_tree.as(gobject.Object),
             .{ .data = true },
             0,
             0,
@@ -1821,6 +1911,15 @@ pub const Window = extern struct {
             .{
                 .application = Application.default(),
             },
+        );
+
+        // Bind application config to the new window (matches newWithSurface/newWithTab).
+        _ = gobject.Object.bindProperty(
+            Application.default().as(gobject.Object),
+            "config",
+            win.as(gobject.Object),
+            "config",
+            .{},
         );
 
         // We have to show it otherwise it'll just be hidden.
@@ -1856,7 +1955,13 @@ pub const Window = extern struct {
             if (priv.tab_overview.getOpen() != 0) return;
 
             self.as(gtk.Window).close();
+            return;
         }
+
+        // Tab count changed — re-evaluate split header visibility because the
+        // auto tab-bar-hidden condition depends on page count (auto+1 tab hides
+        // the tab bar, which may force split headers to "always" mode).
+        self.syncAllSplitHeaders();
     }
     fn setupTabMenu(
         _: *adw.TabView,
@@ -1889,11 +1994,72 @@ pub const Window = extern struct {
             self.addToast(i18n._("Cleared clipboard"));
     }
 
+    /// Build the flat context menu shown when the window has no visible
+    /// decoration (header bar hidden). Sections act as visual dividers.
+    fn buildNoDecorationMenu() *gio.Menu {
+        const menu = gio.Menu.new();
+
+        {
+            const sec = gio.Menu.new();
+            defer sec.unref();
+            sec.append(i18n._("New Window"), "win.new-window");
+            sec.append(i18n._("New Tab"), "win.new-tab");
+            menu.appendSection(null, sec.as(gio.MenuModel));
+        }
+
+        {
+            const sec = gio.Menu.new();
+            defer sec.unref();
+            sec.append(i18n._("Split Right"), "win.split-right");
+            sec.append(i18n._("Split Down"), "win.split-down");
+            menu.appendSection(null, sec.as(gio.MenuModel));
+        }
+
+        {
+            const sec = gio.Menu.new();
+            defer sec.unref();
+            sec.append(i18n._("Notify on Command Exit"), "surface.notify-on-next-command-finish");
+            menu.appendSection(null, sec.as(gio.MenuModel));
+        }
+
+        {
+            const sec = gio.Menu.new();
+            defer sec.unref();
+            sec.append(i18n._("Change Title\u{2026}"), "win.prompt-surface-title");
+            menu.appendSection(null, sec.as(gio.MenuModel));
+        }
+
+        {
+            const sec = gio.Menu.new();
+            defer sec.unref();
+            sec.append(i18n._("Overview"), "win.toggle-tab-overview");
+            sec.append(i18n._("Command Palette"), "win.toggle-command-palette");
+            menu.appendSection(null, sec.as(gio.MenuModel));
+        }
+
+        return menu;
+    }
+
     fn surfaceMenu(
-        _: *Surface,
+        surface: *Surface,
         self: *Self,
     ) callconv(.c) void {
         self.syncActions();
+
+        // When the window has no visible decoration (no header bar), show a
+        // richer flat context menu so the user can still reach window/tab/split
+        // actions without the header bar buttons.
+        const popover = surface.getContextMenu();
+        if (!self.getHeaderbarVisible()) {
+            const menu = buildNoDecorationMenu();
+            defer menu.unref();
+            popover.setMenuModel(menu.as(gio.MenuModel));
+        } else {
+            // Restore the original Blueprint-declared model. The surface
+            // saves it immediately after initTemplate so it is always the
+            // static menu even after a previous no-deco swap.
+            popover.setMenuModel(surface.getContextMenuOriginalModel());
+        }
     }
 
     fn surfacePresentRequest(
@@ -2201,7 +2367,7 @@ pub const Window = extern struct {
                 "website",
                 website,
                 "comments",
-                comptime ("Built: " ++ build_config.build_timestamp).ptr,
+                comptime ("Built: " ++ build_config.build_timestamp ++ "\nCommit: " ++ build_config.version_build).ptr,
                 @as(?*anyopaque, null),
             );
         } else {
@@ -2218,7 +2384,7 @@ pub const Window = extern struct {
                 "website",
                 website,
                 "comments",
-                comptime ("Built: " ++ build_config.build_timestamp).ptr,
+                comptime ("Built: " ++ build_config.build_timestamp ++ "\nCommit: " ++ build_config.version_build).ptr,
                 @as(?*anyopaque, null),
             );
         }
@@ -2495,6 +2661,33 @@ pub const Window = extern struct {
         const child = page.getChild();
         const tab = gobject.ext.cast(Tab, child) orelse return;
         Window.newWithTab(Application.default(), tab);
+    }
+
+    fn actionToggleTabBar(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        priv.tab_bar_hidden = !priv.tab_bar_hidden;
+        self.as(gobject.Object).notifyByPspec(properties.@"tabs-visible".impl.param_spec);
+    }
+
+    fn actionToggleDecoration(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.toggleWindowDecorations();
+        self.syncAllSplitHeaders();
+    }
+
+    fn actionToggleTabOverview(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.toggleTabOverview();
     }
 
     const C = Common(Self, Private);

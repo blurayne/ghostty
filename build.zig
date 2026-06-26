@@ -9,6 +9,9 @@ const app_zon_version = @import("build.zig.zon").version;
 /// Libghostty version. We use a separate version from the app.
 const lib_version = "0.1.0-dev";
 
+/// Fork patch level — bump this when releasing a new fork build on the same upstream version.
+const fork_patch = "1";
+
 /// Minimum required zig version.
 const minimum_zig_version = @import("build.zig.zon").minimum_zig_version;
 
@@ -38,6 +41,7 @@ pub fn build(b: *std.Build) !void {
         b,
         file_version orelse app_zon_version,
         lib_version,
+        fork_patch,
     );
     const test_filters = b.option(
         [][]const u8,
