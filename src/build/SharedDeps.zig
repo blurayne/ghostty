@@ -636,6 +636,7 @@ fn addGtkNg(
             .{ "glib", "glib2" },
             .{ "gobject", "gobject2" },
             .{ "gtk", "gtk4" },
+            .{ "pango", "pango1" },
             .{ "xlib", "xlib2" },
         };
         inline for (gobject_imports) |import| {

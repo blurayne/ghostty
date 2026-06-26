@@ -7,9 +7,11 @@
 const std = @import("std");
 
 const adw = @import("adw");
+const gdk = @import("gdk");
 const gio = @import("gio");
 const gobject = @import("gobject");
 const gtk = @import("gtk");
+const pango = @import("pango");
 
 const build_config = @import("../../../build_config.zig");
 const configpkg = @import("../../../config.zig");
@@ -488,6 +490,84 @@ pub const ConfigEditorWindow = extern struct {
             },
 
             .string, .repeatable, .complex => {
+                // Font-family fields get a FontDialogButton for family-only picking.
+                const is_font_family = std.mem.eql(u8, field.name, "font-family") or
+                    std.mem.eql(u8, field.name, "font-family-bold") or
+                    std.mem.eql(u8, field.name, "font-family-italic") or
+                    std.mem.eql(u8, field.name, "font-family-bold-italic");
+
+                if (is_font_family) {
+                    const font_dialog = gtk.FontDialog.new();
+                    const btn = gtk.FontDialogButton.new(font_dialog);
+                    btn.as(gtk.Widget).setValign(.center);
+                    // Restrict the picker to family level (no style/size).
+                    btn.setLevel(.family);
+
+                    // Set initial font from the current value (family name string).
+                    if (current_raw.len > 0) {
+                        const desc = pango.FontDescription.new();
+                        defer desc.free();
+                        desc.setFamily(current_raw.ptr);
+                        btn.setFontDesc(desc);
+                    }
+
+                    _ = gobject.Object.signals.notify.connect(
+                        btn.as(gobject.Object),
+                        *ConfigEntryObject,
+                        onFontDialogButtonChanged,
+                        entry,
+                        .{ .detail = "font-desc" },
+                    );
+                    return btn.as(gtk.Widget);
+                }
+
+                // Color fields get a ColorDialogButton for visual color picking.
+                const is_color_field = blk: {
+                    const n = field.name;
+                    if (std.mem.eql(u8, n, "background") or
+                        std.mem.eql(u8, n, "foreground"))
+                        break :blk true;
+                    // Fields whose name contains "color" are color fields
+                    // (e.g. cursor-color, split-divider-color, bold-color).
+                    if (std.mem.indexOf(u8, n, "color") != null)
+                        break :blk true;
+                    // selection-background, selection-foreground,
+                    // search-background, search-foreground, etc.
+                    if (std.mem.endsWith(u8, n, "-background") or
+                        std.mem.endsWith(u8, n, "-foreground"))
+                        break :blk true;
+                    break :blk false;
+                };
+
+                if (is_color_field) {
+                    const color_dialog = gtk.ColorDialog.new();
+                    const btn = gtk.ColorDialogButton.new(color_dialog);
+                    btn.as(gtk.Widget).setValign(.center);
+
+                    // Try to parse the current value as an RGB color and
+                    // pre-load it into the button.
+                    if (current_raw.len > 0) {
+                        var rgba: gdk.RGBA = .{
+                            .f_red = 0,
+                            .f_green = 0,
+                            .f_blue = 0,
+                            .f_alpha = 1,
+                        };
+                        if (gdk.RGBA.parse(&rgba, current_raw.ptr) != 0) {
+                            btn.setRgba(&rgba);
+                        }
+                    }
+
+                    _ = gobject.Object.signals.notify.connect(
+                        btn.as(gobject.Object),
+                        *ConfigEntryObject,
+                        onColorDialogButtonChanged,
+                        entry,
+                        .{ .detail = "rgba" },
+                    );
+                    return btn.as(gtk.Widget);
+                }
+
                 const entry_widget = gtk.Entry.new();
                 entry_widget.as(gtk.Widget).setValign(.center);
                 entry_widget.as(gtk.Widget).setHexpand(0);
@@ -563,6 +643,38 @@ pub const ConfigEditorWindow = extern struct {
     ) callconv(.c) void {
         const text = entry_widget.as(gtk.Editable).getText();
         entry.setCurrentValue(std.mem.span(text));
+        entry.setDirty(true);
+    }
+
+    fn onFontDialogButtonChanged(
+        btn_obj: *gobject.Object,
+        _: *gobject.ParamSpec,
+        entry: *ConfigEntryObject,
+    ) callconv(.c) void {
+        const btn = gobject.ext.cast(gtk.FontDialogButton, btn_obj) orelse return;
+        const desc = btn.getFontDesc() orelse return;
+        // getFamily() returns a borrowed pointer into the FontDescription;
+        // do not free it.
+        const family_ptr = desc.getFamily() orelse return;
+        entry.setCurrentValue(std.mem.span(family_ptr));
+        entry.setDirty(true);
+    }
+
+    fn onColorDialogButtonChanged(
+        btn_obj: *gobject.Object,
+        _: *gobject.ParamSpec,
+        entry: *ConfigEntryObject,
+    ) callconv(.c) void {
+        const btn = gobject.ext.cast(gtk.ColorDialogButton, btn_obj) orelse return;
+        const rgba = btn.getRgba();
+        // Format as #rrggbb hex string.
+        var hex_buf: [8]u8 = undefined;
+        const hex = std.fmt.bufPrintZ(&hex_buf, "#{x:0>2}{x:0>2}{x:0>2}", .{
+            @as(u8, @intFromFloat(rgba.f_red * 255.0)),
+            @as(u8, @intFromFloat(rgba.f_green * 255.0)),
+            @as(u8, @intFromFloat(rgba.f_blue * 255.0)),
+        }) catch return;
+        entry.setCurrentValue(hex);
         entry.setDirty(true);
     }
 

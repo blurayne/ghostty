@@ -2188,12 +2188,10 @@ pub const Window = extern struct {
     /// can handle the result correctly.
     fn onTabBarExtraDrop(
         _: *adw.TabBar,
-        page: *adw.TabPage,
+        _: *adw.TabPage,
         value: *gobject.Value,
         self: *Self,
     ) callconv(.c) c_int {
-        const priv = self.private();
-
         // Extract GBytes from the GValue.
         const boxed = value.getBoxed() orelse return 0;
         const bytes: *glib.Bytes = @ptrCast(@alignCast(boxed));
@@ -2207,55 +2205,9 @@ pub const Window = extern struct {
         // Resolve the source surface by UUID across all windows / tabs.
         const source_surface = Application.default().findSurfaceByUuid(payload.uuid) orelse return 0;
 
-        // Get the source SplitTree.
-        const source_tree = ext.getAncestor(SplitTree, source_surface.as(gtk.Widget)) orelse return 0;
-
-        // Get the target Tab and its SplitTree from the drop page.
-        const child = page.getChild();
-        const target_tab = gobject.ext.cast(Tab, child) orelse return 0;
-        const target_tree = target_tab.getSplitTree();
-
-        // Self-drop guard: no-op if source already lives in the target tab.
-        if (source_tree == target_tree) return 0;
-
-        // Get source handle from the source tree.
-        const source_tree_data = source_tree.getTree() orelse return 0;
-        const source_handle = blk: {
-            var it = source_tree_data.iterator();
-            while (it.next()) |e| {
-                if (e.view == source_surface) break :blk e.handle;
-            }
-            log.warn("onTabBarExtraDrop: source surface not found in source tree", .{});
-            return 0;
-        };
-
-        // Get the last (rightmost in iteration order) leaf handle in the
-        // target tree so we can append the surface there.
-        const target_tree_data = target_tree.getTree() orelse return 0;
-        const target_handle = blk: {
-            var last: ?Surface.Tree.Node.Handle = null;
-            var it = target_tree_data.iterator();
-            while (it.next()) |e| last = e.handle;
-            break :blk last orelse {
-                log.warn("onTabBarExtraDrop: target tree is empty", .{});
-                return 0;
-            };
-        };
-
-        // Move the source surface into the target tree as a right-split of
-        // the last leaf.
-        target_tree.moveSurfaceInto(
-            source_tree,
-            source_handle,
-            target_handle,
-            .right,
-        ) catch |err| {
-            log.warn("onTabBarExtraDrop: moveSurfaceInto failed: {}", .{err});
-            return 0;
-        };
-
-        // Bring the target tab into view.
-        priv.tab_view.setSelectedPage(page);
+        // Dropping onto the tab bar always creates a new tab containing just
+        // the dragged pane — regardless of which existing tab was hovered.
+        self.addTabWithSurface(source_surface);
 
         return 1;
     }
