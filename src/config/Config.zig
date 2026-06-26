@@ -1127,6 +1127,30 @@ palette: Palette = .{},
 /// This option has no effect when `split-header` is not `auto`.
 @"split-header-auto-threshold": u32 = 2,
 
+/// How space is distributed when creating a new split pane.
+///
+/// `split-tiling` is the fallback used when the per-axis variants
+/// (`split-tiling-horizontal`, `split-tiling-vertical`) are not explicitly
+/// set. Setting `split-tiling` alone applies to both axes.
+///
+///   - traditional  Each new split halves the pane it is created from
+///                  (default). With two vertical panes at 1/2:1/2, a third
+///                  gives 1/2:1/4:1/4.
+///   - even         After every new split, all sibling panes along the same
+///                  axis are redistributed to equal widths/heights. With two
+///                  vertical panes at 1/2:1/2, a third gives 1/3:1/3:1/3.
+@"split-tiling": SplitTilingMode = .traditional,
+
+/// Per-axis tiling mode for horizontal (left/right) splits.
+/// Overrides `split-tiling` for horizontal splits when set.
+/// See `split-tiling` for value descriptions.
+@"split-tiling-horizontal": ?SplitTilingMode = null,
+
+/// Per-axis tiling mode for vertical (up/down) splits.
+/// Overrides `split-tiling` for vertical splits when set.
+/// See `split-tiling` for value descriptions.
+@"split-tiling-vertical": ?SplitTilingMode = null,
+
 /// Action to perform when double-clicking the split header title bar.
 ///
 ///   - rename    open the rename popover (default)
@@ -8778,6 +8802,13 @@ pub const SplitTitleDoubleclickAction = enum {
     zoom,
     /// Do nothing.
     none,
+};
+
+pub const SplitTilingMode = enum {
+    /// Each new split halves the space of the pane it splits (default).
+    traditional,
+    /// After each new split, redistribute all same-axis siblings evenly.
+    even,
 };
 
 pub const RepeatableCommand = struct {

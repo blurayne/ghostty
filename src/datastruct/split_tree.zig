@@ -2775,3 +2775,36 @@ test "goto_split_index: out of range returns null handle" {
     try testing.expect(!found);
     try testing.expectEqual(@as(usize, 2), i); // only 2 leaves
 }
+
+test "even tiling: 3 horizontal panes get equal ratios" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // Build a single-leaf tree A.
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+
+    // Split right to get A|B, then equalize.
+    var vB: TestView = .{ .label = "B" };
+    var tB: TestTree = try .init(alloc, &vB);
+    defer tB.deinit();
+    var split2 = try tA.split(alloc, .root, .right, 0.5, &tB);
+    var equal2 = try split2.equalize(alloc);
+    split2.deinit();
+
+    // Split right again to get A|B|C, then equalize.
+    var vC: TestView = .{ .label = "C" };
+    var tC: TestTree = try .init(alloc, &vC);
+    defer tC.deinit();
+    var split3 = try equal2.split(alloc, .root, .right, 0.5, &tC);
+    equal2.deinit();
+    var equal3 = try split3.equalize(alloc);
+    split3.deinit();
+    defer equal3.deinit();
+
+    // The root split should have ratio ≈ 1/3 (left pane A takes 1/3 of space).
+    const root_ratio: f16 = equal3.nodes[0].split.ratio;
+    // f16 represents 1/3 as approximately 0.3333; allow a small tolerance.
+    try testing.expect(@abs(root_ratio - @as(f16, 1.0 / 3.0)) < 0.01);
+}

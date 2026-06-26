@@ -111,7 +111,7 @@ fn packedFlagVariants(comptime T: type) []const EnumVariant {
 }
 
 /// Build the static field metadata array at comptime.
-pub const fields: []const FieldMeta = comptime build: {
+pub const fields: []const FieldMeta = build: {
     @setEvalBranchQuota(100_000);
 
     const struct_fields = @typeInfo(Config).@"struct".fields;

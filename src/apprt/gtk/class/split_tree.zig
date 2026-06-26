@@ -174,6 +174,10 @@ pub const SplitTree = extern struct {
         /// Manual visibility toggle for split-header in manual mode.
         header_manual_visible: bool = false,
 
+        /// Whether the user has manually overridden titlebar visibility
+        /// via the split context menu (independent of split-header config).
+        header_override_active: bool = false,
+
         pub var offset: c_int = 0;
     };
 
@@ -287,6 +291,23 @@ pub const SplitTree = extern struct {
             .{ handle, direction, old_tree, &new_tree },
         );
 
+        // Even-tiling: redistribute all same-axis panes equally after each new split.
+        const tiling_mode: configpkg.Config.SplitTilingMode = tiling: {
+            const app = Application.default();
+            const config_obj = app.getConfig();
+            defer config_obj.unref();
+            const cfg = config_obj.get();
+            break :tiling switch (direction) {
+                .left, .right => cfg.@"split-tiling-horizontal" orelse cfg.@"split-tiling",
+                .up, .down => cfg.@"split-tiling-vertical" orelse cfg.@"split-tiling",
+            };
+        };
+        if (tiling_mode == .even) {
+            const equalized = try new_tree.equalize(alloc);
+            new_tree.deinit();
+            new_tree = equalized;
+        }
+
         // Replace our tree
         self.setTree(&new_tree);
     }
@@ -331,6 +352,21 @@ pub const SplitTree = extern struct {
         const handle = self.getActiveSurfaceHandle() orelse .root;
         var new_tree = try old_tree.split(alloc, handle, .right, 0.5, &single_tree);
         defer new_tree.deinit();
+
+        // Even-tiling: redistribute all horizontal panes equally after each mirrored split.
+        const tiling_mode: configpkg.Config.SplitTilingMode = tiling: {
+            const app = Application.default();
+            const config_obj = app.getConfig();
+            defer config_obj.unref();
+            const cfg = config_obj.get();
+            break :tiling cfg.@"split-tiling-horizontal" orelse cfg.@"split-tiling";
+        };
+        if (tiling_mode == .even) {
+            const equalized = try new_tree.equalize(alloc);
+            new_tree.deinit();
+            new_tree = equalized;
+        }
+
         self.setTree(&new_tree);
     }
 
@@ -902,13 +938,35 @@ pub const SplitTree = extern struct {
         self: *Self,
     ) callconv(.c) void {
         const priv = self.private();
-        priv.header_manual_visible = !priv.header_manual_visible;
+        // On the first call, snapshot the current effective visibility so the
+        // first toggle always hides (when headers are visible) or shows (when
+        // hidden), regardless of the split-header config mode.
+        if (!priv.header_override_active) {
+            priv.header_override_active = true;
+            priv.header_manual_visible = !self.effectiveHeaderVisible();
+        } else {
+            priv.header_manual_visible = !priv.header_manual_visible;
+        }
         self.updateHeaderVisibility();
+    }
+
+    /// Returns whether any split header is currently visible in the tree.
+    fn effectiveHeaderVisible(self: *Self) bool {
+        const tree = self.getTree() orelse return false;
+        var it = tree.iterator();
+        while (it.next()) |entry| {
+            const ssw = ext.getAncestor(
+                SurfaceScrolledWindow,
+                entry.view.as(gtk.Widget),
+            ) orelse continue;
+            if (ssw.getHeader().as(gtk.Widget).getVisible() != 0) return true;
+        }
+        return false;
     }
 
     /// Walk all leaves in the tree and update their SplitHeader visibility
     /// based on the current config split-header mode and split count.
-    fn updateHeaderVisibility(self: *Self) void {
+    pub fn updateHeaderVisibility(self: *Self) void {
         const tree = self.getTree() orelse return;
         const app = Application.default();
         const config_obj = app.getConfig();
@@ -916,6 +974,20 @@ pub const SplitTree = extern struct {
         const config = config_obj.get();
         const mode = config.@"split-header";
         const priv = self.private();
+
+        // Determine the effective mode: when chrome is completely hidden and the
+        // user has chosen "auto", force "always" so the split headers remain
+        // the only navigation chrome.
+        const effective_mode: configpkg.Config.SplitHeaderMode = effective: {
+            if (mode == .auto) {
+                const window = ext.getAncestor(
+                    Window,
+                    self.as(gtk.Widget),
+                ) orelse break :effective mode;
+                if (window.isChromelessMode()) break :effective .always;
+            }
+            break :effective mode;
+        };
 
         // Count leaves in the tree
         var count: u32 = 0;
@@ -933,11 +1005,13 @@ pub const SplitTree = extern struct {
             ) orelse continue;
             const header = ssw.getHeader();
             header.setSplitCount(count);
-            header.setHeaderMode(mode);
+            header.setHeaderMode(effective_mode);
             header.setPaneNumber(pane_number);
             pane_number += 1;
-            // For manual mode, directly override the visibility
-            if (mode == .manual) {
+            if (priv.header_override_active) {
+                // Menu toggle overrides config-based visibility for all modes.
+                header.as(gtk.Widget).setVisible(@intFromBool(priv.header_manual_visible));
+            } else if (mode == .manual) {
                 header.as(gtk.Widget).setVisible(@intFromBool(priv.header_manual_visible));
             }
         }
