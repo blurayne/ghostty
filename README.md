@@ -14,13 +14,33 @@
 >
 > **Install (Linux Flatpak)**
 >
-> Download the bundle for your architecture from the [latest tip release](../../releases/tag/tip), then:
-> ```
+> Prebuilt bundles are published on the [latest tip release](../../releases/tag/tip):
+>
+> | Architecture | Download |
+> |---|---|
+> | x86_64 (Intel/AMD) | [`com.mitchellh.ghostty-x86_64.flatpak`](../../releases/download/tip/com.mitchellh.ghostty-x86_64.flatpak) |
+> | aarch64 (ARM64) | [`com.mitchellh.ghostty-aarch64.flatpak`](../../releases/download/tip/com.mitchellh.ghostty-aarch64.flatpak) |
+>
+> Download the bundle for your architecture and install it (no remote needed):
+> ```sh
+> # x86_64
+> curl -LO https://github.com/blurayne/ghostty/releases/download/tip/com.mitchellh.ghostty-x86_64.flatpak
 > flatpak install --user --bundle com.mitchellh.ghostty-x86_64.flatpak
-> # or on ARM:
+>
+> # aarch64 (ARM64)
+> curl -LO https://github.com/blurayne/ghostty/releases/download/tip/com.mitchellh.ghostty-aarch64.flatpak
 > flatpak install --user --bundle com.mitchellh.ghostty-aarch64.flatpak
 > ```
-> The tip release is rebuilt automatically for x86_64 and ARM64 on every push to `main`.
+> Then launch it:
+> ```sh
+> flatpak run com.mitchellh.ghostty
+> ```
+> Update by downloading the latest bundle and re-running `flatpak install` (it
+> reinstalls over the existing copy). Uninstall with
+> `flatpak uninstall --user com.mitchellh.ghostty`.
+>
+> The `tip` release is a rolling prerelease, rebuilt automatically for x86_64 and
+> ARM64 on every push to `main`, so its assets always reflect the latest build.
 >
 > **Terminal type (`TERM`)**
 >
