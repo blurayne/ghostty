@@ -51,10 +51,10 @@ jobs:
         if: always()
         run: mv .git.ci-bak .git 2>/dev/null || true
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: flatpak-${{ matrix.arch }}
-          path: com.mitchellh.ghostty-${{ matrix.arch }}.flatpak
+      # The flatpak-builder action already uploads the bundle as an artifact
+      # named "com.mitchellh.ghostty-<arch>.flatpak" (because `bundle:` is set
+      # above), so no explicit upload-artifact step is needed. The release job
+      # consumes those artifacts by that name.
 
   release:
     name: Publish tip release
@@ -64,10 +64,21 @@ jobs:
       contents: write
 
     steps:
+      # Each build's bundle arrives as an artifact named
+      # "com.mitchellh.ghostty-<arch>.flatpak" containing the file
+      # "com.mitchellh.ghostty.flatpak". Without merge-multiple, each artifact
+      # is extracted into its own directory named after the artifact.
       - uses: actions/download-artifact@v4
         with:
-          pattern: flatpak-*
-          merge-multiple: true
+          pattern: com.mitchellh.ghostty-*
+
+      # Both inner files share the name "com.mitchellh.ghostty.flatpak", so give
+      # each a distinct, arch-suffixed filename before attaching to the release.
+      - name: Stage bundles with arch-suffixed names
+        run: |
+          mkdir -p dist
+          mv com.mitchellh.ghostty-x86_64.flatpak/*.flatpak  dist/com.mitchellh.ghostty-x86_64.flatpak
+          mv com.mitchellh.ghostty-aarch64.flatpak/*.flatpak dist/com.mitchellh.ghostty-aarch64.flatpak
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -75,6 +86,7 @@ jobs:
           prerelease: true
           tag_name: tip
           target_commitish: ${{ github.sha }}
+          fail_on_unmatched_files: true
           body: |
             Automated build from `main` — ${{ github.sha }}
 
@@ -87,5 +99,5 @@ jobs:
             flatpak install --user --bundle com.mitchellh.ghostty-aarch64.flatpak
             ```
           files: |
-            com.mitchellh.ghostty-x86_64.flatpak
-            com.mitchellh.ghostty-aarch64.flatpak
+            dist/com.mitchellh.ghostty-x86_64.flatpak
+            dist/com.mitchellh.ghostty-aarch64.flatpak
