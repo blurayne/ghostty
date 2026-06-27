@@ -1,3 +1,5 @@
+[![Flatpak Release](https://github.com/blurayne/ghostty/actions/workflows/flatpak-release.yml/badge.svg?branch=main)](https://github.com/blurayne/ghostty/actions/workflows/flatpak-release.yml)
+
 > **Personal fork.** This is a casual personal fork of [ghostty-org/ghostty](https://github.com/ghostty-org/ghostty).
 > It is updated occasionally, only when changes are needed for personal use.
 > No support is offered, no PRs will be merged, and there is no commitment to track upstream.
