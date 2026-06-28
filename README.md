@@ -5,14 +5,33 @@
 > No support is offered, no PRs will be merged, and there is no commitment to track upstream.
 > If you are looking for Ghostty, use upstream.
 >
-> **Changes from upstream:**
-> - **Split titlebars** — per-pane header bars showing a configurable title template (`split-title-format`), shown automatically when more than N splits are open (`split-header-auto-threshold`)
-> - **Split rename** — double-click the title bar or use the right-click context menu to rename a split; the window/tab title follows the active split when no title bar is visible
-> - **Zoom icon** — the title bar icon reflects whether the split is zoomed or restored
-> - **Color customization** — right-click a split title bar to customize its foreground, background, and text colors
-> - **Drop overlay** — directional highlight (top/bottom/left/right) when dragging a split over another pane
-> - **Build timestamp** — UTC build date shown in the About dialog
-> - **New config keys** — `split-title-format`, `split-header-auto-threshold`, `split-title-doubleclick-action`
+> **What's different from upstream.** All additions are in the GTK (Linux/FreeBSD) app and the shared terminal core.
+>
+> _Splits & tiling_ (see [SPLITS-TILING.md](SPLITS-TILING.md) for the design):
+> - **Drag-and-drop reorder** — drag a pane's header onto another pane and drop on an edge (top/bottom/left/right) to rearrange the layout. Implements upstream [#10224](https://github.com/ghostty-org/ghostty/issues/10224).
+> - **Cross-tab & cross-window moves** — drag a pane into another tab or window, or onto the tab bar.
+> - **Tear-off to new window** — `move_split_to_new_window` pops a pane out into its own window.
+> - **Drop-zone overlay** — directional highlight while dragging a split over another pane.
+> - **Even-tiling distribution** — redistribute splits to equal sizes.
+> - **Split title bars** — per-pane headers using a configurable template (`split-title-format`), shown automatically past N splits (`split-header-auto-threshold`).
+> - **Split rename** — double-click the header or use the context menu; window/tab title follows the active split when no header is shown.
+> - **Zoom icon & per-split colors** — header icon reflects zoom state; right-click a header to set foreground/background/text colors.
+> - **Terminal mirroring** _(experimental)_ — one PTY shown live in multiple panes (`PtyHandle` 1:N).
+>
+> _Images & graphics_:
+> - **Sixel graphics** — `DCS q` sixel decoder, rendered through the Kitty graphics pipeline and advertised in the DA1 response.
+> - **iTerm2 inline images** — OSC 1337 `File=` (PNG), rendered through the same pipeline.
+>
+> _Configuration_:
+> - **In-app config editor** — a GTK GUI for editing config with a font selector, color picker, Save/Restart, and a live file watcher.
+> - **Config language server** — a `ghostty-config-lsp` server plus editor clients for the config file format.
+>
+> _Packaging & build_:
+> - **Flatpak builds + rolling release** — reproducible Flatpak bundles and an automated `tip` prerelease for x86_64 and aarch64 (see install instructions below).
+> - **Dev-container build system** — `mise` tasks driving a containerized `flatpak-builder`, plus upstream-merge helpers.
+> - **Build timestamp** — UTC build date shown in the About dialog.
+>
+> _New config keys_: `split-title-format`, `split-header-auto-threshold`, `split-title-doubleclick-action`
 >
 > **Install (Linux Flatpak)**
 >
