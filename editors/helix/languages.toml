@@ -1,0 +1,20 @@
+# Helix editor configuration for Ghostty config files.
+#
+# Copy or merge this into ~/.config/helix/languages.toml
+#
+# Prerequisites:
+#   - ghostty-config-lsp binary on PATH (build with: zig build emit-lsp)
+
+[[language]]
+name = "ghostty"
+scope = "source.ghostty"
+file-types = [
+  { glob = "**/ghostty/config" },
+  { glob = "**/.config/ghostty/config" },
+]
+comment-tokens = "#"
+indent = { tab-width = 2, unit = "  " }
+language-servers = ["ghostty-config-lsp"]
+
+[language-server.ghostty-config-lsp]
+command = "ghostty-config-lsp"

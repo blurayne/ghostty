@@ -61,6 +61,7 @@ emit_themes: bool = false,
 emit_xcframework: bool = false,
 emit_webdata: bool = false,
 emit_config_schema: bool = true,
+emit_lsp: bool = false,
 emit_unicode_table_gen: bool = false,
 
 /// True when Ghostty is being built as a dependency of another project
@@ -447,6 +448,12 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8, forkP
         "emit-config-schema",
         "Build and install config.schema.json and editor completion files.",
     ) orelse true;
+
+    config.emit_lsp = b.option(
+        bool,
+        "emit-lsp",
+        "Build and install the ghostty-config-lsp Language Server binary.",
+    ) orelse false;
 
     config.emit_xcframework = b.option(
         bool,

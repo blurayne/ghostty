@@ -104,14 +104,67 @@ pub fn build(b: *std.Build) !void {
     if (config.emit_webdata) webdata.install();
 
     // Config schema — installed by default, skippable with -Demit-config-schema=false
+    const schema = try buildpkg.GhosttySchema.init(b, &deps);
     {
-        const schema = try buildpkg.GhosttySchema.init(b, &deps);
         if (config.emit_config_schema) schema.install();
         const schema_step = b.step(
             "emit-config-schema",
             "Emit config.schema.json (and editor completion files) to zig-out/share/ghostty/schema/",
         );
         schema_step.dependOn(schema.step);
+    }
+
+    // Config LSP server — opt-in with -Demit-lsp=true
+    {
+        const lsp = try buildpkg.GhosttyLsp.init(b, &deps, &schema);
+        if (config.emit_lsp) lsp.install();
+        const lsp_step = b.step(
+            "emit-lsp",
+            "Build and install ghostty-config-lsp Language Server to zig-out/bin/",
+        );
+        lsp_step.dependOn(lsp.install_step);
+
+        // Unit test step for the LSP modules.
+        const test_lsp_step = b.step("test-lsp", "Run LSP unit tests");
+        const lsp_tests = b.addTest(.{
+            .name = "test-lsp",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/lsp/server.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
+        });
+        test_lsp_step.dependOn(&b.addRunArtifact(lsp_tests).step);
+
+        const schema_tests = b.addTest(.{
+            .name = "test-lsp-schema",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/lsp/schema.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
+        });
+        test_lsp_step.dependOn(&b.addRunArtifact(schema_tests).step);
+
+        const parser_tests = b.addTest(.{
+            .name = "test-lsp-parser",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/lsp/config_parser.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
+        });
+        test_lsp_step.dependOn(&b.addRunArtifact(parser_tests).step);
+
+        const rpc_tests = b.addTest(.{
+            .name = "test-lsp-jsonrpc",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/lsp/jsonrpc.zig"),
+                .target = b.graph.host,
+                .optimize = .Debug,
+            }),
+        });
+        test_lsp_step.dependOn(&b.addRunArtifact(rpc_tests).step);
     }
 
     // Ghostty bench tools

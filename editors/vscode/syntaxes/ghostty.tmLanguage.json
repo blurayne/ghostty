@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Ghostty Config",
+  "scopeName": "source.ghostty",
+  "fileTypes": [],
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#assignment"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.number-sign.ghostty",
+      "match": "#.*$"
+    },
+    "assignment": {
+      "match": "^([a-zA-Z][a-zA-Z0-9-]*)\\s*(=)\\s*(.*?)\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.other.key.ghostty"
+        },
+        "2": {
+          "name": "punctuation.separator.key-value.ghostty"
+        },
+        "3": {
+          "name": "string.unquoted.value.ghostty"
+        }
+      }
+    }
+  }
+}
