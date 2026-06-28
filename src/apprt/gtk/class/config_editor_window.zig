@@ -411,39 +411,33 @@ pub const ConfigEditorWindow = extern struct {
             if (comptime struct_field.name[0] == '_') continue;
             if (store_idx >= n) break;
 
-            const raw_obj = model.getItem(store_idx) orelse {
-                store_idx += 1;
-                continue;
-            };
-            const obj: *gobject.Object = @ptrCast(@alignCast(raw_obj));
-            defer obj.unref();
-            const entry = gobject.ext.cast(ConfigEntryObject, obj) orelse {
-                store_idx += 1;
-                continue;
-            };
+            if (model.getItem(store_idx)) |raw_obj| {
+                const obj: *gobject.Object = @ptrCast(@alignCast(raw_obj));
+                defer obj.unref();
+                if (gobject.ext.cast(ConfigEntryObject, obj)) |entry| {
+                    var buf: std.Io.Writer.Allocating = .init(alloc);
+                    defer buf.deinit();
 
-            // Serialize the fresh value for this field.
-            var buf: std.Io.Writer.Allocating = .init(alloc);
-            defer buf.deinit();
+                    configpkg.formatEntry(
+                        struct_field.type,
+                        struct_field.name,
+                        @field(new_core_config, struct_field.name),
+                        &buf.writer,
+                    ) catch {};
 
-            configpkg.formatEntry(
-                struct_field.type,
-                struct_field.name,
-                @field(new_core_config, struct_field.name),
-                &buf.writer,
-            ) catch {};
+                    const written = buf.written();
+                    const value_str: []const u8 = blk: {
+                        if (std.mem.indexOf(u8, written, " = ")) |sep| {
+                            const raw = written[sep + 3 ..];
+                            break :blk std.mem.trimRight(u8, raw, "\n");
+                        }
+                        break :blk written;
+                    };
 
-            const written = buf.written();
-            const value_str: []const u8 = blk: {
-                if (std.mem.indexOf(u8, written, " = ")) |sep| {
-                    const raw = written[sep + 3 ..];
-                    break :blk std.mem.trimRight(u8, raw, "\n");
+                    entry.setCurrentValue(value_str);
+                    entry.setDirty(false);
                 }
-                break :blk written;
-            };
-
-            entry.setCurrentValue(value_str);
-            entry.setDirty(false);
+            }
 
             store_idx += 1;
         }
