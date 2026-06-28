@@ -17,79 +17,81 @@ template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
       };
     }
 
-    Gtk.Box {
-      orientation: vertical;
-
+    Adw.ToastOverlay toast_overlay {
       Gtk.Box {
-        orientation: horizontal;
-        margin-top: 6;
-        margin-bottom: 6;
-        margin-start: 12;
-        margin-end: 12;
-        spacing: 18;
-
-        Gtk.CheckButton instant_reload_check {
-          label: _("Apply immediately");
-          active: true;
-          toggled => $on_instant_reload_toggled();
-        }
-
-        Gtk.CheckButton persist_check {
-          label: _("Persist changes");
-          toggled => $on_persist_toggled();
-        }
+        orientation: vertical;
 
         Gtk.Box {
+          orientation: horizontal;
+          margin-top: 6;
+          margin-bottom: 6;
+          margin-start: 12;
+          margin-end: 12;
+          spacing: 18;
+
+          Gtk.CheckButton instant_reload_check {
+            label: _("Apply immediately");
+            active: true;
+            toggled => $on_instant_reload_toggled();
+          }
+
+          Gtk.CheckButton persist_check {
+            label: _("Persist changes");
+            toggled => $on_persist_toggled();
+          }
+
+          Gtk.Box {
+            hexpand: true;
+          }
+
+          Gtk.Button save_btn {
+            label: _("Save");
+            clicked => $on_save_clicked();
+
+            styles ["suggested-action"]
+          }
+
+          Gtk.Button restart_btn {
+            label: _("Restart");
+            clicked => $on_restart_clicked();
+          }
+        }
+
+        Gtk.Separator {
+          orientation: horizontal;
+        }
+
+        Gtk.ScrolledWindow {
+          vexpand: true;
           hexpand: true;
-        }
 
-        Gtk.Button save_btn {
-          label: _("Save");
-          clicked => $on_save_clicked();
+          Gtk.ListView config_list {
+            show-separators: true;
+            single-click-activate: false;
 
-          styles ["suggested-action"]
-        }
+            model: Gtk.SingleSelection {
+              model: Gtk.FilterListModel filter_model {
+                incremental: true;
 
-        Gtk.Button restart_btn {
-          label: _("Restart");
-          clicked => $on_restart_clicked();
-        }
-      }
+                filter: Gtk.StringFilter string_filter {
+                  expression: expr item as <$GhosttyConfigEntryObject>.key-name;
+                  search: bind search_entry.text;
+                  match-mode: substring;
+                  ignore-case: true;
+                };
 
-      Gtk.Separator {
-        orientation: horizontal;
-      }
-
-      Gtk.ScrolledWindow {
-        vexpand: true;
-        hexpand: true;
-
-        Gtk.ListView config_list {
-          show-separators: true;
-          single-click-activate: false;
-
-          model: Gtk.SingleSelection {
-            model: Gtk.FilterListModel filter_model {
-              incremental: true;
-
-              filter: Gtk.StringFilter string_filter {
-                expression: expr item as <$GhosttyConfigEntryObject>.key-name;
-                search: bind search_entry.text;
-                match-mode: substring;
-                ignore-case: true;
-              };
-
-              model: Gio.ListStore entry_store {
-                item-type: typeof<$GhosttyConfigEntryObject>;
+                model: Gio.ListStore entry_store {
+                  item-type: typeof<$GhosttyConfigEntryObject>;
+                };
               };
             };
-          };
 
-          factory: Gtk.SignalListItemFactory {
-            setup => $factory_setup();
-            bind => $factory_bind();
-            unbind => $factory_unbind();
-          };
+            factory: Gtk.SignalListItemFactory {
+              setup => $factory_setup();
+              bind => $factory_bind();
+              unbind => $factory_unbind();
+            };
+          }
         }
       }
     }
