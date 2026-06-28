@@ -625,6 +625,93 @@ pub const StreamHandler = struct {
                 const msg = try termio.Message.writeReq(self.alloc, response[0..stream.pos]);
                 self.messageWriter(msg);
             },
+
+            .sixel => |*sixel_cmd| try self.sixelImage(sixel_cmd),
+        }
+    }
+
+    /// Decode a sixel DCS command and display it via the Kitty graphics pipeline.
+    ///
+    /// This mirrors `iterm2InlineImage`: decode the image data, build a
+    /// synthetic `kitty.graphics.Command`, and call `kittyGraphics`.
+    fn sixelImage(
+        self: *StreamHandler,
+        cmd: *terminal.dcs.Command.Sixel,
+    ) !void {
+        if (comptime !terminal_options.kitty_graphics) {
+            log.debug("sixel: kitty_graphics feature disabled, skipping", .{});
+            return;
+        }
+
+        if (comptime terminal_options.kitty_graphics) {
+            if (!self.terminal.screens.active.kitty_images.enabled()) {
+                log.debug("sixel: kitty image storage disabled, skipping", .{});
+                return;
+            }
+
+            const raw_data = cmd.data.written();
+            if (raw_data.len == 0) {
+                log.debug("sixel: empty data, skipping", .{});
+                return;
+            }
+
+            // Decode sixel → RGBA bitmap.
+            var dec = terminal.sixel.Decoder.init(
+                self.alloc,
+                cmd.params.ps,
+                cmd.params.pc,
+            );
+            defer dec.deinit();
+
+            dec.feed(raw_data) catch |err| {
+                log.warn("sixel: decode error: {}", .{err});
+                return;
+            };
+
+            const w = dec.width;
+            const h = dec.imageHeight();
+            if (w == 0 or h == 0) {
+                log.debug("sixel: decoded image is empty ({}x{}), skipping", .{ w, h });
+                return;
+            }
+
+            log.debug("sixel: decoded {}x{} image from {} raw bytes", .{ w, h, raw_data.len });
+
+            const rgba = dec.toRgba() catch |err| {
+                log.warn("sixel: toRgba error: {}", .{err});
+                return;
+            };
+            const rgba_buf = rgba orelse return;
+            // The Kitty command takes ownership via deinit; no errdefer needed
+            // since kittyGraphics does not return errors itself.
+
+            var kitty_cmd: terminal.kitty.graphics.Command = .{
+                .control = .{ .transmit_and_display = .{
+                    .transmission = .{
+                        .format = .rgba,
+                        .medium = .direct,
+                        .width = w,
+                        .height = h,
+                        .image_id = 0,
+                        .image_number = 0,
+                    },
+                    .display = .{
+                        .columns = 0, // let Kitty auto-size to image width
+                        .rows = 0,
+                        .cursor_movement = .after,
+                    },
+                } },
+                .data = rgba_buf,
+            };
+            defer kitty_cmd.deinit(self.alloc);
+
+            if (self.terminal.kittyGraphics(self.alloc, &kitty_cmd)) |resp| {
+                if (!resp.ok()) {
+                    log.warn("sixel: kitty graphics error: {s}", .{resp.message});
+                }
+            }
+
+            try self.queueRender();
         }
     }
 
@@ -922,12 +1009,13 @@ pub const StreamHandler = struct {
         switch (req) {
             .primary => self.messageWriter(.{
                 // 62 = Level 2 conformance
+                //  4 = Sixel graphics
                 // 22 = Color text
                 // 52 = Clipboard access
                 .write_stable = if (self.clipboard_write != .deny)
-                    "\x1B[?62;22;52c"
+                    "\x1B[?62;4;22;52c"
                 else
-                    "\x1B[?62;22c",
+                    "\x1B[?62;4;22c",
             }),
 
             .secondary => self.messageWriter(.{
