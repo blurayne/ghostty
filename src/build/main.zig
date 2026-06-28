@@ -19,6 +19,7 @@ pub const GhosttyI18n = @import("GhosttyI18n.zig");
 pub const GhosttyXcodebuild = @import("GhosttyXcodebuild.zig");
 pub const GhosttyXCFramework = @import("GhosttyXCFramework.zig");
 pub const GhosttySchema = @import("GhosttySchema.zig");
+pub const GhosttyLsp = @import("GhosttyLsp.zig");
 pub const GhosttyWebdata = @import("GhosttyWebdata.zig");
 pub const GhosttyZig = @import("GhosttyZig.zig");
 pub const HelpStrings = @import("HelpStrings.zig");

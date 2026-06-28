@@ -8,6 +8,10 @@ const SharedDeps = @import("SharedDeps.zig");
 /// Top-level step; depends on all three install steps (JSON + Sublime + VS Code).
 step: *std.Build.Step,
 
+/// The raw JSON output from the schema generator (lazy path into the build cache).
+/// Consumers (e.g. GhosttyLsp) can use this to embed the schema at compile time.
+json_output: std.Build.LazyPath,
+
 pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
     const exe = b.addExecutable(.{
         .name = "schemagen",
@@ -85,7 +89,7 @@ pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
     all.dependOn(&install_sublime.step);
     all.dependOn(&install_vscode.step);
 
-    return .{ .step = all };
+    return .{ .step = all, .json_output = json_out };
 }
 
 pub fn install(self: *const GhosttySchema) void {
