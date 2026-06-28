@@ -7,6 +7,15 @@ const DCS = terminal.DCS;
 
 const log = std.log.scoped(.terminal_dcs);
 
+/// Parameters extracted from the DCS `q` (sixel) header.
+pub const SixelParams = struct {
+    /// P2 / Pb — background select: 0=default bg (transparent), 1=black.
+    ps: u16 = 0,
+    /// P3 / Pc — colour register count (0 = use default 256).  Stored for
+    /// completeness; the decoder always allocates 256 registers.
+    pc: u16 = 0,
+};
+
 /// DCS command handler. This should be hooked into a terminal.Stream handler.
 /// The hook/put/unhook functions are meant to be called from the
 /// terminal.stream dcsHook, dcsPut, and dcsUnhook functions, respectively.
@@ -50,6 +59,28 @@ pub const Handler = struct {
     fn tryHook(self: Handler, alloc: Allocator, dcs: DCS) !?Hook {
         return switch (dcs.intermediates.len) {
             0 => switch (dcs.final) {
+                // Sixel graphics: ESC P [Pa;Pb;Pc] q <data> ST
+                // final='q', no intermediates.
+                'q' => sixel: {
+                    // Pa (index 0) = pixel aspect ratio (ignored for rendering).
+                    // Pb (index 1) = background select: 0=default, 1=black.
+                    // Pc (index 2) = colour register count (0=256).
+                    const ps: u16 = if (dcs.params.len >= 2) dcs.params[1] else 0;
+                    const pc: u16 = if (dcs.params.len >= 3) dcs.params[2] else 0;
+                    break :sixel .{
+                        .state = .{
+                            .sixel = .{
+                                .params = .{ .ps = ps, .pc = pc },
+                                .buffer = try .initCapacity(
+                                    alloc,
+                                    4096, // Sixel images can be large; start bigger
+                                ),
+                                .max_bytes = self.max_bytes,
+                            },
+                        },
+                    };
+                },
+
                 // Tmux control mode
                 'p' => tmux: {
                     if (comptime !build_options.tmux_control_mode) {
@@ -149,6 +180,18 @@ pub const Handler = struct {
                 buffer.data[buffer.len] = byte;
                 buffer.len += 1;
             },
+
+            .sixel => |*s| {
+                if (s.buffer.written().len >= s.max_bytes) {
+                    // Silently drop data that exceeds the limit.
+                    // deinit the buffer before moving to .ignore state.
+                    log.warn("sixel data exceeds max_bytes={}, dropping rest", .{s.max_bytes});
+                    s.buffer.deinit();
+                    self.state = .ignore;
+                    return null;
+                }
+                try s.buffer.writer.writeByte(byte);
+            },
         }
 
         return null;
@@ -195,6 +238,15 @@ pub const Handler = struct {
                 },
                 else => unreachable,
             } },
+
+            // Transfer ownership of the sixel buffer to the command.
+            // The handler clears its state; the command owns the buffer.
+            .sixel => |*s| .{
+                .sixel = .{
+                    .params = s.params,
+                    .data = s.buffer,
+                },
+            },
         };
     }
 
@@ -217,11 +269,23 @@ pub const Command = union(enum) {
     else
         void,
 
+    /// Sixel graphics data.  The `data` buffer contains the raw sixel byte
+    /// stream (everything after the DCS `q` final byte, before ST).  Caller
+    /// must call `deinit` to free the buffer.
+    sixel: Sixel,
+
+    pub const Sixel = struct {
+        params: SixelParams,
+        /// Raw sixel data buffer.  Ownership transferred from the DCS handler.
+        data: std.Io.Writer.Allocating,
+    };
+
     pub fn deinit(self: *Command) void {
         switch (self.*) {
             .xtgettcap => |*v| v.data.deinit(),
             .decrqss => {},
             .tmux => {},
+            .sixel => |*v| v.data.deinit(),
         }
     }
 
@@ -280,6 +344,13 @@ const State = union(enum) {
     else
         void,
 
+    /// Sixel graphics: accumulate raw sixel data stream.
+    sixel: struct {
+        params: SixelParams,
+        buffer: std.Io.Writer.Allocating,
+        max_bytes: usize,
+    },
+
     pub fn deinit(self: *State) void {
         switch (self.*) {
             .inactive,
@@ -291,6 +362,7 @@ const State = union(enum) {
             .tmux => |*v| if (comptime build_options.tmux_control_mode) {
                 v.deinit();
             } else unreachable,
+            .sixel => |*v| v.buffer.deinit(),
         }
     }
 };
@@ -427,4 +499,86 @@ test "tmux enter and implicit exit" {
         try testing.expect(cmd == .tmux);
         try testing.expect(cmd.tmux == .exit);
     }
+}
+
+test "sixel DCS hook recognized" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var h: Handler = .{};
+    defer h.deinit();
+
+    // final='q', no intermediates → sixel
+    const ret = h.hook(alloc, .{ .final = 'q' });
+    try testing.expect(ret == null); // hook returns null (no immediate command)
+    try testing.expect(h.state == .sixel);
+
+    // Feed some data bytes
+    _ = h.put('#');
+    _ = h.put('0');
+    _ = h.put('~');
+
+    var cmd = h.unhook().?;
+    defer cmd.deinit();
+    try testing.expect(cmd == .sixel);
+    try testing.expectEqualStrings("#0~", cmd.sixel.data.written());
+}
+
+test "sixel DCS with params" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var h: Handler = .{};
+    defer h.deinit();
+
+    // Pa=0, Pb=1 (black bg), Pc=256
+    _ = h.hook(alloc, .{ .params = &.{ 0, 1, 256 }, .final = 'q' });
+    try testing.expect(h.state == .sixel);
+    try testing.expectEqual(@as(u16, 1), h.state.sixel.params.ps);
+    try testing.expectEqual(@as(u16, 256), h.state.sixel.params.pc);
+
+    var cmd = h.unhook().?;
+    defer cmd.deinit();
+    try testing.expect(cmd == .sixel);
+    try testing.expectEqual(@as(u16, 1), cmd.sixel.params.ps);
+}
+
+test "sixel DCS different from XTGETTCAP" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // XTGETTCAP uses intermediate '+' before 'q', so it's different from sixel.
+    var h: Handler = .{};
+    defer h.deinit();
+    try testing.expect(h.hook(alloc, .{ .intermediates = "+", .final = 'q' }) == null);
+    try testing.expect(h.state == .xtgettcap);
+    // unhook returns an owned Command; deinit to avoid leak.
+    var cmd = h.unhook().?;
+    cmd.deinit();
+}
+
+test "sixel DCS max_bytes limit" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var h: Handler = .{ .max_bytes = 5 };
+    defer h.deinit();
+
+    _ = h.hook(alloc, .{ .final = 'q' });
+    try testing.expect(h.state == .sixel);
+
+    // Feed 6 bytes (1 over max_bytes=5) — should switch to ignore.
+    _ = h.put('a');
+    _ = h.put('b');
+    _ = h.put('c');
+    _ = h.put('d');
+    _ = h.put('e');
+    _ = h.put('f'); // this should trigger the overflow → .ignore
+
+    // After the overflow, state is .ignore.
+    try testing.expect(h.state == .ignore);
+
+    // unhook() returns null for .ignore and resets state to .inactive.
+    try testing.expect(h.unhook() == null);
+    try testing.expect(h.state == .inactive);
 }

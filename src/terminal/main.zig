@@ -8,6 +8,7 @@ const style = @import("style.zig");
 pub const apc = @import("apc.zig");
 pub const dcs = @import("dcs.zig");
 pub const osc = @import("osc.zig");
+pub const sixel = @import("sixel.zig");
 pub const point = @import("point.zig");
 pub const color = @import("color.zig");
 pub const device_attributes = @import("device_attributes.zig");
