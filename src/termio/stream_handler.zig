@@ -421,6 +421,26 @@ pub const StreamHandler = struct {
             // additional decoders in sys.zig.
             //
             // image_id=0 → Ghostty auto-assigns an ID.
+            //
+            // Resolve the iTerm2 width/height spec (cells / pixels / percent /
+            // auto) into a Kitty placement size in cells. A result of 0 means
+            // "use the image's natural size for this axis", which the renderer
+            // scales while preserving aspect ratio.
+            const display_cols = iterm2DisplayCells(
+                img.columns,
+                img.width_px,
+                img.width_percent,
+                self.terminal.cols,
+                self.terminal.width_px,
+            );
+            const display_rows = iterm2DisplayCells(
+                img.rows,
+                img.height_px,
+                img.height_percent,
+                self.terminal.rows,
+                self.terminal.height_px,
+            );
+
             const data_copy = try self.alloc.dupe(u8, img.data);
             var cmd: terminal.kitty.graphics.Command = .{
                 .control = .{ .transmit_and_display = .{
@@ -431,8 +451,8 @@ pub const StreamHandler = struct {
                         .image_number = 0,
                     },
                     .display = .{
-                        .columns = img.columns,
-                        .rows = img.rows,
+                        .columns = display_cols,
+                        .rows = display_rows,
                         // Move the cursor to just below the image after rendering.
                         .cursor_movement = .after,
                     },
@@ -450,6 +470,32 @@ pub const StreamHandler = struct {
 
             try self.queueRender();
         }
+    }
+
+    /// Resolve an iTerm2 width/height spec to a Kitty placement size in cells.
+    ///
+    /// iTerm2 accepts the size as cells, pixels (`Npx`), a percentage of the
+    /// terminal (`N%`), or "auto" (all-zero). Kitty placement sizes in cells
+    /// (0 = the image's natural size), so pixels and percentages are converted
+    /// using the terminal's current geometry. `cells` wins if set, then
+    /// pixels, then percent; otherwise 0 (natural size).
+    fn iterm2DisplayCells(
+        cells: u32,
+        px: u32,
+        percent: u8,
+        total_cells: u32,
+        total_px: u32,
+    ) u32 {
+        if (cells != 0) return cells;
+        if (px != 0 and total_px != 0 and total_cells != 0) {
+            const cell_px = total_px / total_cells;
+            if (cell_px == 0) return 0;
+            return (px + cell_px - 1) / cell_px; // ceil-divide
+        }
+        if (percent != 0 and total_cells != 0) {
+            return (@as(u32, percent) * total_cells + 50) / 100; // rounded
+        }
+        return 0;
     }
 
     pub inline fn dcsHook(self: *StreamHandler, dcs: terminal.DCS) !void {

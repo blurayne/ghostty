@@ -47,14 +47,16 @@ fn parseFile(alloc: std.mem.Allocator, value: []const u8) ?Command.Iterm2InlineI
         if (std.ascii.eqlIgnoreCase(k, "inline")) {
             inline_flag = std.mem.eql(u8, v, "1");
         } else if (std.ascii.eqlIgnoreCase(k, "width")) {
-            result.columns, result.width_px = parseDimension(v);
+            result.columns, result.width_px, result.width_percent = parseDimension(v);
         } else if (std.ascii.eqlIgnoreCase(k, "height")) {
-            result.rows, result.height_px = parseDimension(v);
+            result.rows, result.height_px, result.height_percent = parseDimension(v);
         } else if (std.ascii.eqlIgnoreCase(k, "preserveAspectRatio")) {
             result.preserve_aspect_ratio = !std.mem.eql(u8, v, "0");
+        } else if (std.ascii.eqlIgnoreCase(k, "size")) {
+            result.size = std.fmt.parseInt(u64, v, 10) catch 0;
         }
-        // name= and size= are intentionally ignored: name is cosmetic and
-        // size= is just a pre-allocation hint that the parser doesn't need.
+        // name= is intentionally ignored: it is a cosmetic download filename
+        // that has no effect on inline rendering.
     }
 
     if (!inline_flag) {
@@ -71,20 +73,26 @@ fn parseFile(alloc: std.mem.Allocator, value: []const u8) ?Command.Iterm2InlineI
     return result;
 }
 
-/// Parse a dimension value such as "80", "80px", or "auto".
-/// Returns { columns_or_rows, pixels } where exactly one is non-zero (or
-/// both zero for "auto").
-fn parseDimension(v: []const u8) struct { u32, u32 } {
-    if (std.ascii.eqlIgnoreCase(v, "auto") or v.len == 0) return .{ 0, 0 };
+/// Parse a dimension value such as "80" (cells), "80px" (pixels), "50%"
+/// (percent of the terminal dimension), or "auto".
+/// Returns { cells, pixels, percent } where at most one component is non-zero
+/// (all zero for "auto" or an unparseable value).
+fn parseDimension(v: []const u8) struct { u32, u32, u8 } {
+    if (std.ascii.eqlIgnoreCase(v, "auto") or v.len == 0) return .{ 0, 0, 0 };
 
     if (std.mem.endsWith(u8, v, "px")) {
-        const n = std.fmt.parseInt(u32, v[0 .. v.len - 2], 10) catch return .{ 0, 0 };
-        return .{ 0, n };
+        const n = std.fmt.parseInt(u32, v[0 .. v.len - 2], 10) catch return .{ 0, 0, 0 };
+        return .{ 0, n, 0 };
+    }
+
+    if (std.mem.endsWith(u8, v, "%")) {
+        const n = std.fmt.parseInt(u8, v[0 .. v.len - 1], 10) catch return .{ 0, 0, 0 };
+        return .{ 0, 0, n };
     }
 
     // Plain integer → terminal columns/rows.
-    const n = std.fmt.parseInt(u32, v, 10) catch return .{ 0, 0 };
-    return .{ n, 0 };
+    const n = std.fmt.parseInt(u32, v, 10) catch return .{ 0, 0, 0 };
+    return .{ n, 0, 0 };
 }
 
 /// Decode a standard base64 string into a freshly-allocated byte slice.
@@ -667,6 +675,42 @@ test "OSC: 1337: File= with preserveAspectRatio=0" {
     const cmd = p.end('\x1b').?.*;
     try testing.expect(cmd == .iterm2_inline_image);
     try testing.expectEqual(false, cmd.iterm2_inline_image.preserve_aspect_ratio);
+}
+
+test "OSC: 1337: File= with percent dimensions" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "dGVzdA==" is base64 for "test"
+    const input = "1337;File=inline=1;width=50%;height=25%:dGVzdA==";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .iterm2_inline_image);
+    const img = cmd.iterm2_inline_image;
+    try testing.expectEqual(0, img.columns);
+    try testing.expectEqual(0, img.width_px);
+    try testing.expectEqual(50, img.width_percent);
+    try testing.expectEqual(0, img.rows);
+    try testing.expectEqual(0, img.height_px);
+    try testing.expectEqual(25, img.height_percent);
+}
+
+test "OSC: 1337: File= with size metadata" {
+    const testing = std.testing;
+
+    var p: Parser = .init(testing.allocator);
+    defer p.deinit();
+
+    // "dGVzdA==" is base64 for "test"
+    const input = "1337;File=inline=1;size=2048:dGVzdA==";
+    for (input) |ch| p.next(ch);
+
+    const cmd = p.end('\x1b').?.*;
+    try testing.expect(cmd == .iterm2_inline_image);
+    try testing.expectEqual(2048, cmd.iterm2_inline_image.size);
 }
 
 test "OSC: 1337: File= auto dimensions" {
