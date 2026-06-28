@@ -7,8 +7,6 @@ services:
       - .:/workspace
       - flatpak-cache:/root/.local/share/flatpak
       - flatpak-builder-cache:/workspace/flatpak/.flatpak-builder
-      - type: tmpfs
-        target: /workspace/.git
     working_dir: /workspace
 
 volumes:

@@ -56,11 +56,28 @@ pub const ConfigEditorWindow = extern struct {
         /// The list view widget (bound from template).
         config_list: *gtk.ListView,
 
+        /// Toast overlay for success/error notifications.
+        toast_overlay: *adw.ToastOverlay,
+
         /// Whether to instantly apply changes on widget edit.
         instant_reload: bool = true,
 
         /// Whether to persist changes to disk on apply.
         persist: bool = false,
+
+        // ---- Phase 5: file watcher ----
+
+        /// Path to the config file (null-terminated, heap-allocated).
+        /// Set once at window init; freed in dispose.
+        config_path: ?[:0]const u8 = null,
+
+        /// Active GIO file monitor, or null if setup failed.
+        file_monitor: ?*gio.FileMonitor = null,
+
+        /// Set to true while we are in the middle of writing the config file
+        /// ourselves so that the monitor callback can ignore the self-triggered
+        /// inotify events.
+        writing_file: bool = false,
 
         pub var offset: c_int = 0;
     };
@@ -145,10 +162,35 @@ pub const ConfigEditorWindow = extern struct {
         // The filter is already created in initTemplate from the blueprint;
         // here we just ensure the search-changed signal does a refilter.
         // (Signal connections happen via template callbacks below.)
+
+        // ------------------------------------------------------------------
+        // Phase 5: Set up the file monitor for external-change detection.
+        self.setupFileMonitor();
+
+        // ------------------------------------------------------------------
+        // Phase 6: Ctrl+S keyboard shortcut — save dirty entries.
+        const key_ctrl = gtk.EventControllerKey.new();
+        _ = gtk.EventControllerKey.signals.key_pressed.connect(
+            key_ctrl,
+            *Self,
+            onKeyPressed,
+            self,
+            .{},
+        );
+        self.as(gtk.Widget).addController(key_ctrl.as(gtk.EventController));
     }
 
     fn dispose(self: *Self) callconv(.c) void {
         const priv = self.private();
+
+        // Phase 5: tear down file monitor first to avoid spurious events.
+        self.teardownFileMonitor();
+
+        // Free the config path string we allocated at init.
+        if (priv.config_path) |p| {
+            Application.default().allocator().free(p);
+            priv.config_path = null;
+        }
 
         // Clear the store so the list items are released.
         priv.entry_store.removeAll();
@@ -176,7 +218,7 @@ pub const ConfigEditorWindow = extern struct {
         _ = search;
         // gtk.FilterListModel refilters automatically when the filter changes
         // (our StringFilter is bound to search_entry.text via the blueprint).
-        @as(*gtk.Filter, @alignCast(@ptrCast(priv.string_filter))).changed(.different);
+        @as(*gtk.Filter, @ptrCast(@alignCast(priv.string_filter))).changed(.different);
     }
 
     /// Toggle instant-reload behaviour.
@@ -193,6 +235,228 @@ pub const ConfigEditorWindow = extern struct {
         self: *Self,
     ) callconv(.c) void {
         self.private().persist = button.getActive() != 0;
+    }
+
+    /// Key-press handler for the editor window.
+    /// Ctrl+S → save; Ctrl+R → reload from file.
+    fn onKeyPressed(
+        _: *gtk.EventControllerKey,
+        keyval: c_uint,
+        _: c_uint,
+        state: gdk.ModifierType,
+        self: *Self,
+    ) callconv(.c) c_int {
+        const ctrl = state.control_mask;
+        if (!ctrl) return 0;
+
+        const GDK_KEY_s: c_uint = 0x73;
+        const GDK_KEY_r: c_uint = 0x72;
+
+        if (keyval == GDK_KEY_s) {
+            self.saveConfigToDisk() catch |err| {
+                log.err("Ctrl+S save failed: {}", .{err});
+                self.showToast("Save failed — check the log");
+                return 1;
+            };
+            self.showToast("Changes saved");
+            return 1; // consumed
+        }
+
+        if (keyval == GDK_KEY_r) {
+            self.reloadFromFile();
+            return 1;
+        }
+
+        return 0;
+    }
+
+    //---------------------------------------------------------------
+    // Phase 5 — File watcher
+
+    /// Set up a GIO file monitor on the config file path.  Called once at
+    /// window init; silently skips setup if the path cannot be resolved.
+    fn setupFileMonitor(self: *Self) void {
+        const priv = self.private();
+        const alloc = Application.default().allocator();
+
+        // Resolve (and create-if-missing) the config file path.
+        const path = config_edit.openPath(alloc) catch |err| {
+            log.warn("setupFileMonitor: could not resolve config path: {}", .{err});
+            return;
+        };
+        priv.config_path = path;
+
+        const gfile = gio.File.newForPath(path.ptr);
+        defer gfile.unref();
+
+        // Monitor the file directly (not directory).
+        var err_ptr: ?*glib.Error = null;
+        const monitor = gfile.monitorFile(.flags_none, null, &err_ptr) orelse {
+            if (err_ptr) |e| {
+                const msg: [*:0]const u8 = if (e.f_message) |m| m else "(no message)";
+                log.warn("setupFileMonitor: g_file_monitor_file failed: {s}", .{msg});
+                glib.Error.free(e);
+            }
+            return;
+        };
+        // Reduce debounce rate-limit to 500 ms for reasonable responsiveness.
+        monitor.setRateLimit(500);
+
+        _ = gio.FileMonitor.signals.changed.connect(
+            monitor,
+            *Self,
+            onFileChanged,
+            self,
+            .{},
+        );
+
+        priv.file_monitor = monitor;
+        log.info("watching config file for external changes: {s}", .{path});
+    }
+
+    /// Cancel and release the file monitor.
+    fn teardownFileMonitor(self: *Self) void {
+        const priv = self.private();
+        if (priv.file_monitor) |fm| {
+            _ = fm.cancel();
+            fm.unref();
+            priv.file_monitor = null;
+        }
+    }
+
+    /// GIO FileMonitor "changed" signal handler.
+    ///
+    /// Fires on the GLib main thread.  We ignore events that we triggered
+    /// ourselves (writing_file flag) and show a conflict dialog for all
+    /// others with event type `changes_done_hint`.
+    fn onFileChanged(
+        _: *gio.FileMonitor,
+        _: *gio.File,
+        _: ?*gio.File,
+        event_type: gio.FileMonitorEvent,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+
+        // Ignore events triggered by our own writes.
+        if (priv.writing_file) return;
+
+        // Only act on the debounced "done writing" event.
+        if (event_type != .changes_done_hint) return;
+
+        self.showConflictDialog();
+    }
+
+    /// Show an Adw.AlertDialog offering Reload / Keep editor / Cancel.
+    fn showConflictDialog(self: *Self) void {
+        const dialog = adw.AlertDialog.new(
+            "Config File Changed",
+            "The configuration file was modified externally. " ++
+                "What would you like to do?",
+        );
+        dialog.addResponse("reload", "_Reload from file");
+        dialog.addResponse("keep", "_Keep editor state");
+        dialog.setDefaultResponse("reload");
+        dialog.setCloseResponse("keep");
+        dialog.setResponseAppearance("reload", .suggested);
+
+        dialog.choose(
+            self.as(gtk.Widget),
+            null,
+            onConflictDialogResponse,
+            self,
+        );
+    }
+
+    /// Async callback for the conflict dialog.
+    fn onConflictDialogResponse(
+        source: ?*gobject.Object,
+        result: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const self: *Self = @ptrCast(@alignCast(ud orelse return));
+        const src = source orelse return;
+        const ad: *adw.AlertDialog = @ptrCast(@alignCast(src));
+        const response = ad.chooseFinish(result);
+        if (std.mem.eql(u8, std.mem.span(response), "reload")) {
+            self.reloadFromFile();
+        }
+        // "keep" and "cancel" both just dismiss the dialog.
+    }
+
+    /// Reload all entry values from the live config (re-reads the file).
+    ///
+    /// This refreshes each ConfigEntryObject's current_value from a freshly
+    /// loaded Config, and clears the dirty flag on all rows.
+    fn reloadFromFile(self: *Self) void {
+        const priv = self.private();
+        const app = Application.default();
+        const alloc = app.allocator();
+
+        // Hard-reload the config from disk.
+        var new_core_config = configpkg.Config.load(alloc) catch |err| {
+            log.err("reloadFromFile: Config.load failed: {}", .{err});
+            self.showToast("Reload failed — check the log");
+            return;
+        };
+        defer new_core_config.deinit();
+
+        // Walk the store and update each entry's current value.
+        const model = priv.entry_store.as(gio.ListModel);
+        const n = model.getNItems();
+
+        var store_idx: u32 = 0;
+        @setEvalBranchQuota(100_000);
+        inline for (@typeInfo(configpkg.Config).@"struct".fields) |struct_field| {
+            if (comptime struct_field.name[0] == '_') continue;
+            if (store_idx >= n) break;
+
+            const raw_obj = model.getItem(store_idx) orelse {
+                store_idx += 1;
+                continue;
+            };
+            const obj: *gobject.Object = @ptrCast(@alignCast(raw_obj));
+            defer obj.unref();
+            const entry = gobject.ext.cast(ConfigEntryObject, obj) orelse {
+                store_idx += 1;
+                continue;
+            };
+
+            // Serialize the fresh value for this field.
+            var buf: std.Io.Writer.Allocating = .init(alloc);
+            defer buf.deinit();
+
+            configpkg.formatEntry(
+                struct_field.type,
+                struct_field.name,
+                @field(new_core_config, struct_field.name),
+                &buf.writer,
+            ) catch {};
+
+            const written = buf.written();
+            const value_str: []const u8 = blk: {
+                if (std.mem.indexOf(u8, written, " = ")) |sep| {
+                    const raw = written[sep + 3 ..];
+                    break :blk std.mem.trimRight(u8, raw, "\n");
+                }
+                break :blk written;
+            };
+
+            entry.setCurrentValue(value_str);
+            entry.setDirty(false);
+
+            store_idx += 1;
+        }
+
+        self.showToast("Reloaded from file");
+        log.info("reloadFromFile: refreshed {} entries", .{store_idx});
+    }
+
+    /// Show a short toast notification in the editor window.
+    fn showToast(self: *Self, comptime message: [:0]const u8) void {
+        const toast = adw.Toast.new(message);
+        toast.setTimeout(3);
+        self.private().toast_overlay.addToast(toast);
     }
 
     //---------------------------------------------------------------
@@ -637,7 +901,7 @@ pub const ConfigEditorWindow = extern struct {
         const dropdown = gobject.ext.cast(gtk.DropDown, dd) orelse return;
         const selected = dropdown.getSelected();
         const model = dropdown.getModel() orelse return;
-        const str_obj_ = gobject.ext.cast(gtk.StringObject, @as(*gobject.Object, @alignCast(@ptrCast(model.getItem(selected) orelse return))));
+        const str_obj_ = gobject.ext.cast(gtk.StringObject, @as(*gobject.Object, @ptrCast(@alignCast(model.getItem(selected) orelse return))));
         const str_obj = str_obj_ orelse return;
         const text = str_obj.getString();
         entry.setCurrentValue(std.mem.span(text));
@@ -736,14 +1000,6 @@ pub const ConfigEditorWindow = extern struct {
         const path = try config_edit.openPath(alloc);
         defer alloc.free(path);
 
-        const file = try std.fs.openFileAbsoluteZ(path, .{ .mode = .write_only });
-        defer file.close();
-        try file.seekFromEnd(0);
-
-        var wbuf: [4096]u8 = undefined;
-        var file_writer = file.writer(&wbuf);
-        const writer = &file_writer.interface;
-
         const model = priv.entry_store.as(gio.ListModel);
         const n = model.getNItems();
         var dirty_count: usize = 0;
@@ -757,6 +1013,18 @@ pub const ConfigEditorWindow = extern struct {
         }
 
         if (dirty_count == 0) return;
+
+        // Suppress monitor events that we trigger ourselves.
+        priv.writing_file = true;
+        defer priv.writing_file = false;
+
+        const file = try std.fs.openFileAbsoluteZ(path, .{ .mode = .write_only });
+        defer file.close();
+        try file.seekFromEnd(0);
+
+        var wbuf: [4096]u8 = undefined;
+        var file_writer = file.writer(&wbuf);
+        const writer = &file_writer.interface;
 
         try writer.writeAll("\n# --- config editor ---\n");
 
@@ -791,6 +1059,7 @@ pub const ConfigEditorWindow = extern struct {
             return;
         };
         log.info("config saved successfully", .{});
+        self.showToast("Changes saved");
     }
 
     fn getStatePath() ![]u8 {
@@ -851,6 +1120,7 @@ pub const ConfigEditorWindow = extern struct {
             class.bindTemplateChildPrivate("entry_store", .{});
             class.bindTemplateChildPrivate("filter_model", .{});
             class.bindTemplateChildPrivate("string_filter", .{});
+            class.bindTemplateChildPrivate("toast_overlay", .{});
 
             // Template callbacks.
             class.bindTemplateCallback("on_search_changed", &onSearchChanged);
