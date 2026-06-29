@@ -1,0 +1,60 @@
+name: Build Check
+
+# Fast compile check for the Linux/GTK app on every push and PR (docs-only
+# changes excluded), so code is verified in minutes instead of waiting for the
+# full Flatpak release build. Runs on standard GitHub-hosted runners with no
+# org secrets, mirroring the project's own Debian build recipe
+# (src/build/docker/debian/Dockerfile).
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+# One check per ref; a new push cancels the in-progress one.
+concurrency:
+  group: build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zig-build:
+    name: zig build (Linux/GTK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/.zig-cache-global
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get -qq update
+          sudo apt-get -qq -y --no-install-recommends install \
+            blueprint-compiler build-essential curl ca-certificates \
+            libbz2-dev libonig-dev libxml2-utils pandoc \
+            libadwaita-1-dev libgtk-4-dev libgtk4-layer-shell-dev xz-utils
+
+      - name: Install Zig
+        run: |
+          ZIG_VERSION=$(sed -n -E 's/^[[:space:]]*\.?minimum_zig_version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' build.zig.zon)
+          echo "Using Zig $ZIG_VERSION"
+          curl -fL -o /tmp/zig.tar.xz \
+            "https://ziglang.org/download/$ZIG_VERSION/zig-$(uname -m)-linux-$ZIG_VERSION.tar.xz"
+          sudo tar -xf /tmp/zig.tar.xz -C /opt
+          sudo ln -sf "/opt/zig-$(uname -m)-linux-$ZIG_VERSION/zig" /usr/local/bin/zig
+          zig version
+
+      - name: Cache Zig global cache (fetched dependencies)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ZIG_GLOBAL_CACHE_DIR }}
+          key: zig-global-${{ runner.os }}-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            zig-global-${{ runner.os }}-
+
+      - name: Build (compile check)
+        run: zig build -Doptimize=Debug -Dcpu=baseline
