@@ -4,6 +4,14 @@ Parked features adjacent to the tiling work in
 `docs/agents/plans/2026-06-22-ghostty-tiling-features.md`. Items here are intentionally
 deferred until the in-flight plan ships and we have user feedback.
 
+## Protocol references
+
+- **iTerm2 OSC escape codes** — https://iterm2.com/documentation-escape-codes.html
+  Comprehensive list of OSC 1337 keys. Many beyond the image protocol are still
+  unimplemented (annotations, OpenURL, badges, marks, profiles, key labels,
+  RequestAttention, StealFocus, SetBackgroundImageFile, etc.). Worth scanning
+  whenever picking the next feature to add.
+
 ---
 
 ## P8 — Synchronized (Broadcast) Input
