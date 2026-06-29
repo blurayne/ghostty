@@ -1027,6 +1027,10 @@ pub const SplitTree = extern struct {
             } else if (mode == .manual) {
                 header.as(gtk.Widget).setVisible(@intFromBool(priv.header_manual_visible));
             }
+
+            // Sync the hover handle: when the header is visible the handle must
+            // be suppressed so the two drag affordances don't coexist.
+            ssw.updateHoverHandle();
         }
     }
 

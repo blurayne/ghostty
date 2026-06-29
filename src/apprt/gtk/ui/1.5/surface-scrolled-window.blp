@@ -11,16 +11,44 @@ template $GhostttySurfaceScrolledWindow: Adw.Bin {
       surface: bind template.surface;
     }
 
-    // The double-nesting is required due to a GTK bug where you can't
-    // bind the first child of a builder layout. If you do, you get a double
-    // dispose. Easiest way to see that is simply remove this and see the
-    // GTK critical errors (and sometimes crashes).
-    Adw.Bin {
-      vexpand: true;
+    // The Overlay lets us show the drag-handle affordance on top of the
+    // scrolled window when the header is hidden.
+    Gtk.Overlay surface_overlay {
+      EventControllerMotion hover_motion {
+        motion => $on_hover_motion();
+        leave => $on_hover_leave();
+      }
 
-      Gtk.ScrolledWindow scrolled_window {
-        hscrollbar-policy: never;
-        vscrollbar-policy: bind $scrollbar_policy(template.config) as <Gtk.PolicyType>;
+      // The double-nesting is required due to a GTK bug where you can't
+      // bind the first child of a builder layout. If you do, you get a double
+      // dispose. Easiest way to see that is simply remove this and see the
+      // GTK critical errors (and sometimes crashes).
+      Adw.Bin {
+        vexpand: true;
+
+        Gtk.ScrolledWindow scrolled_window {
+          hscrollbar-policy: never;
+          vscrollbar-policy: bind $scrollbar_policy(template.config) as <Gtk.PolicyType>;
+        }
+      }
+
+      // Drag-handle overlay: shown when header is hidden and pointer is near top.
+      [overlay]
+      Adw.Bin hover_handle {
+        visible: false;
+        halign: center;
+        valign: start;
+        margin-top: 4;
+        can-focus: false;
+        focusable: false;
+
+        Gtk.Image {
+          styles ["split-drag-handle"]
+          icon-name: "view-list-symbolic";
+          pixel-size: 16;
+          can-focus: false;
+          focusable: false;
+        }
       }
     }
   }
