@@ -289,6 +289,11 @@ pub const Handler = struct {
             // Kitty transmit_and_display command and feeds it through the Kitty
             // graphics pipeline.
             .iterm2_inline_image => {},
+            // Multipart transfer protocol — no-op in test handler.
+            .iterm2_multipart_begin,
+            .iterm2_file_part,
+            .iterm2_file_end,
+            => {},
 
             // Have no terminal-modifying effect
             .show_desktop_notification,

@@ -126,6 +126,9 @@ pub const Action = union(Key) {
     color_operation: ColorOperation,
     semantic_prompt: SemanticPrompt,
     iterm2_inline_image: osc.Command.Iterm2InlineImage,
+    iterm2_multipart_begin: osc.Command.Iterm2MultipartBegin,
+    iterm2_file_part: []const u8,
+    iterm2_file_end: void,
 
     pub const Key = lib.Enum(
         lib.target,
@@ -224,6 +227,9 @@ pub const Action = union(Key) {
             "color_operation",
             "semantic_prompt",
             "iterm2_inline_image",
+            "iterm2_multipart_begin",
+            "iterm2_file_part",
+            "iterm2_file_end",
         },
     );
 
@@ -2051,6 +2057,18 @@ pub fn Stream(comptime H: type) type {
 
                 .iterm2_inline_image => |v| {
                     self.handler.vt(.iterm2_inline_image, v);
+                },
+
+                .iterm2_multipart_begin => |v| {
+                    self.handler.vt(.iterm2_multipart_begin, v);
+                },
+
+                .iterm2_file_part => |v| {
+                    self.handler.vt(.iterm2_file_part, v);
+                },
+
+                .iterm2_file_end => {
+                    self.handler.vt(.iterm2_file_end, {});
                 },
 
                 .conemu_sleep,
