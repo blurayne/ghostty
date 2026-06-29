@@ -212,6 +212,16 @@ pub const Command = union(Key) {
         /// When true, do not advance the cursor after rendering.
         do_not_move_cursor: bool = false,
 
+        /// Requested display width as a percentage of the terminal width
+        /// (0 = unspecified). Mutually exclusive with `columns` / `width_px`.
+        width_percent: u8 = 0,
+        /// Requested display height as a percentage of the terminal height
+        /// (0 = unspecified). Mutually exclusive with `rows` / `height_px`.
+        height_percent: u8 = 0,
+        /// File size in bytes advertised by the sender via `size=`, or 0 when
+        /// unspecified. Metadata only — not required to render inline.
+        size: u64 = 0,
+
         pub fn deinit(self: *Iterm2InlineImage, alloc: ?Allocator) void {
             const a = alloc orelse return;
             if (self.data.len > 0) a.free(self.data);
