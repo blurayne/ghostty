@@ -432,7 +432,7 @@ pub fn parse(parser: *Parser, _: ?u8) ?*Command {
                 parser.command = .invalid;
                 return null;
             }
-            parser.command = .{ .iterm2_file_part = value };
+            parser.command = .{ .iterm2_file_part = .{ .data = value } };
             return &parser.command;
         },
 
@@ -1025,7 +1025,7 @@ test "OSC: 1337: FilePart= produces iterm2_file_part with base64 data" {
 
     const cmd = p.end('\x1b').?.*;
     try testing.expect(cmd == .iterm2_file_part);
-    try testing.expectEqualStrings("dGVzdA==", cmd.iterm2_file_part);
+    try testing.expectEqualStrings("dGVzdA==", cmd.iterm2_file_part.data);
 }
 
 test "OSC: 1337: FilePart= with empty value returns null" {

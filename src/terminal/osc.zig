@@ -184,7 +184,7 @@ pub const Command = union(Key) {
     /// OSC 1337 FilePart= — one chunk of a multipart image, base64-encoded.
     /// The slice points into the OSC parser's allocating buffer; the stream
     /// handler must copy it before the parser resets.
-    iterm2_file_part: []const u8,
+    iterm2_file_part: Iterm2FilePart,
 
     /// OSC 1337 FileEnd — finalises a multipart transfer.
     iterm2_file_end: void,
@@ -258,6 +258,18 @@ pub const Command = union(Key) {
         /// This type is not C ABI compatible; use void to indicate that.
         pub const C = void;
         pub fn cval(_: Iterm2MultipartBegin) C {
+            return {};
+        }
+    };
+
+    /// One chunk of a multipart image transfer. Owned by the OSC parser;
+    /// stream handler must copy `data` before the parser resets.
+    pub const Iterm2FilePart = struct {
+        data: []const u8,
+
+        /// This type is not C ABI compatible; use void to indicate that.
+        pub const C = void;
+        pub fn cval(_: Iterm2FilePart) C {
             return {};
         }
     };

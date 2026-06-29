@@ -127,7 +127,7 @@ pub const Action = union(Key) {
     semantic_prompt: SemanticPrompt,
     iterm2_inline_image: osc.Command.Iterm2InlineImage,
     iterm2_multipart_begin: osc.Command.Iterm2MultipartBegin,
-    iterm2_file_part: []const u8,
+    iterm2_file_part: osc.Command.Iterm2FilePart,
     iterm2_file_end: void,
 
     pub const Key = lib.Enum(

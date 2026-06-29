@@ -388,7 +388,7 @@ pub const StreamHandler = struct {
 
             .iterm2_inline_image => try self.iterm2InlineImage(value),
             .iterm2_multipart_begin => try self.iterm2MultipartBegin(value),
-            .iterm2_file_part => try self.iterm2FilePart(value),
+            .iterm2_file_part => try self.iterm2FilePart(value.data),
             .iterm2_file_end => try self.iterm2FileEnd(),
 
             // Unimplemented
