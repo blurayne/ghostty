@@ -978,7 +978,7 @@ pub const ConfigEditorWindow = extern struct {
         const name = std.mem.span(name_ptr);
         const app = Application.default();
         const alloc = app.allocator();
-        const url = std.fmt.allocPrint(alloc, "https://ghostty.org/docs/config/{s}", .{name}) catch return;
+        const url = std.fmt.allocPrint(alloc, "https://ghostty.org/docs/config/reference#{s}", .{name}) catch return;
         defer alloc.free(url);
         app.openUrlFallback(.text, url);
     }
