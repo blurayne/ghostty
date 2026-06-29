@@ -1,13 +1,8 @@
 # Plan: Glyph Protocol — Rendering Integration
 Date: 2026-06-29
 Priority: P2
-Status: **blocked on user input — DO NOT IMPLEMENT until Open Questions 1, 2, 3 are answered**
-
-> **Implementation gate.** This plan must not be executed until the three
-> open questions at the bottom (font-grid access for `system=true`, snapshot
-> mechanism, cache invalidation granularity) have a recorded decision in the
-> "Recommended answers" section below. An implementation agent that reads
-> this plan should refuse to proceed without those answers.
+Status: **ready to implement** — user decisions recorded 2026-06-29:
+Q1=`system=false`, Q2=copy, Q3=coarse.
 
 ## Scope Clarification
 
@@ -477,7 +472,8 @@ under the existing mutex, or round-trip through the apprt mailbox.
 **Recommended.** Ship `system=false`. It's never wrong, just suboptimal. Add
 real coverage detection later if a concrete use case demands it.
 
-**Decision:** _____
+**Decision:** ship `system=false` always. Defer font-grid plumbing to a
+follow-up if bandwidth becomes a real concern.
 
 ### Q2. Snapshot the glossary by copy, or by atomic refcounted pointer swap?
 
@@ -500,7 +496,8 @@ consistent view without blocking the IO thread.
 **Recommended.** Copy. 32–64 KB per glossary change is nothing on modern
 hardware. Lock-free RC is over-engineering for the data volume.
 
-**Decision:** _____
+**Decision:** copy under the terminal mutex into a per-frame
+`GlossaryFace`. No atomic-RC pointer machinery.
 
 ### Q3. Coarse (whole-PUA) or fine (per-codepoint) bitmap cache invalidation on `r`?
 
@@ -524,7 +521,8 @@ render); coarse causes a stutter on each registration.
 **Recommended.** Coarse. Matches the dominant usage pattern. Upgrade to fine
 only if real apps cause stutter.
 
-**Decision:** _____
+**Decision:** coarse — invalidate the whole PUA bitmap cache on any `r`
+or `c`. Upgrade to per-codepoint only if a real app demonstrates stutter.
 
 ---
 
@@ -532,8 +530,8 @@ only if real apps cause stutter.
 
 Before an implementation agent picks this plan up, confirm:
 
-- [ ] Q1 has a recorded **Decision:**
-- [ ] Q2 has a recorded **Decision:**
-- [ ] Q3 has a recorded **Decision:**
-- [ ] User has acknowledged that this is a fork-custom protocol with no upstream
+- [x] Q1 has a recorded **Decision:** — `system=false`
+- [x] Q2 has a recorded **Decision:** — copy
+- [x] Q3 has a recorded **Decision:** — coarse
+- [x] User has acknowledged that this is a fork-custom protocol with no upstream
       acceptance path (we never merge to ghostty-org)
