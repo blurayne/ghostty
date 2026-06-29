@@ -173,24 +173,33 @@ template $GhosttyWindow: Adw.ApplicationWindow {
 }
 
 menu split_menu {
-  item {
-    label: _("Split Up");
-    action: "win.split-up";
+  section {
+    item {
+      label: _("Split Up");
+      action: "win.split-up";
+    }
+
+    item {
+      label: _("Split Down");
+      action: "win.split-down";
+    }
+
+    item {
+      label: _("Split Left");
+      action: "win.split-left";
+    }
+
+    item {
+      label: _("Split Right");
+      action: "win.split-right";
+    }
   }
 
-  item {
-    label: _("Split Down");
-    action: "win.split-down";
-  }
-
-  item {
-    label: _("Split Left");
-    action: "win.split-left";
-  }
-
-  item {
-    label: _("Split Right");
-    action: "win.split-right";
+  section {
+    item {
+      label: _("Toggle Split Headers");
+      action: "split-tree.toggle-header";
+    }
   }
 }
 

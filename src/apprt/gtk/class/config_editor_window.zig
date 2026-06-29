@@ -1135,6 +1135,13 @@ pub const ConfigEditorWindow = extern struct {
         _ = app.core().mailbox.push(.open_config, .forever);
     }
 
+    fn onReloadClicked(
+        _: *gtk.Button,
+        self: *Self,
+    ) callconv(.c) void {
+        self.reloadFromFile();
+    }
+
     //---------------------------------------------------------------
     // Boilerplate
 
@@ -1178,6 +1185,7 @@ pub const ConfigEditorWindow = extern struct {
             class.bindTemplateCallback("on_save_clicked", &onSaveClicked);
             class.bindTemplateCallback("on_restart_clicked", &onRestartClicked);
             class.bindTemplateCallback("on_open_file_clicked", &onOpenFileClicked);
+            class.bindTemplateCallback("on_reload_clicked", &onReloadClicked);
             class.bindTemplateCallback("factory_setup", &factorySetup);
             class.bindTemplateCallback("factory_bind", &factoryBind);
             class.bindTemplateCallback("factory_unbind", &factoryUnbind);

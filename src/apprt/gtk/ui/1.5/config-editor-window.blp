@@ -62,8 +62,14 @@ template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
             clicked => $on_open_file_clicked();
           }
 
+          Gtk.Button reload_btn {
+            label: _("Reload");
+            tooltip-text: _("Discard pending edits and reload from disk");
+            clicked => $on_reload_clicked();
+          }
+
           Gtk.Button save_btn {
-            label: _("Save");
+            label: _("Save and apply");
             clicked => $on_save_clicked();
 
             styles ["suggested-action"]
