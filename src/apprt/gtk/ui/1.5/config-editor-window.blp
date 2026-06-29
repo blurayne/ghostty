@@ -44,6 +44,12 @@ template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
             hexpand: true;
           }
 
+          Gtk.Button open_file_btn {
+            label: _("Open File");
+            tooltip-text: _("Open the config file in an external editor");
+            clicked => $on_open_file_clicked();
+          }
+
           Gtk.Button save_btn {
             label: _("Save");
             clicked => $on_save_clicked();

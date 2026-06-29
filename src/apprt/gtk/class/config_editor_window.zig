@@ -1082,6 +1082,15 @@ pub const ConfigEditorWindow = extern struct {
         Application.default().as(gio.Application).quit();
     }
 
+    fn onOpenFileClicked(
+        _: *gtk.Button,
+        self: *Self,
+    ) callconv(.c) void {
+        _ = self;
+        const app = Application.default();
+        _ = app.core().mailbox.push(.open_config, .forever);
+    }
+
     //---------------------------------------------------------------
     // Boilerplate
 
@@ -1122,6 +1131,7 @@ pub const ConfigEditorWindow = extern struct {
             class.bindTemplateCallback("on_persist_toggled", &onPersistToggled);
             class.bindTemplateCallback("on_save_clicked", &onSaveClicked);
             class.bindTemplateCallback("on_restart_clicked", &onRestartClicked);
+            class.bindTemplateCallback("on_open_file_clicked", &onOpenFileClicked);
             class.bindTemplateCallback("factory_setup", &factorySetup);
             class.bindTemplateCallback("factory_bind", &factoryBind);
             class.bindTemplateCallback("factory_unbind", &factoryUnbind);
