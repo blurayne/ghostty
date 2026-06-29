@@ -83,6 +83,29 @@ pub const StreamHandler = struct {
     /// this to determine if we need to default the window title.
     seen_title: bool = false,
 
+    /// Accumulation state for iTerm2 multipart image transfers (OSC 1337
+    /// MultipartFile= / FilePart= / FileEnd protocol).  Null when no transfer
+    /// is in progress.
+    iterm2_multipart: ?Iterm2MultipartState = null,
+
+    /// State for an in-progress iTerm2 multipart image transfer.
+    const Iterm2MultipartState = struct {
+        /// Header fields parsed from the MultipartFile= sequence.
+        header: terminal.osc.Command.Iterm2MultipartBegin,
+        /// Accumulated raw base64 bytes from FilePart= sequences.
+        /// Stored as base64 (not yet decoded) to avoid two alloc passes.
+        /// Decoded when FileEnd is received.
+        data: std.ArrayListUnmanaged(u8),
+        /// Safety cap: abort if accumulated base64 exceeds this size.
+        /// Decoded size will be ~3/4 of this, i.e. ~24 MB for 32 MB cap.
+        const max_bytes: usize = 32 * 1024 * 1024;
+
+        fn deinit(self: *Iterm2MultipartState, alloc: Allocator) void {
+            self.data.deinit(alloc);
+            self.header.deinit(alloc);
+        }
+    };
+
     pub const Stream = terminal.Stream(StreamHandler);
 
     /// True if we have tmux control mode built in.
@@ -91,6 +114,10 @@ pub const StreamHandler = struct {
     pub fn deinit(self: *StreamHandler) void {
         self.apc.deinit();
         self.dcs.deinit();
+        if (self.iterm2_multipart) |*mp| {
+            mp.deinit(self.alloc);
+            self.iterm2_multipart = null;
+        }
         if (comptime tmux_enabled) tmux: {
             const viewer = self.tmux_viewer orelse break :tmux;
             viewer.deinit();
@@ -360,12 +387,146 @@ pub const StreamHandler = struct {
             .apc_put => self.apc.feed(self.alloc, value),
 
             .iterm2_inline_image => try self.iterm2InlineImage(value),
+            .iterm2_multipart_begin => try self.iterm2MultipartBegin(value),
+            .iterm2_file_part => try self.iterm2FilePart(value),
+            .iterm2_file_end => try self.iterm2FileEnd(),
 
             // Unimplemented
             .title_push,
             .title_pop,
             => {},
         }
+    }
+
+    /// Detect the image format from the first few magic bytes.
+    /// Returns true if the data appears to be PNG; false otherwise.
+    /// PNG magic: \x89 P N G \r \n \x1a \n
+    fn iterm2IsPng(data: []const u8) bool {
+        const png_magic = "\x89PNG\r\n\x1a\n";
+        return data.len >= png_magic.len and
+            std.mem.eql(u8, data[0..png_magic.len], png_magic);
+    }
+
+    /// Core helper: transmit `data` (owned by caller; will be duped) through
+    /// the Kitty graphics pipeline as a PNG inline image. Returns true on
+    /// success, false if the image was skipped (not an error).
+    ///
+    /// `columns` and `rows` are in terminal cell units (0 = auto).
+    /// `do_not_move_cursor`: when true, cursor stays at current position.
+    fn iterm2DisplayImage(
+        self: *StreamHandler,
+        data: []const u8,
+        columns: u32,
+        rows: u32,
+        do_not_move_cursor: bool,
+    ) !bool {
+        if (comptime !terminal_options.kitty_graphics) return false;
+
+        if (comptime terminal_options.kitty_graphics) {
+            if (!self.terminal.screens.active.kitty_images.enabled()) {
+                log.debug("iterm2 inline image: kitty image storage disabled, skipping", .{});
+                return false;
+            }
+
+            if (data.len == 0) {
+                log.debug("iterm2 inline image: empty data, skipping", .{});
+                return false;
+            }
+
+            // Format detection: only PNG is supported by the wuffs decoder.
+            if (!iterm2IsPng(data)) {
+                log.warn(
+                    "iterm2 inline image: non-PNG format detected (magic={x:0>2}{x:0>2}...), " ++
+                        "skipping — only PNG is supported in this build",
+                    .{
+                        if (data.len > 0) data[0] else 0,
+                        if (data.len > 1) data[1] else 0,
+                    },
+                );
+                return false;
+            }
+
+            log.debug(
+                "iterm2 inline image: size={} columns={} rows={} do_not_move_cursor={}",
+                .{ data.len, columns, rows, do_not_move_cursor },
+            );
+
+            // Build a synthetic Kitty transmit-and-display command.
+            //
+            // We must copy data because the Kitty command takes ownership of
+            // its data slice and will free it via cmd.deinit(alloc).
+            //
+            // image_id=0 → Ghostty auto-assigns an ID.
+            const data_copy = try self.alloc.dupe(u8, data);
+            var cmd: terminal.kitty.graphics.Command = .{
+                .control = .{ .transmit_and_display = .{
+                    .transmission = .{
+                        .format = .png,
+                        .medium = .direct,
+                        .image_id = 0,
+                        .image_number = 0,
+                    },
+                    .display = .{
+                        .columns = columns,
+                        .rows = rows,
+                        .cursor_movement = if (do_not_move_cursor) .none else .after,
+                    },
+                } },
+                .data = data_copy,
+            };
+            defer cmd.deinit(self.alloc);
+
+            if (self.terminal.kittyGraphics(self.alloc, &cmd)) |resp| {
+                if (!resp.ok()) {
+                    log.warn("iterm2 inline image: kitty graphics error: {s}", .{resp.message});
+                }
+            }
+
+            try self.queueRender();
+            return true;
+        }
+        unreachable;
+    }
+
+    /// Resolve dimensions for Kitty display: convert pixel/percent dims to
+    /// terminal cell counts. Returns cols/rows in terminal cells (0 = auto).
+    ///
+    /// The Kitty display command uses `c` (columns) and `r` (rows) as terminal
+    /// cell counts for the display footprint; pixel dimensions must be converted.
+    fn iterm2ResolveDisplay(
+        self: *StreamHandler,
+        columns: u32,
+        rows: u32,
+        width_px: u32,
+        height_px: u32,
+        width_pct: u8,
+        height_pct: u8,
+    ) struct { cols: u32, rws: u32 } {
+        const cell = self.size.cell;
+        var cols = columns;
+        var rws = rows;
+
+        // Pixel dimensions: convert to cell counts (round up).
+        if (cols == 0 and width_px != 0 and cell.width != 0) {
+            cols = (width_px + cell.width - 1) / cell.width;
+        }
+        if (rws == 0 and height_px != 0 and cell.height != 0) {
+            rws = (height_px + cell.height - 1) / cell.height;
+        }
+
+        // Percent dimensions: resolve to pixel first, then convert to cells.
+        if (cols == 0 and width_pct != 0) {
+            const vp = self.size.terminal();
+            const px = @min(vp.width, @as(u64, vp.width) * width_pct / 100);
+            if (cell.width != 0) cols = @intCast((px + cell.width - 1) / cell.width);
+        }
+        if (rws == 0 and height_pct != 0) {
+            const vp = self.size.terminal();
+            const px = @min(vp.height, @as(u64, vp.height) * height_pct / 100);
+            if (cell.height != 0) rws = @intCast((px + cell.height - 1) / cell.height);
+        }
+
+        return .{ .cols = cols, .rws = rws };
     }
 
     /// Handle an OSC 1337 `File=` inline image by injecting it into the
@@ -384,72 +545,223 @@ pub const StreamHandler = struct {
             return;
         }
 
-        // The remainder of this function references types from the Kitty
-        // graphics module which only exists when kitty_graphics=true.  The
-        // comptime early-return above ensures we never reach here when the
-        // feature is compiled out.  We wrap the body in a comptime block to
-        // prevent the Zig compiler from attempting to resolve
-        // terminal.kitty.graphics.Command when kitty_graphics=false.
-        if (comptime terminal_options.kitty_graphics) {
-            if (!self.terminal.screens.active.kitty_images.enabled()) {
-                log.debug("iterm2 inline image: kitty image storage disabled, skipping", .{});
-                return;
-            }
+        const dims = self.iterm2ResolveDisplay(
+            img.columns,
+            img.rows,
+            img.width_px,
+            img.height_px,
+            img.width_pct,
+            img.height_pct,
+        );
 
-            if (img.data.len == 0) {
-                log.debug("iterm2 inline image: empty data, skipping", .{});
-                return;
-            }
+        _ = try self.iterm2DisplayImage(
+            img.data,
+            dims.cols,
+            dims.rws,
+            img.do_not_move_cursor,
+        );
+    }
 
-            log.debug(
-                "iterm2 inline image: size={} columns={} rows={} width_px={} height_px={}",
-                .{ img.data.len, img.columns, img.rows, img.width_px, img.height_px },
-            );
-
-            // Build a synthetic Kitty transmit-and-display command.
-            //
-            // We must copy img.data because the Kitty command takes ownership of
-            // its data slice and will free it via cmd.deinit(alloc).  The original
-            // img.data is still owned by the OSC parser and will be freed when the
-            // parser resets — freeing it twice would be a bug.
-            //
-            // format=png: the Kitty LoadingImage path treats this as PNG data and
-            // will pass it through the sys.decode_png decoder (wuffs by default).
-            // Only PNG images are decoded; JPEG, GIF, WebP, BMP etc. will fail with
-            // "EINVAL: invalid data" which is logged but not fatal.
-            // Supporting additional formats would require format-detection here and
-            // additional decoders in sys.zig.
-            //
-            // image_id=0 → Ghostty auto-assigns an ID.
-            const data_copy = try self.alloc.dupe(u8, img.data);
-            var cmd: terminal.kitty.graphics.Command = .{
-                .control = .{ .transmit_and_display = .{
-                    .transmission = .{
-                        .format = .png,
-                        .medium = .direct,
-                        .image_id = 0,
-                        .image_number = 0,
-                    },
-                    .display = .{
-                        .columns = img.columns,
-                        .rows = img.rows,
-                        // Move the cursor to just below the image after rendering.
-                        .cursor_movement = .after,
-                    },
-                } },
-                .data = data_copy,
-            };
-            defer cmd.deinit(self.alloc);
-
-            if (self.terminal.kittyGraphics(self.alloc, &cmd)) |resp| {
-                if (!resp.ok()) {
-                    log.warn("iterm2 inline image: kitty graphics error: {s}", .{resp.message});
-                }
-                // We do not send a wire response to the pty for OSC 1337.
-            }
-
-            try self.queueRender();
+    /// Handle OSC 1337 `MultipartFile=` — begin a multipart image transfer.
+    fn iterm2MultipartBegin(
+        self: *StreamHandler,
+        header: terminal.osc.Command.Iterm2MultipartBegin,
+    ) !void {
+        // Abort any in-progress transfer.
+        if (self.iterm2_multipart) |*mp| {
+            log.warn("iterm2 multipart: new MultipartFile= received while transfer in progress; aborting previous", .{});
+            mp.deinit(self.alloc);
+            self.iterm2_multipart = null;
         }
+
+        // The header fields were allocated by the OSC parser; we must copy the
+        // name because the parser will free it after this call returns.
+        const name_copy: []const u8 = if (header.name.len > 0)
+            try self.alloc.dupe(u8, header.name)
+        else
+            "";
+
+        self.iterm2_multipart = .{
+            .header = .{
+                .name = name_copy,
+                .columns = header.columns,
+                .rows = header.rows,
+                .width_px = header.width_px,
+                .height_px = header.height_px,
+                .width_pct = header.width_pct,
+                .height_pct = header.height_pct,
+                .preserve_aspect_ratio = header.preserve_aspect_ratio,
+                .do_not_move_cursor = header.do_not_move_cursor,
+                .display_inline = header.display_inline,
+            },
+            .data = .{},
+        };
+        log.debug("iterm2 multipart: begin transfer name={s} inline={}", .{ header.name, header.display_inline });
+    }
+
+    /// Handle OSC 1337 `FilePart=` — append one base64 chunk to the buffer.
+    fn iterm2FilePart(
+        self: *StreamHandler,
+        chunk: []const u8,
+    ) !void {
+        const mp = &(self.iterm2_multipart orelse {
+            log.warn("iterm2 multipart: FilePart= received with no active MultipartFile=, ignoring", .{});
+            return;
+        });
+
+        if (mp.data.items.len + chunk.len > Iterm2MultipartState.max_bytes) {
+            log.warn(
+                "iterm2 multipart: data exceeds max size ({d} bytes), aborting",
+                .{Iterm2MultipartState.max_bytes},
+            );
+            mp.deinit(self.alloc);
+            self.iterm2_multipart = null;
+            return;
+        }
+
+        try mp.data.appendSlice(self.alloc, chunk);
+    }
+
+    /// Handle OSC 1337 `FileEnd` — finalise and display/download the image.
+    fn iterm2FileEnd(self: *StreamHandler) !void {
+        var mp = self.iterm2_multipart orelse {
+            log.warn("iterm2 multipart: FileEnd received with no active MultipartFile=, ignoring", .{});
+            return;
+        };
+        // Clear state unconditionally so any error path doesn't double-free.
+        self.iterm2_multipart = null;
+        defer mp.deinit(self.alloc);
+
+        if (mp.data.items.len == 0) {
+            log.debug("iterm2 multipart: FileEnd with empty data, skipping", .{});
+            return;
+        }
+
+        log.debug("iterm2 multipart: finalising transfer name={s} b64_len={}", .{ mp.header.name, mp.data.items.len });
+
+        if (!mp.header.display_inline) {
+            // Download / attachment case.
+            try self.iterm2DownloadFile(mp.header.name, mp.data.items);
+            return;
+        }
+
+        // Inline display: decode the accumulated base64 payload.
+        const simd = @import("../simd/main.zig");
+        const b64 = mp.data.items;
+        const max_decoded = simd.base64.maxLen(b64);
+        if (max_decoded == 0) {
+            log.warn("iterm2 multipart: base64 max length is 0", .{});
+            return;
+        }
+
+        const decoded_buf = try self.alloc.alloc(u8, b64.len);
+        defer self.alloc.free(decoded_buf);
+        @memcpy(decoded_buf[0..b64.len], b64);
+
+        const decoded = simd.base64.decode(decoded_buf[0..b64.len], decoded_buf[0..max_decoded]) catch |err| {
+            log.warn("iterm2 multipart: base64 decode error: {}", .{err});
+            return;
+        };
+
+        const dims = self.iterm2ResolveDisplay(
+            mp.header.columns,
+            mp.header.rows,
+            mp.header.width_px,
+            mp.header.height_px,
+            mp.header.width_pct,
+            mp.header.height_pct,
+        );
+
+        _ = try self.iterm2DisplayImage(
+            decoded,
+            dims.cols,
+            dims.rws,
+            mp.header.do_not_move_cursor,
+        );
+    }
+
+    /// Write image data to the user's download directory.
+    /// Uses $XDG_DOWNLOAD_DIR, falling back to $HOME/Downloads.
+    /// On failure, logs an error but does not propagate it.
+    fn iterm2DownloadFile(self: *StreamHandler, raw_name: []const u8, b64_data: []const u8) !void {
+        // Decode base64 first.
+        const simd = @import("../simd/main.zig");
+        const max_decoded = simd.base64.maxLen(b64_data);
+        if (max_decoded == 0) {
+            log.warn("iterm2 download: base64 max length is 0", .{});
+            return;
+        }
+
+        const alloc = self.alloc;
+        const decode_buf = try alloc.alloc(u8, b64_data.len);
+        defer alloc.free(decode_buf);
+        @memcpy(decode_buf[0..b64_data.len], b64_data);
+
+        const decoded = simd.base64.decode(decode_buf[0..b64_data.len], decode_buf[0..max_decoded]) catch |err| {
+            log.warn("iterm2 download: base64 decode error: {}", .{err});
+            return;
+        };
+
+        // Sanitize filename: take basename only, strip non-printable / path chars.
+        const safe_name = iterm2SanitizeFilename(raw_name) catch "iterm2-download.bin";
+
+        // Resolve download directory.
+        // home_path is allocated only when $HOME fallback is used; we own it.
+        var home_path: ?[]u8 = null;
+        defer if (home_path) |p| alloc.free(p);
+
+        const download_dir: []const u8 = blk: {
+            if (std.posix.getenv("XDG_DOWNLOAD_DIR")) |d| {
+                if (d.len > 0) break :blk d;
+            }
+            if (std.posix.getenv("HOME")) |h| {
+                const path = try std.fmt.allocPrint(alloc, "{s}/Downloads", .{h});
+                home_path = path;
+                break :blk path;
+            }
+            // Last resort: /tmp.
+            break :blk "/tmp";
+        };
+
+        const dest_path = try std.fmt.allocPrint(alloc, "{s}/{s}", .{ download_dir, safe_name });
+        defer alloc.free(dest_path);
+
+        std.fs.cwd().makePath(download_dir) catch |err| {
+            log.err("iterm2 download: cannot create directory {s}: {}", .{ download_dir, err });
+            return;
+        };
+
+        const file = std.fs.cwd().createFile(dest_path, .{ .exclusive = false }) catch |err| {
+            log.err("iterm2 download: cannot create {s}: {}", .{ dest_path, err });
+            return;
+        };
+        defer file.close();
+
+        file.writeAll(decoded) catch |err| {
+            log.err("iterm2 download: write error for {s}: {}", .{ dest_path, err });
+            return;
+        };
+
+        log.info("iterm2 download: saved {d} bytes to {s}", .{ decoded.len, dest_path });
+    }
+
+    /// Sanitize a filename for use in a download path.
+    /// Returns an error-union so the caller can substitute a default on failure.
+    fn iterm2SanitizeFilename(raw: []const u8) error{InvalidName}![]const u8 {
+        if (raw.len == 0) return error.InvalidName;
+
+        // Take the basename (strip any directory component).
+        const name = std.fs.path.basename(raw);
+        if (name.len == 0 or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) {
+            return error.InvalidName;
+        }
+
+        // Reject if any byte is a null or path separator.
+        for (name) |b| {
+            if (b == 0 or b == '/' or b == '\\') return error.InvalidName;
+        }
+
+        return name;
     }
 
     pub inline fn dcsHook(self: *StreamHandler, dcs: terminal.DCS) !void {

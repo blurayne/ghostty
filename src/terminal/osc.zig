@@ -171,8 +171,23 @@ pub const Command = union(Key) {
     /// (meaning "auto-size"). `width_px` / `height_px` are pixel dimensions
     /// when the application specified `width=<N>px` / `height=<N>px` — they
     /// are zero otherwise and the cell-column / cell-row counts should be used
-    /// instead. A zero in both the cell and pixel dimension means "auto".
+    /// instead. `width_pct` / `height_pct` are percent-of-viewport values
+    /// (1–100) when the application specified `width=N%` / `height=N%`. A zero
+    /// in all three dimension fields means "auto".
     iterm2_inline_image: Iterm2InlineImage,
+
+    /// OSC 1337 MultipartFile= — initiates a multi-sequence image transfer.
+    /// Carries the parsed header args (same as File= minus the data payload).
+    /// Followed by one or more `iterm2_file_part` then `iterm2_file_end`.
+    iterm2_multipart_begin: Iterm2MultipartBegin,
+
+    /// OSC 1337 FilePart= — one chunk of a multipart image, base64-encoded.
+    /// The slice points into the OSC parser's allocating buffer; the stream
+    /// handler must copy it before the parser resets.
+    iterm2_file_part: []const u8,
+
+    /// OSC 1337 FileEnd — finalises a multipart transfer.
+    iterm2_file_end: void,
 
     pub const Iterm2InlineImage = struct {
         /// Raw decoded image bytes (PNG, JPEG, GIF, WebP, BMP …).
@@ -187,8 +202,15 @@ pub const Command = union(Key) {
         width_px: u32 = 0,
         /// Requested display height in pixels (0 = use rows instead).
         height_px: u32 = 0,
+
+        /// Requested display width as percent of viewport (0 = not specified).
+        width_pct: u8 = 0,
+        /// Requested display height as percent of viewport (0 = not specified).
+        height_pct: u8 = 0,
         /// Whether to preserve the image aspect ratio when scaling.
         preserve_aspect_ratio: bool = true,
+        /// When true, do not advance the cursor after rendering.
+        do_not_move_cursor: bool = false,
 
         pub fn deinit(self: *Iterm2InlineImage, alloc: ?Allocator) void {
             const a = alloc orelse return;
@@ -198,6 +220,44 @@ pub const Command = union(Key) {
         /// This type is not C ABI compatible; use void to indicate that.
         pub const C = void;
         pub fn cval(_: Iterm2InlineImage) C {
+            return {};
+        }
+    };
+
+    /// Header args for a multipart image transfer (MultipartFile=).
+    /// The `name` slice is owned by the caller (allocated by the OSC parser).
+    pub const Iterm2MultipartBegin = struct {
+        /// Base64-decoded filename. Empty slice = not provided. Owned by caller.
+        name: []const u8 = "",
+
+        /// Requested display width in terminal columns (0 = auto).
+        columns: u32 = 0,
+        /// Requested display height in terminal rows (0 = auto).
+        rows: u32 = 0,
+        /// Requested display width in pixels (0 = use columns instead).
+        width_px: u32 = 0,
+        /// Requested display height in pixels (0 = use rows instead).
+        height_px: u32 = 0,
+
+        /// Requested display width as percent of viewport (0 = not specified).
+        width_pct: u8 = 0,
+        /// Requested display height as percent of viewport (0 = not specified).
+        height_pct: u8 = 0,
+        /// Whether to preserve the image aspect ratio when scaling.
+        preserve_aspect_ratio: bool = true,
+        /// When true, do not advance the cursor after rendering.
+        do_not_move_cursor: bool = false,
+        /// Whether to display inline (true) or save to disk / download (false).
+        display_inline: bool = true,
+
+        pub fn deinit(self: *Iterm2MultipartBegin, alloc: ?Allocator) void {
+            const a = alloc orelse return;
+            if (self.name.len > 0) a.free(self.name);
+        }
+
+        /// This type is not C ABI compatible; use void to indicate that.
+        pub const C = void;
+        pub fn cval(_: Iterm2MultipartBegin) C {
             return {};
         }
     };
@@ -236,6 +296,9 @@ pub const Command = union(Key) {
             "kitty_clipboard_protocol",
             "context_signal",
             "iterm2_inline_image",
+            "iterm2_multipart_begin",
+            "iterm2_file_part",
+            "iterm2_file_end",
         },
     );
 
@@ -442,6 +505,7 @@ pub const Parser = struct {
                 v.deinit(self.alloc orelse break :kitty_color_protocol);
             },
             .iterm2_inline_image => |*v| v.deinit(self.alloc),
+            .iterm2_multipart_begin => |*v| v.deinit(self.alloc),
             .change_window_icon,
             .change_window_title,
             .clipboard_contents,
@@ -466,6 +530,8 @@ pub const Parser = struct {
             .kitty_text_sizing,
             .kitty_clipboard_protocol,
             .context_signal,
+            .iterm2_file_part,
+            .iterm2_file_end,
             => {},
         }
 
