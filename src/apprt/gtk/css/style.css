@@ -158,6 +158,23 @@ label.resize-overlay {
 }
 
 /*
+ * Split drag hover handle — shown when header is hidden, fades in/out on hover
+ *
+ * The handle bin wraps a Gtk.Image with icon "view-list-symbolic".
+ * CSS class "split-drag-handle" is on the Image itself; the outer
+ * Adw.Bin (hover_handle) receives the "visible" class toggle.
+ */
+.split-drag-handle {
+  /* Semi-transparent pill background. Use rgba() for broad GTK4 compat
+   * (same pattern as dnd-zone overlays above).
+   * rgba(128,128,128,0.25) is a neutral mid-grey that looks reasonable on
+   * both dark and light themes without needing color-mix. */
+  background-color: rgba(128, 128, 128, 0.25);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+/*
  * Split Header Bar
  */
 .split-header {
