@@ -47,11 +47,15 @@ pub const ConfigEditorWindow = extern struct {
         /// The filter list model (wraps entry_store with search filter).
         filter_model: *gtk.FilterListModel,
 
-        /// The string filter connected to the search entry.
-        string_filter: *gtk.StringFilter,
+        /// Custom filter that matches the search text against key-name and,
+        /// when search_values_check is active, also against current-value.
+        custom_filter: *gtk.CustomFilter,
 
         /// The search entry widget (bound from template).
         search_entry: *gtk.SearchEntry,
+
+        /// Checkbox: when active, the search also matches current values.
+        search_values_check: *gtk.CheckButton,
 
         /// The list view widget (bound from template).
         config_list: *gtk.ListView,
@@ -158,10 +162,10 @@ pub const ConfigEditorWindow = extern struct {
         }
 
         // ------------------------------------------------------------------
-        // Wire up search filter.
-        // The filter is already created in initTemplate from the blueprint;
-        // here we just ensure the search-changed signal does a refilter.
-        // (Signal connections happen via template callbacks below.)
+        // Wire the custom filter's match function. The function reads the
+        // search text directly from priv.search_entry and gates the
+        // value-side match on priv.search_values_check.
+        priv.custom_filter.setFilterFunc(filterMatch, self, null);
 
         // ------------------------------------------------------------------
         // Phase 5: Set up the file monitor for external-change detection.
@@ -211,14 +215,54 @@ pub const ConfigEditorWindow = extern struct {
 
     /// Called when the search text changes — refilter the list.
     fn onSearchChanged(
-        search: *gtk.SearchEntry,
+        _: *gtk.SearchEntry,
         self: *Self,
     ) callconv(.c) void {
         const priv = self.private();
-        _ = search;
-        // gtk.FilterListModel refilters automatically when the filter changes
-        // (our StringFilter is bound to search_entry.text via the blueprint).
-        @as(*gtk.Filter, @ptrCast(@alignCast(priv.string_filter))).changed(.different);
+        @as(*gtk.Filter, @ptrCast(@alignCast(priv.custom_filter))).changed(.different);
+    }
+
+    /// Called when the "in values" checkbox toggles — refilter the list.
+    fn onSearchValuesToggled(
+        _: *gtk.CheckButton,
+        self: *Self,
+    ) callconv(.c) void {
+        const priv = self.private();
+        @as(*gtk.Filter, @ptrCast(@alignCast(priv.custom_filter))).changed(.different);
+    }
+
+    /// Match function used by the CustomFilter. Matches when the search text
+    /// is a case-insensitive substring of the key name, OR (when the "in
+    /// values" checkbox is active) of the current serialized value.
+    fn filterMatch(
+        item: *gobject.Object,
+        user_data: ?*anyopaque,
+    ) callconv(.c) c_int {
+        const self: *Self = @ptrCast(@alignCast(user_data orelse return 1));
+        const priv = self.private();
+
+        const entry = gobject.ext.cast(ConfigEntryObject, item) orelse return 1;
+
+        // Empty search → match everything.
+        const search_ptr = priv.search_entry.as(gtk.Editable).getText();
+        const search = std.mem.span(search_ptr);
+        if (search.len == 0) return 1;
+
+        // Always check the key name.
+        if (entry.propGetKeyName()) |key_z| {
+            const key = std.mem.span(key_z.ptr);
+            if (std.ascii.indexOfIgnoreCase(key, search) != null) return 1;
+        }
+
+        // If enabled, also check the current value.
+        if (priv.search_values_check.as(gtk.CheckButton).getActive() != 0) {
+            if (entry.getCurrentValue()) |val_z| {
+                const val = std.mem.span(val_z.ptr);
+                if (std.ascii.indexOfIgnoreCase(val, search) != null) return 1;
+            }
+        }
+
+        return 0;
     }
 
     /// Toggle instant-reload behaviour.
@@ -1119,14 +1163,16 @@ pub const ConfigEditorWindow = extern struct {
 
             // Template bindings from blueprint.
             class.bindTemplateChildPrivate("search_entry", .{});
+            class.bindTemplateChildPrivate("search_values_check", .{});
             class.bindTemplateChildPrivate("config_list", .{});
             class.bindTemplateChildPrivate("entry_store", .{});
             class.bindTemplateChildPrivate("filter_model", .{});
-            class.bindTemplateChildPrivate("string_filter", .{});
+            class.bindTemplateChildPrivate("custom_filter", .{});
             class.bindTemplateChildPrivate("toast_overlay", .{});
 
             // Template callbacks.
             class.bindTemplateCallback("on_search_changed", &onSearchChanged);
+            class.bindTemplateCallback("on_search_values_toggled", &onSearchValuesToggled);
             class.bindTemplateCallback("on_instant_reload_toggled", &onInstantReloadToggled);
             class.bindTemplateCallback("on_persist_toggled", &onPersistToggled);
             class.bindTemplateCallback("on_save_clicked", &onSaveClicked);

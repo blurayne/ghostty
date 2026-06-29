@@ -10,10 +10,22 @@ template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
   content: Adw.ToolbarView {
     [top]
     Adw.HeaderBar {
-      title-widget: Gtk.SearchEntry search_entry {
+      title-widget: Gtk.Box {
+        orientation: horizontal;
+        spacing: 6;
         hexpand: true;
-        placeholder-text: _("Filter config keys…");
-        search-changed => $on_search_changed();
+
+        Gtk.SearchEntry search_entry {
+          hexpand: true;
+          placeholder-text: _("Filter config keys…");
+          search-changed => $on_search_changed();
+        }
+
+        Gtk.CheckButton search_values_check {
+          label: _("in values");
+          tooltip-text: _("Also match against the current value of each option");
+          toggled => $on_search_values_toggled();
+        }
       };
     }
 
@@ -79,12 +91,7 @@ template $GhosttyConfigEditorWindow : Adw.ApplicationWindow {
               model: Gtk.FilterListModel filter_model {
                 incremental: true;
 
-                filter: Gtk.StringFilter string_filter {
-                  expression: expr item as <$GhosttyConfigEntryObject>.key-name;
-                  search: bind search_entry.text;
-                  match-mode: substring;
-                  ignore-case: true;
-                };
+                filter: Gtk.CustomFilter custom_filter {};
 
                 model: Gio.ListStore entry_store {
                   item-type: typeof<$GhosttyConfigEntryObject>;
