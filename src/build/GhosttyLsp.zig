@@ -26,8 +26,7 @@ pub fn init(
     // Copy the schema JSON next to the shim so @embedFile resolves correctly.
     _ = wf.addCopyFile(schema.json_output, "config.schema.json");
     // Generate the shim: pub const data: []const u8 = @embedFile("config.schema.json");
-    const shim = wf.add(
-        "config_schema.zig",
+    const shim = wf.add("config_schema.zig",
         \\pub const data: []const u8 = @embedFile("config.schema.json");
         \\
     );

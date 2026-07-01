@@ -36,7 +36,7 @@ pub fn main() !void {
         var default_buf: std.Io.Writer.Allocating = .init(alloc);
         defer default_buf.deinit();
         const default_value: field.type = if (field.default_value_ptr) |ptr|
-            @as(*const field.type, @alignCast(@ptrCast(ptr))).*
+            @as(*const field.type, @ptrCast(@alignCast(ptr))).*
         else
             @as(field.type, undefined);
         try formatFieldValue(field.type, default_value, &default_buf.writer);

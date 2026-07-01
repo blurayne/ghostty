@@ -84,10 +84,10 @@ pub const Decoder = struct {
     repeat: u32,
 
     // ── palette introduction accumulators ────────────────────────────────
-    pa_reg: u16,     // register number
-    pa_model: u8,    // 1=HLS, 2=RGB
+    pa_reg: u16, // register number
+    pa_model: u8, // 1=HLS, 2=RGB
     pa_vals: [3]u16, // components
-    pa_idx: u2,      // which component we're reading (0–2)
+    pa_idx: u2, // which component we're reading (0–2)
 
     const ParseState = enum {
         normal,
@@ -188,21 +188,21 @@ pub const Decoder = struct {
 
         // VT340 built-in 16-colour palette.
         const default16 = [16]Rgba{
-            .{ .r = 0,   .g = 0,   .b = 0,   .a = 255 }, // 0  black
-            .{ .r = 51,  .g = 51,  .b = 204, .a = 255 }, // 1  blue
-            .{ .r = 204, .g = 33,  .b = 33,  .a = 255 }, // 2  red
-            .{ .r = 51,  .g = 204, .b = 51,  .a = 255 }, // 3  green
-            .{ .r = 204, .g = 51,  .b = 204, .a = 255 }, // 4  magenta
-            .{ .r = 51,  .g = 204, .b = 204, .a = 255 }, // 5  cyan
-            .{ .r = 204, .g = 204, .b = 51,  .a = 255 }, // 6  yellow
+            .{ .r = 0, .g = 0, .b = 0, .a = 255 }, // 0  black
+            .{ .r = 51, .g = 51, .b = 204, .a = 255 }, // 1  blue
+            .{ .r = 204, .g = 33, .b = 33, .a = 255 }, // 2  red
+            .{ .r = 51, .g = 204, .b = 51, .a = 255 }, // 3  green
+            .{ .r = 204, .g = 51, .b = 204, .a = 255 }, // 4  magenta
+            .{ .r = 51, .g = 204, .b = 204, .a = 255 }, // 5  cyan
+            .{ .r = 204, .g = 204, .b = 51, .a = 255 }, // 6  yellow
             .{ .r = 135, .g = 135, .b = 135, .a = 255 }, // 7  gray 50%
-            .{ .r = 66,  .g = 66,  .b = 66,  .a = 255 }, // 8  gray 25%
-            .{ .r = 84,  .g = 84,  .b = 204, .a = 255 }, // 9  bright blue
-            .{ .r = 204, .g = 84,  .b = 84,  .a = 255 }, // 10 bright red
-            .{ .r = 84,  .g = 204, .b = 84,  .a = 255 }, // 11 bright green
-            .{ .r = 204, .g = 84,  .b = 204, .a = 255 }, // 12 bright magenta
-            .{ .r = 84,  .g = 204, .b = 204, .a = 255 }, // 13 bright cyan
-            .{ .r = 204, .g = 204, .b = 84,  .a = 255 }, // 14 bright yellow
+            .{ .r = 66, .g = 66, .b = 66, .a = 255 }, // 8  gray 25%
+            .{ .r = 84, .g = 84, .b = 204, .a = 255 }, // 9  bright blue
+            .{ .r = 204, .g = 84, .b = 84, .a = 255 }, // 10 bright red
+            .{ .r = 84, .g = 204, .b = 84, .a = 255 }, // 11 bright green
+            .{ .r = 204, .g = 84, .b = 204, .a = 255 }, // 12 bright magenta
+            .{ .r = 84, .g = 204, .b = 204, .a = 255 }, // 13 bright cyan
+            .{ .r = 204, .g = 204, .b = 84, .a = 255 }, // 14 bright yellow
             .{ .r = 204, .g = 204, .b = 204, .a = 255 }, // 15 white
         };
         for (default16, 0..) |c, i| self.palette[i] = c;
@@ -506,7 +506,7 @@ test "sixel: minimal 1-wide single-color image" {
     var i: usize = 0;
     while (i < 6) : (i += 1) {
         try testing.expectEqual(@as(u8, 204), rgba.?[i * 4 + 0]); // R
-        try testing.expectEqual(@as(u8, 33),  rgba.?[i * 4 + 1]); // G
+        try testing.expectEqual(@as(u8, 33), rgba.?[i * 4 + 1]); // G
         try testing.expectEqual(@as(u8, 255), rgba.?[i * 4 + 3]); // A
     }
 }
@@ -536,12 +536,12 @@ test "sixel: carriage return and next band" {
     // Band 0, row 0, col 0 should be color2 (was overwritten: red 204,33,33).
     // palette[2] = { r=204, g=33, b=33, a=255 }
     try testing.expectEqual(@as(u8, 204), rgba.?[0]); // R at (row=0, col=0)
-    try testing.expectEqual(@as(u8, 33),  rgba.?[1]); // G at (row=0, col=0)
+    try testing.expectEqual(@as(u8, 33), rgba.?[1]); // G at (row=0, col=0)
 
     // Band 0, row 0, col 1 should be color1 (blue: 51,51,204).
     // palette[1] = { r=51, g=51, b=204, a=255 }
-    try testing.expectEqual(@as(u8, 51),  rgba.?[4]); // R at (row=0, col=1)
-    try testing.expectEqual(@as(u8, 51),  rgba.?[5]); // G at (row=0, col=1)
+    try testing.expectEqual(@as(u8, 51), rgba.?[4]); // R at (row=0, col=1)
+    try testing.expectEqual(@as(u8, 51), rgba.?[5]); // G at (row=0, col=1)
 }
 
 test "sixel: repeat prefix" {
@@ -563,8 +563,8 @@ test "sixel: palette introduction RGB" {
 
     // Palette register 1 should now be (255, 0, 0, 255).
     try testing.expectEqual(@as(u8, 255), dec.palette[1].r);
-    try testing.expectEqual(@as(u8, 0),   dec.palette[1].g);
-    try testing.expectEqual(@as(u8, 0),   dec.palette[1].b);
+    try testing.expectEqual(@as(u8, 0), dec.palette[1].g);
+    try testing.expectEqual(@as(u8, 0), dec.palette[1].b);
     try testing.expectEqual(@as(u8, 255), dec.palette[1].a);
 
     // Column 0 should be painted with register 1 (pure red).
@@ -572,8 +572,8 @@ test "sixel: palette introduction RGB" {
     try testing.expect(rgba != null);
     defer testing.allocator.free(rgba.?);
     try testing.expectEqual(@as(u8, 255), rgba.?[0]); // R
-    try testing.expectEqual(@as(u8, 0),   rgba.?[1]); // G
-    try testing.expectEqual(@as(u8, 0),   rgba.?[2]); // B
+    try testing.expectEqual(@as(u8, 0), rgba.?[1]); // G
+    try testing.expectEqual(@as(u8, 0), rgba.?[2]); // B
 }
 
 test "sixel: empty data returns null" {

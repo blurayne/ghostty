@@ -2770,7 +2770,10 @@ test "goto_split_index: out of range returns null handle" {
     var found: bool = false;
     while (it.next()) |_| {
         i += 1;
-        if (i == 99) { found = true; break; }
+        if (i == 99) {
+            found = true;
+            break;
+        }
     }
     try testing.expect(!found);
     try testing.expectEqual(@as(usize, 2), i); // only 2 leaves

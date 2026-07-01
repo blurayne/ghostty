@@ -1109,10 +1109,25 @@ pub const ConfigEditorWindow = extern struct {
     }
 
     fn writeSentinelFile() void {
-        const path = getStatePath() catch return;
+        const path = getStatePath() catch |err| {
+            log.warn("sentinel: getStatePath failed: {}", .{err});
+            return;
+        };
         defer std.heap.c_allocator.free(path);
-        const f = std.fs.createFileAbsolute(path, .{}) catch return;
+
+        if (std.fs.path.dirname(path)) |dir| {
+            std.fs.cwd().makePath(dir) catch |err| {
+                log.warn("sentinel: makePath({s}) failed: {}", .{ dir, err });
+                return;
+            };
+        }
+
+        const f = std.fs.createFileAbsolute(path, .{}) catch |err| {
+            log.warn("sentinel: createFileAbsolute({s}) failed: {}", .{ path, err });
+            return;
+        };
         f.close();
+        log.info("sentinel written: {s}", .{path});
     }
 
     fn onRestartClicked(

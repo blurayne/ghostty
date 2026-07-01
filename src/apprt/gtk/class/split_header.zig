@@ -347,9 +347,10 @@ pub const SplitHeader = extern struct {
         var buf: [512]u8 = undefined;
         const font_style: []const u8 = if (colors.italic) "italic" else "normal";
         const font_weight: []const u8 = if (colors.bold) "bold" else "normal";
-        const css = std.fmt.bufPrintZ(&buf,
+        const css = std.fmt.bufPrintZ(
+            &buf,
             ".{s} {{ background-color: rgba({d},{d},{d},{d:.3}); color: rgba({d},{d},{d},{d:.3}); font-style: {s}; font-weight: {s}; }}" ++
-            " .{s} button {{ color: rgba({d},{d},{d},{d:.3}); }}",
+                " .{s} button {{ color: rgba({d},{d},{d},{d:.3}); }}",
             .{
                 css_class_slice,
                 @as(u8, @intFromFloat(colors.bg.f_red * 255)),
@@ -587,12 +588,14 @@ pub const SplitHeader = extern struct {
     }
 
     fn syncZoomButton(self: *Self) void {
-        const tree = self.private().split_tree orelse return;
+        const priv = self.private();
+        priv.zoom_button.as(gtk.Widget).setSensitive(@intFromBool(priv.split_count >= 2));
+        const tree = priv.split_tree orelse return;
         const zoomed = tree.getIsZoomed();
-        const icon: [*:0]const u8 = if (zoomed) "view-restore-symbolic" else "view-fullscreen-symbolic";
+        const icon: [*:0]const u8 = if (zoomed) "window-restore-symbolic" else "view-fullscreen-symbolic";
         const tooltip: [*:0]const u8 = if (zoomed) "Restore Split" else "Maximize Split";
-        self.private().zoom_button.setIconName(icon);
-        self.private().zoom_button.as(gtk.Widget).setTooltipText(tooltip);
+        priv.zoom_button.setIconName(icon);
+        priv.zoom_button.as(gtk.Widget).setTooltipText(tooltip);
     }
 
     fn syncTitleLabel(self: *Self) void {
@@ -697,6 +700,7 @@ pub const SplitHeader = extern struct {
     pub fn setSplitCount(self: *Self, count: u32) void {
         self.private().split_count = count;
         self.updateVisibility();
+        self.syncZoomButton();
     }
 
     pub fn setPaneNumber(self: *Self, number: u32) void {

@@ -998,21 +998,23 @@ pub const StreamHandler = struct {
             // since kittyGraphics does not return errors itself.
 
             var kitty_cmd: terminal.kitty.graphics.Command = .{
-                .control = .{ .transmit_and_display = .{
-                    .transmission = .{
-                        .format = .rgba,
-                        .medium = .direct,
-                        .width = w,
-                        .height = h,
-                        .image_id = 0,
-                        .image_number = 0,
+                .control = .{
+                    .transmit_and_display = .{
+                        .transmission = .{
+                            .format = .rgba,
+                            .medium = .direct,
+                            .width = w,
+                            .height = h,
+                            .image_id = 0,
+                            .image_number = 0,
+                        },
+                        .display = .{
+                            .columns = 0, // let Kitty auto-size to image width
+                            .rows = 0,
+                            .cursor_movement = .after,
+                        },
                     },
-                    .display = .{
-                        .columns = 0, // let Kitty auto-size to image width
-                        .rows = 0,
-                        .cursor_movement = .after,
-                    },
-                } },
+                },
                 .data = rgba_buf,
             };
             defer kitty_cmd.deinit(self.alloc);

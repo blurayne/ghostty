@@ -39,4 +39,3 @@ renderer_mailbox: *renderer.Thread.Mailbox,
 
 /// The mailbox for sending the surface messages.
 surface_mailbox: apprt.surface.Mailbox,
-
