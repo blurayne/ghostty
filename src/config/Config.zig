@@ -2448,6 +2448,26 @@ keybind: Keybinds = .{},
 /// program, not the terminal emulator).
 @"clipboard-paste-bracketed-safe": bool = true,
 
+/// Enable pasting images from the clipboard. When enabled, pasting while the
+/// clipboard holds an image (and no text) saves the image to a temporary PNG
+/// file and pastes that file's path into the running program (as a bracketed
+/// paste). This lets CLI tools that understand image file paths (for example,
+/// coding agents) receive the image. No image is rendered inline.
+///
+/// The dedicated `paste_image` keybind action always uses this path, even when
+/// the clipboard also contains text.
+@"clipboard-image-paste": bool = true,
+
+/// Directory to write clipboard images into for `clipboard-image-paste`. When
+/// unset, the system temporary directory is used (`$TMPDIR` or `/tmp` on
+/// Linux). Files are named `ghostty-paste-<n>.png`.
+@"clipboard-image-paste-directory": ?[]const u8 = null,
+
+/// Maximum size in bytes of a clipboard image that will be pasted via
+/// `clipboard-image-paste`. Larger images are ignored. Guards against writing
+/// very large temporary files.
+@"clipboard-image-paste-max-size": u32 = 25_000_000,
+
 /// Enables or disabled title reporting (CSI 21 t). This escape sequence
 /// allows the running program to query the terminal title. This is a common
 /// security issue and is disabled by default.
@@ -11068,4 +11088,13 @@ test "compatibility: window new-window" {
             cfg.@"macos-dock-drop-behavior",
         );
     }
+}
+
+test "clipboard image paste defaults" {
+    const testing = std.testing;
+    var cfg = try Config.default(testing.allocator);
+    defer cfg.deinit();
+    try testing.expect(cfg.@"clipboard-image-paste");
+    try testing.expectEqual(@as(?[]const u8, null), cfg.@"clipboard-image-paste-directory");
+    try testing.expectEqual(@as(u32, 25_000_000), cfg.@"clipboard-image-paste-max-size");
 }

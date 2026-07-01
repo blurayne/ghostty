@@ -299,6 +299,9 @@ const DerivedConfig = struct {
     clipboard_trim_trailing_spaces: bool,
     clipboard_paste_protection: bool,
     clipboard_paste_bracketed_safe: bool,
+    clipboard_image_paste: bool,
+    clipboard_image_paste_directory: ?[]const u8,
+    clipboard_image_paste_max_size: u32,
     clipboard_codepoint_map: configpkg.Config.RepeatableClipboardCodepointMap,
     copy_on_select: configpkg.CopyOnSelect,
     right_click_action: configpkg.RightClickAction,
@@ -378,6 +381,12 @@ const DerivedConfig = struct {
             .clipboard_trim_trailing_spaces = config.@"clipboard-trim-trailing-spaces",
             .clipboard_paste_protection = config.@"clipboard-paste-protection",
             .clipboard_paste_bracketed_safe = config.@"clipboard-paste-bracketed-safe",
+            .clipboard_image_paste = config.@"clipboard-image-paste",
+            .clipboard_image_paste_directory = if (config.@"clipboard-image-paste-directory") |dir|
+                try alloc.dupe(u8, dir)
+            else
+                null,
+            .clipboard_image_paste_max_size = config.@"clipboard-image-paste-max-size",
             .clipboard_codepoint_map = try config.@"clipboard-codepoint-map".clone(alloc),
             .copy_on_select = config.@"copy-on-select",
             .right_click_action = config.@"right-click-action",
