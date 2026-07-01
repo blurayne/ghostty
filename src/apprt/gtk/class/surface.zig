@@ -1757,6 +1757,13 @@ pub const Surface = extern struct {
         );
     }
 
+    pub fn clipboardRequestImage(
+        self: *Self,
+        clipboard_type: apprt.Clipboard,
+    ) !bool {
+        return Clipboard.requestImage(self, clipboard_type);
+    }
+
     pub fn setClipboard(
         self: *Self,
         clipboard_type: apprt.Clipboard,
@@ -4198,6 +4205,16 @@ const Clipboard = struct {
         if (state == .paste) {
             const formats = clipboard.getFormats();
             if (formats.containGtype(gobject.ext.types.string) == 0) {
+                // No text. If the clipboard has an image and image paste is
+                // enabled, paste the image (as a temp-file path) instead.
+                const image_enabled = if (self.private().core_surface) |surface|
+                    surface.config.clipboard_image_paste
+                else
+                    false;
+                if (image_enabled and formats.containMimeType("image/png") != 0) {
+                    return requestImage(self, clipboard_type);
+                }
+
                 log.debug("clipboard has no text format, not starting paste request", .{});
                 return false;
             }
@@ -4223,6 +4240,88 @@ const Clipboard = struct {
         );
 
         return true;
+    }
+
+    /// Request an image from the clipboard, write it to a temp file, and paste
+    /// the path. Returns true if a read was started, false if the clipboard
+    /// has no image (so performable keybinds can pass through).
+    pub fn requestImage(
+        self: *Surface,
+        clipboard_type: apprt.Clipboard,
+    ) Allocator.Error!bool {
+        const clipboard = get(
+            self.private().gl_area.as(gtk.Widget),
+            clipboard_type,
+        ) orelse return false;
+
+        // Only start if the clipboard actually offers a PNG image.
+        const formats = clipboard.getFormats();
+        if (formats.containMimeType("image/png") == 0) {
+            log.debug("clipboard has no image format, not starting image paste", .{});
+            return false;
+        }
+
+        const alloc = Application.default().allocator();
+        const ud = try alloc.create(Request);
+        errdefer alloc.destroy(ud);
+        ud.* = .{
+            .self = self.ref(),
+            .state = .{ .paste = {} },
+        };
+        errdefer self.unref();
+
+        clipboard.readTextureAsync(
+            null,
+            clipboardReadTexture,
+            ud,
+        );
+
+        return true;
+    }
+
+    fn clipboardReadTexture(
+        source: ?*gobject.Object,
+        res: *gio.AsyncResult,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const clipboard = gobject.ext.cast(
+            gdk.Clipboard,
+            source orelse return,
+        ) orelse return;
+        const req: *Request = @ptrCast(@alignCast(ud orelse return));
+
+        const alloc = Application.default().allocator();
+        defer alloc.destroy(req);
+
+        const self = req.self;
+        defer self.unref();
+
+        var gerr: ?*glib.Error = null;
+        const texture_ = clipboard.readTextureFinish(res, &gerr);
+        if (gerr) |err| {
+            defer err.free();
+            log.warn(
+                "failed to read clipboard image err={s}",
+                .{err.f_message orelse "(no message)"},
+            );
+            return;
+        }
+        const texture = texture_ orelse return;
+        defer texture.unref();
+
+        // Encode the texture to PNG bytes.
+        const bytes = texture.saveToPngBytes();
+        defer bytes.unref();
+
+        var size: usize = 0;
+        const data_ptr = bytes.getData(&size) orelse return;
+        const png = @as([*]const u8, @ptrCast(data_ptr))[0..size];
+
+        const surface = self.private().core_surface orelse return;
+        surface.completeClipboardPasteImage(png) catch |err| {
+            log.warn("failed to complete image paste err={}", .{err});
+            return;
+        };
     }
 
     /// Paste explicit text directly into the surface, regardless of the
