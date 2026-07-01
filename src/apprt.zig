@@ -12,6 +12,8 @@ const build_config = @import("build_config.zig");
 
 const structs = @import("apprt/structs.zig");
 
+pub const clipboard_image = @import("apprt/clipboard_image.zig");
+
 pub const action = @import("apprt/action.zig");
 pub const ipc = @import("apprt/ipc.zig");
 pub const gtk = @import("apprt/gtk.zig");
@@ -56,4 +58,5 @@ test {
     _ = runtime;
     _ = action;
     _ = structs;
+    _ = clipboard_image;
 }
