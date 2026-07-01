@@ -81,6 +81,13 @@ pub fn clipboardRequest(
     );
 }
 
+pub fn clipboardRequestImage(
+    self: *Self,
+    clipboard_type: apprt.Clipboard,
+) !bool {
+    return try self.surface.clipboardRequestImage(clipboard_type);
+}
+
 pub fn setClipboard(
     self: *Self,
     clipboard_type: apprt.Clipboard,

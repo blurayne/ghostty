@@ -697,6 +697,17 @@ pub const Surface = struct {
         return true;
     }
 
+    pub fn clipboardRequestImage(
+        self: *Surface,
+        clipboard_type: apprt.Clipboard,
+    ) !bool {
+        _ = self;
+        _ = clipboard_type;
+        // Image clipboard paste is not yet implemented for this apprt (macOS).
+        // See the clipboard-image-paste config option and the design spec.
+        return false;
+    }
+
     fn completeClipboardRequest(
         self: *Surface,
         str: [:0]const u8,
