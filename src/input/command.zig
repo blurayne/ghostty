@@ -183,6 +183,12 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Paste the contents of the selection clipboard.",
         }},
 
+        .paste_image => comptime &.{.{
+            .action = .paste_image,
+            .title = "Paste Image from Clipboard",
+            .description = "Paste an image from the clipboard as a temporary file path.",
+        }},
+
         .start_search => comptime &.{.{
             .action = .start_search,
             .title = "Start Search",

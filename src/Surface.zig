@@ -5113,6 +5113,8 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             .{ .paste = {} },
         ),
 
+        .paste_image => return try self.startClipboardRequestImage(.standard),
+
         .increase_font_size => |delta| {
             // Max delta is somewhat arbitrary.
             const clamped_delta = @max(0, @min(255, delta));
@@ -5894,6 +5896,17 @@ fn startClipboardRequest(
     return try self.rt_surface.clipboardRequest(loc, req);
 }
 
+/// Start an image clipboard request (for the `paste_image` action). Returns
+/// true if a request was started. Returns false if image paste is disabled or
+/// the apprt does not support it, so performable keybinds can pass through.
+fn startClipboardRequestImage(
+    self: *Surface,
+    loc: apprt.Clipboard,
+) !bool {
+    if (!self.config.clipboard_image_paste) return false;
+    return try self.rt_surface.clipboardRequestImage(loc);
+}
+
 fn completeClipboardPaste(
     self: *Surface,
     data: []const u8,
@@ -5971,6 +5984,45 @@ fn completeClipboardPaste(
             vec,
         ), .unlocked);
     };
+}
+
+/// Complete an image clipboard paste. `png` is the raw PNG-encoded image bytes
+/// read from the clipboard by the apprt. We write the image to a temp file and
+/// paste its path into the terminal (see the `clipboard-image-paste` config).
+/// The data is copied as needed; it is safe to free `png` after this returns.
+pub fn completeClipboardPasteImage(
+    self: *Surface,
+    png: []const u8,
+) !void {
+    if (!self.config.clipboard_image_paste) {
+        log.info("clipboard image paste disabled, ignoring", .{});
+        return;
+    }
+    if (png.len == 0) return;
+    if (png.len > self.config.clipboard_image_paste_max_size) {
+        log.warn(
+            "clipboard image too large, ignoring len={} max={}",
+            .{ png.len, self.config.clipboard_image_paste_max_size },
+        );
+        return;
+    }
+
+    const path = try apprt.clipboard_image.write(
+        self.alloc,
+        self.config.clipboard_image_paste_directory,
+        png,
+        std.time.milliTimestamp(),
+        std.crypto.random.int(u32),
+    );
+    defer self.alloc.free(path);
+
+    log.info("clipboard image written to {s}", .{path});
+
+    // Paste the path through the normal (safe) paste path so it is bracketed
+    // when the running program has bracketed paste mode enabled. allow_unsafe
+    // is true because the path we generated is known-safe and we never want a
+    // confirmation dialog for it.
+    try self.completeClipboardPaste(path, true);
 }
 
 fn completeClipboardReadOSC52(

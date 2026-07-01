@@ -378,6 +378,11 @@ pub const Action = union(enum) {
     /// Paste the contents of the selection clipboard.
     paste_from_selection,
 
+    /// Paste an image from the default clipboard, if one is present. The image
+    /// is written to a temporary file and its path is pasted into the running
+    /// program. See the `clipboard-image-paste` config option.
+    paste_image,
+
     /// If there is a URL under the cursor, copy it to the default clipboard.
     copy_url_to_clipboard,
 
@@ -1380,6 +1385,7 @@ pub const Action = union(enum) {
             .copy_title_to_clipboard,
             .paste_from_clipboard,
             .paste_from_selection,
+            .paste_image,
             .increase_font_size,
             .decrease_font_size,
             .reset_font_size,
@@ -3089,6 +3095,11 @@ test "parse: text action equals sign" {
         }, binding.trigger);
         try testing.expectEqualStrings("=hello", binding.action.text);
     }
+}
+
+test "parse paste_image action" {
+    const testing = std.testing;
+    try testing.expect((try Action.parse("paste_image")) == .paste_image);
 }
 
 // For Ghostty 1.2+ we changed our key names to match the W3C and removed
