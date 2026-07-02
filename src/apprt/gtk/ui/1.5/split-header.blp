@@ -50,6 +50,16 @@ template $GhosttySplitHeader: Adw.Bin {
 menu header_context_menu_model {
   section {
     item {
+      label: _("Copy");
+      action: "win.copy";
+    }
+    item {
+      label: _("Paste");
+      action: "win.paste";
+    }
+  }
+  section {
+    item {
       label: _("Rename…");
       action: "split-header.rename";
     }
@@ -88,6 +98,12 @@ menu header_context_menu_model {
       label: _("Split Down");
       action: "split-tree.new-split";
       target: "down";
+    }
+  }
+  section {
+    item {
+      label: _("About Ghostty");
+      action: "win.about";
     }
   }
 }
