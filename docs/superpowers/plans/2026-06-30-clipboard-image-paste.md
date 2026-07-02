@@ -35,7 +35,7 @@
 - Produces (config fields): `config.@"clipboard-image-paste": bool`, `config.@"clipboard-image-paste-directory": ?[]const u8`, `config.@"clipboard-image-paste-max-size": u32`
 - Produces (DerivedConfig fields, accessed as `self.config.<name>` on core `Surface`): `clipboard_image_paste: bool`, `clipboard_image_paste_directory: ?[]const u8`, `clipboard_image_paste_max_size: u32`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to the end of `src/config/Config.zig` (before the final line if there's a trailing block, otherwise append):
 
@@ -50,12 +50,12 @@ test "clipboard image paste defaults" {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `ZIG_ARGS='-Dtest-filter=clipboard image paste defaults' mise run zig-test`
 Expected: FAIL — compile error, `clipboard-image-paste` is not a member of `Config`.
 
-- [ ] **Step 3: Add the config options**
+- [x] **Step 3: Add the config options**
 
 In `src/config/Config.zig`, immediately after the `@"clipboard-paste-bracketed-safe": bool = true,` line (currently line 2449):
 
@@ -81,7 +81,7 @@ In `src/config/Config.zig`, immediately after the `@"clipboard-paste-bracketed-s
 @"clipboard-image-paste-max-size": u32 = 25_000_000,
 ```
 
-- [ ] **Step 4: Add DerivedConfig fields**
+- [x] **Step 4: Add DerivedConfig fields**
 
 In `src/Surface.zig`, in the `DerivedConfig` struct after `clipboard_paste_bracketed_safe: bool,` (currently line 301):
 
@@ -91,7 +91,7 @@ In `src/Surface.zig`, in the `DerivedConfig` struct after `clipboard_paste_brack
     clipboard_image_paste_max_size: u32,
 ```
 
-- [ ] **Step 5: Copy values in DerivedConfig.init**
+- [x] **Step 5: Copy values in DerivedConfig.init**
 
 In `src/Surface.zig`, in the DerivedConfig initializer after `.clipboard_paste_bracketed_safe = config.@"clipboard-paste-bracketed-safe",` (currently line 380):
 
@@ -104,12 +104,12 @@ In `src/Surface.zig`, in the DerivedConfig initializer after `.clipboard_paste_b
             .clipboard_image_paste_max_size = config.@"clipboard-image-paste-max-size",
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `ZIG_ARGS='-Dtest-filter=clipboard image paste defaults' mise run zig-test`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 zig fmt .
@@ -138,7 +138,7 @@ Pure, fully unit-testable helper that builds the file name and writes the PNG.
   - `pub fn write(alloc: std.mem.Allocator, dir: ?[]const u8, png: []const u8, timestamp_ms: i64, rand: u32) ![]u8` — returns caller-owned absolute path.
 - Consumers reach it as `apprt.clipboard_image.<fn>` (registered in Step 3).
 
-- [ ] **Step 1: Create the file with the failing tests**
+- [x] **Step 1: Create the file with the failing tests**
 
 Create `src/apprt/clipboard_image.zig`:
 
@@ -221,7 +221,7 @@ test "clipboard image: write creates png file with bytes" {
 }
 ```
 
-- [ ] **Step 2: Register the module so its tests run**
+- [x] **Step 2: Register the module so its tests run**
 
 In `src/apprt.zig`, add a top-level declaration near the other `const`/`pub const` imports (top of file):
 
@@ -241,12 +241,12 @@ test {
 }
 ```
 
-- [ ] **Step 3: Run tests to verify they pass**
+- [x] **Step 3: Run tests to verify they pass**
 
 Run: `ZIG_ARGS='-Dtest-filter=clipboard image:' mise run zig-test`
 Expected: PASS (2 tests: `fileName format`, `write creates png file with bytes`)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 zig fmt .
@@ -273,7 +273,7 @@ Adds the keybind action, the action→request dispatch, and the core method that
 - Consumes (from Task 4, added next): `self.rt_surface.clipboardRequestImage(loc: apprt.Clipboard) !bool`
 - Produces: enum `Action.paste_image`; `Surface.completeClipboardPasteImage(self: *Surface, png: []const u8) !void` (public, called by apprts).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `src/input/Binding.zig` near the other action parse tests (search for an existing `test "parse` block and add after it):
 
@@ -284,12 +284,12 @@ test "parse paste_image action" {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `ZIG_ARGS='-Dtest-filter=parse paste_image action' mise run zig-test`
 Expected: FAIL — `paste_image` is not a member of `Action`.
 
-- [ ] **Step 3: Add the enum value**
+- [x] **Step 3: Add the enum value**
 
 In `src/input/Binding.zig`, after `paste_from_selection,` (line 379):
 
@@ -300,7 +300,7 @@ In `src/input/Binding.zig`, after `paste_from_selection,` (line 379):
     paste_image,
 ```
 
-- [ ] **Step 4: Add to the `scope()` switch**
+- [x] **Step 4: Add to the `scope()` switch**
 
 In `src/input/Binding.zig`, in the surface-actions list, after `.paste_from_selection,` (line 1382):
 
@@ -308,7 +308,7 @@ In `src/input/Binding.zig`, in the surface-actions list, after `.paste_from_sele
             .paste_image,
 ```
 
-- [ ] **Step 5: Add the command-palette entry**
+- [x] **Step 5: Add the command-palette entry**
 
 In `src/input/command.zig`, after the `.paste_from_selection => ...` block (ends line 184):
 
@@ -320,12 +320,12 @@ In `src/input/command.zig`, after the `.paste_from_selection => ...` block (ends
         }},
 ```
 
-- [ ] **Step 6: Run the parse test to verify it passes**
+- [x] **Step 6: Run the parse test to verify it passes**
 
 Run: `ZIG_ARGS='-Dtest-filter=parse paste_image action' mise run zig-test`
 Expected: PASS
 
-- [ ] **Step 7: Add the action dispatch**
+- [x] **Step 7: Add the action dispatch**
 
 In `src/Surface.zig`, after the `.paste_from_selection => ...` arm (ends line 5105):
 
@@ -333,7 +333,7 @@ In `src/Surface.zig`, after the `.paste_from_selection => ...` arm (ends line 51
         .paste_image => return try self.startClipboardRequestImage(.standard),
 ```
 
-- [ ] **Step 8: Add `startClipboardRequestImage`**
+- [x] **Step 8: Add `startClipboardRequestImage`**
 
 In `src/Surface.zig`, immediately after the `startClipboardRequest` function (ends line 5886):
 
@@ -350,7 +350,7 @@ fn startClipboardRequestImage(
 }
 ```
 
-- [ ] **Step 9: Add `completeClipboardPasteImage`**
+- [x] **Step 9: Add `completeClipboardPasteImage`**
 
 In `src/Surface.zig`, immediately after the `completeClipboardPaste` function (ends line 5965):
 
@@ -395,7 +395,7 @@ pub fn completeClipboardPasteImage(
 }
 ```
 
-- [ ] **Step 10: Commit (compiles after Task 4)**
+- [x] **Step 10: Commit (compiles after Task 4)**
 
 ```bash
 zig fmt .
@@ -419,7 +419,7 @@ Adds the runtime-surface method to every apprt so core compiles. GTK routes to t
 - Produces: `clipboardRequestImage(self, clipboard_type: apprt.Clipboard) !bool` on each apprt runtime `Surface`.
 - Consumes (GTK, added in Task 5): the class-level `Surface.clipboardRequestImage`.
 
-- [ ] **Step 1: Add the GTK thin-wrapper method**
+- [x] **Step 1: Add the GTK thin-wrapper method**
 
 In `src/apprt/gtk/Surface.zig`, after the `clipboardRequest` function (ends line 82):
 
@@ -432,7 +432,7 @@ pub fn clipboardRequestImage(
 }
 ```
 
-- [ ] **Step 2: Add the embedded (macOS) stub**
+- [x] **Step 2: Add the embedded (macOS) stub**
 
 In `src/apprt/embedded.zig`, after the `clipboardRequest` function (ends line 698):
 
@@ -449,12 +449,12 @@ pub fn clipboardRequestImage(
 }
 ```
 
-- [ ] **Step 3: Verify it compiles**
+- [x] **Step 3: Verify it compiles**
 
 Run: `mise run zig-build`
 Expected: build succeeds (note: `self.surface.clipboardRequestImage` in the GTK wrapper resolves once Task 5 adds the class method — if building this task in isolation before Task 5, temporarily expect an "unknown method" error on the GTK line; proceed to Task 5 then build). If you are executing tasks in order, do Task 5 before running this build.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 zig fmt .
@@ -478,7 +478,7 @@ Reads a clipboard texture, encodes PNG, and calls core `completeClipboardPasteIm
 - Consumes: `apprt.Clipboard`, the existing `Clipboard.get`, `Request` struct, GDK `readTextureAsync`/`readTextureFinish`, `gdk.Texture.saveToPngBytes`, `glib.Bytes.getData`, core `Surface.completeClipboardPasteImage`.
 - Produces: `Surface.clipboardRequestImage(self, clipboard_type) !bool` (class-level, called by Task 4's wrapper); `Clipboard.requestImage` (called by Task 6's auto-detect).
 
-- [ ] **Step 1: Add the public class method**
+- [x] **Step 1: Add the public class method**
 
 In `src/apprt/gtk/class/surface.zig`, next to the existing `pub fn clipboardRequest` (around line 1748-1755), add:
 
@@ -491,7 +491,7 @@ pub fn clipboardRequestImage(
 }
 ```
 
-- [ ] **Step 2: Add `requestImage` + `clipboardReadTexture` to the `Clipboard` namespace**
+- [x] **Step 2: Add `requestImage` + `clipboardReadTexture` to the `Clipboard` namespace**
 
 In `src/apprt/gtk/class/surface.zig`, inside the `const Clipboard = struct { ... }` namespace, after the `request` function (ends line 4226), add:
 
@@ -579,12 +579,12 @@ In `src/apprt/gtk/class/surface.zig`, inside the `const Clipboard = struct { ...
     }
 ```
 
-- [ ] **Step 3: Verify it compiles**
+- [x] **Step 3: Verify it compiles**
 
 Run: `mise run zig-build`
 Expected: build succeeds.
 
-- [ ] **Step 4: Full build + install**
+- [x] **Step 4: Full build + install**
 
 Run:
 ```bash
@@ -607,7 +607,7 @@ Expected: a path like `/tmp/ghostty-paste-<n>-<n>.png` appears on the command li
 Run `claude` in Ghostty, copy a screenshot, press `Ctrl+Shift+I`.
 Expected: Claude shows an `[Image #N]` attachment (it auto-attaches the pasted image path).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 zig fmt .
@@ -629,7 +629,7 @@ Makes `paste_from_clipboard`/`paste_from_selection` route to image paste when th
 **Interfaces:**
 - Consumes: `Clipboard.requestImage` (Task 5), `self.private().core_surface.?.config.clipboard_image_paste`, `formats.containMimeType`.
 
-- [ ] **Step 1: Replace the no-text early return with image auto-detect**
+- [x] **Step 1: Replace the no-text early return with image auto-detect**
 
 In `src/apprt/gtk/class/surface.zig`, replace the existing block (currently lines 4198-4204):
 
@@ -665,7 +665,7 @@ with:
         }
 ```
 
-- [ ] **Step 2: Full build + install**
+- [x] **Step 2: Full build + install**
 
 Run:
 ```bash
@@ -689,7 +689,7 @@ Expected: the text pastes exactly as before (no temp file created).
 Copy content that provides both image and text (e.g. a spreadsheet cell), press `Ctrl+Shift+V`.
 Expected: text is pasted (not the image); the `paste_image` action still forces the image.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 zig fmt .
