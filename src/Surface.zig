@@ -6009,10 +6009,16 @@ pub fn completeClipboardPasteImage(
         return;
     }
 
+    // `auto` prefers the Flatpak cache dir only when actually sandboxed;
+    // `flatpak` forces it (still gated on isFlatpak below); `host` never.
+    const prefer_flatpak_dir = switch (self.config.linux_temp_dir) {
+        .host => false,
+        .flatpak, .auto => true,
+    };
     const base_dir = try apprt.clipboard_image.resolveBaseDir(
         self.alloc,
         self.config.clipboard_image_paste_directory,
-        self.config.linux_temp_dir == .flatpak,
+        prefer_flatpak_dir,
         internal_os.isFlatpak(),
         std.posix.getenv("XDG_CACHE_HOME"),
         std.posix.getenv("HOME"),

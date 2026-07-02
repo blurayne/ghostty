@@ -2471,8 +2471,10 @@ keybind: Keybinds = .{},
 /// On Linux, controls where Ghostty writes temporary files for
 /// `clipboard-image-paste` (the temporary PNG whose path is pasted).
 ///
-///   * `host` (default) — use the system temporary directory (`$TMPDIR` or
-///     `/tmp`). Correct for normal (non-sandboxed) builds.
+///   * `auto` (default) — behave like `flatpak` when Ghostty is running
+///     inside a Flatpak sandbox, otherwise like `host`.
+///   * `host` — use the system temporary directory (`$TMPDIR` or `/tmp`).
+///     Correct for normal (non-sandboxed) builds.
 ///   * `flatpak` — when Ghostty runs inside a Flatpak sandbox, write to the
 ///     app's own cache directory (`$XDG_CACHE_HOME/ghostty`, i.e.
 ///     `~/.var/app/<app-id>/cache/ghostty`) instead. Under Flatpak the shell
@@ -2480,7 +2482,7 @@ keybind: Keybinds = .{},
 ///     the sandbox `/tmp`; the app cache dir is writable by the sandbox and
 ///     readable by those host-side programs at the same path. Outside Flatpak
 ///     this is identical to `host`.
-@"linux-temp-dir": LinuxTempDir = .host,
+@"linux-temp-dir": LinuxTempDir = .auto,
 
 /// Enables or disabled title reporting (CSI 21 t). This escape sequence
 /// allows the running program to query the terminal title. This is a common
@@ -5398,6 +5400,7 @@ pub const LinkPreviews = enum {
 };
 
 pub const LinuxTempDir = enum {
+    auto,
     host,
     flatpak,
 };
@@ -11122,5 +11125,5 @@ test "linux-temp-dir default" {
     const testing = std.testing;
     var cfg = try Config.default(testing.allocator);
     defer cfg.deinit();
-    try testing.expectEqual(Config.LinuxTempDir.host, cfg.@"linux-temp-dir");
+    try testing.expectEqual(Config.LinuxTempDir.auto, cfg.@"linux-temp-dir");
 }
