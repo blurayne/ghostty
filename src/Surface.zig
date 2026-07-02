@@ -302,6 +302,7 @@ const DerivedConfig = struct {
     clipboard_image_paste: bool,
     clipboard_image_paste_directory: ?[]const u8,
     clipboard_image_paste_max_size: u32,
+    linux_temp_dir: configpkg.Config.LinuxTempDir,
     clipboard_codepoint_map: configpkg.Config.RepeatableClipboardCodepointMap,
     copy_on_select: configpkg.CopyOnSelect,
     right_click_action: configpkg.RightClickAction,
@@ -387,6 +388,7 @@ const DerivedConfig = struct {
             else
                 null,
             .clipboard_image_paste_max_size = config.@"clipboard-image-paste-max-size",
+            .linux_temp_dir = config.@"linux-temp-dir",
             .clipboard_codepoint_map = try config.@"clipboard-codepoint-map".clone(alloc),
             .copy_on_select = config.@"copy-on-select",
             .right_click_action = config.@"right-click-action",
@@ -6007,9 +6009,19 @@ pub fn completeClipboardPasteImage(
         return;
     }
 
-    const path = try apprt.clipboard_image.write(
+    const base_dir = try apprt.clipboard_image.resolveBaseDir(
         self.alloc,
         self.config.clipboard_image_paste_directory,
+        self.config.linux_temp_dir == .flatpak,
+        internal_os.isFlatpak(),
+        std.posix.getenv("XDG_CACHE_HOME"),
+        std.posix.getenv("HOME"),
+    );
+    defer if (base_dir) |b| self.alloc.free(b);
+
+    const path = try apprt.clipboard_image.write(
+        self.alloc,
+        base_dir,
         png,
         std.time.milliTimestamp(),
         std.crypto.random.int(u32),

@@ -2468,6 +2468,20 @@ keybind: Keybinds = .{},
 /// very large temporary files.
 @"clipboard-image-paste-max-size": u32 = 25_000_000,
 
+/// On Linux, controls where Ghostty writes temporary files for
+/// `clipboard-image-paste` (the temporary PNG whose path is pasted).
+///
+///   * `host` (default) — use the system temporary directory (`$TMPDIR` or
+///     `/tmp`). Correct for normal (non-sandboxed) builds.
+///   * `flatpak` — when Ghostty runs inside a Flatpak sandbox, write to the
+///     app's own cache directory (`$XDG_CACHE_HOME/ghostty`, i.e.
+///     `~/.var/app/<app-id>/cache/ghostty`) instead. Under Flatpak the shell
+///     and the programs it runs execute on the host, whose `/tmp` differs from
+///     the sandbox `/tmp`; the app cache dir is writable by the sandbox and
+///     readable by those host-side programs at the same path. Outside Flatpak
+///     this is identical to `host`.
+@"linux-temp-dir": LinuxTempDir = .host,
+
 /// Enables or disabled title reporting (CSI 21 t). This escape sequence
 /// allows the running program to query the terminal title. This is a common
 /// security issue and is disabled by default.
@@ -5381,6 +5395,11 @@ pub const LinkPreviews = enum {
     false,
     true,
     osc8,
+};
+
+pub const LinuxTempDir = enum {
+    host,
+    flatpak,
 };
 
 /// See working-directory
@@ -11097,4 +11116,11 @@ test "clipboard image paste defaults" {
     try testing.expect(cfg.@"clipboard-image-paste");
     try testing.expectEqual(@as(?[]const u8, null), cfg.@"clipboard-image-paste-directory");
     try testing.expectEqual(@as(u32, 25_000_000), cfg.@"clipboard-image-paste-max-size");
+}
+
+test "linux-temp-dir default" {
+    const testing = std.testing;
+    var cfg = try Config.default(testing.allocator);
+    defer cfg.deinit();
+    try testing.expectEqual(Config.LinuxTempDir.host, cfg.@"linux-temp-dir");
 }

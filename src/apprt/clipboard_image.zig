@@ -37,6 +37,10 @@ pub fn write(
 ) ![]u8 {
     const base = resolveDir(dir);
 
+    // Ensure the target directory exists (e.g. a per-user cache dir under
+    // Flatpak). Harmless for the system temp dir, which already exists.
+    try std.fs.cwd().makePath(base);
+
     var name_buf: [64]u8 = undefined;
     const name = fileName(&name_buf, timestamp_ms, rand);
 
@@ -48,6 +52,40 @@ pub fn write(
     try file.writeAll(png);
 
     return path;
+}
+
+/// Resolve the base directory to write a clipboard image into.
+///
+/// Precedence:
+///   1. `explicit` (the `clipboard-image-paste-directory` config) — used as-is.
+///   2. Flatpak mode (`flatpak_mode` and `in_flatpak` both true) — the app's
+///      own cache dir: `$XDG_CACHE_HOME/ghostty` (falling back to
+///      `<home>/.cache/ghostty`). Under Flatpak `$XDG_CACHE_HOME` points at the
+///      app's private, host-visible dir (`~/.var/app/<id>/cache`), which the
+///      sandbox can write and host-side programs can read at the same absolute
+///      path. Requires no extra sandbox permission (unlike `~/.cache`, which is
+///      read-only under `--filesystem=home:ro`).
+///   3. Otherwise `null` — `write` falls back to the system temp dir.
+///
+/// Returns a caller-owned slice (or null). The directory is not created here;
+/// `write` ensures it exists.
+pub fn resolveBaseDir(
+    alloc: Allocator,
+    explicit: ?[]const u8,
+    flatpak_mode: bool,
+    in_flatpak: bool,
+    xdg_cache_home: ?[]const u8,
+    home: ?[]const u8,
+) !?[]u8 {
+    if (explicit) |e| return try alloc.dupe(u8, e);
+    if (flatpak_mode and in_flatpak) {
+        if (xdg_cache_home) |xc| {
+            if (xc.len > 0) return try std.fs.path.join(alloc, &.{ xc, "ghostty" });
+        }
+        if (home) |h| return try std.fs.path.join(alloc, &.{ h, ".cache", "ghostty" });
+        return null;
+    }
+    return null;
 }
 
 test "clipboard image: fileName format" {
@@ -73,4 +111,39 @@ test "clipboard image: write creates png file with bytes" {
     const contents = try std.fs.cwd().readFileAlloc(testing.allocator, path, 1024);
     defer testing.allocator.free(contents);
     try testing.expectEqualStrings(png, contents);
+}
+
+test "clipboard image: resolveBaseDir explicit wins" {
+    const testing = std.testing;
+    const r = try resolveBaseDir(testing.allocator, "/custom/dir", true, true, "/x/.cache", "/home/u");
+    defer if (r) |v| testing.allocator.free(v);
+    try testing.expectEqualStrings("/custom/dir", r.?);
+}
+
+test "clipboard image: resolveBaseDir flatpak uses XDG cache dir" {
+    const testing = std.testing;
+    const r = try resolveBaseDir(testing.allocator, null, true, true, "/home/u/.var/app/x/cache", "/home/u");
+    defer if (r) |v| testing.allocator.free(v);
+    try testing.expectEqualStrings("/home/u/.var/app/x/cache/ghostty", r.?);
+}
+
+test "clipboard image: resolveBaseDir flatpak falls back to home cache" {
+    const testing = std.testing;
+    const r = try resolveBaseDir(testing.allocator, null, true, true, null, "/home/u");
+    defer if (r) |v| testing.allocator.free(v);
+    try testing.expectEqualStrings("/home/u/.cache/ghostty", r.?);
+}
+
+test "clipboard image: resolveBaseDir host mode is null" {
+    const testing = std.testing;
+    const r = try resolveBaseDir(testing.allocator, null, false, true, "/home/u/.cache", "/home/u");
+    defer if (r) |v| testing.allocator.free(v);
+    try testing.expect(r == null);
+}
+
+test "clipboard image: resolveBaseDir flatpak mode but not in flatpak is null" {
+    const testing = std.testing;
+    const r = try resolveBaseDir(testing.allocator, null, true, false, "/home/u/.cache", "/home/u");
+    defer if (r) |v| testing.allocator.free(v);
+    try testing.expect(r == null);
 }
