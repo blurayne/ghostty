@@ -79,6 +79,19 @@ pub const ModeState = struct {
     /// Return a DECRPM report for the given mode tag. If the tag does
     /// not correspond to a known mode, the report state is .not_recognized.
     pub fn getReport(self: *const ModeState, tag: ModeTag) Report {
+        // DECECM (Erase Color Mode, DEC private mode 117) controls whether erasing
+        // and scrolling use the default background or the active background color.
+        // Ghostty's behavior is fixed equivalent to DECECM reset, and DECRQM has a
+        // "permanently reset" response for recognized modes that cannot be changed.
+        // Report that instead of "not recognized" so applications can query and adapt
+        // to Ghostty's erase-color behavior.
+        //
+        // See VT520/VT525 Programmer Information, "Erase Color" and DECRQM/DECRPM:
+        // https://web.mit.edu/dosathena/doc/www/ek-vt520-rm.pdf
+
+        if (!tag.ansi and tag.value == 117) {
+            return .{ .tag = tag, .state = .permanently_reset };
+        }
         const mode = modeFromInt(tag.value, tag.ansi) orelse return .{
             .tag = tag,
             .state = .not_recognized,
@@ -101,45 +114,31 @@ pub const ModeState = struct {
 /// be used directly but rather through the ModeState struct.
 pub const ModePacked = packed_struct: {
     const StructField = std.builtin.Type.StructField;
-    var fields: [entries.len]StructField = undefined;
-    for (entries, 0..) |entry, i| {
-        fields[i] = .{
-            .name = entry.name,
-            .type = bool,
-            .default_value_ptr = &entry.default,
-            .is_comptime = false,
-            .alignment = 0,
-        };
+    var names: [entries.len][]const u8 = undefined;
+    var types = [_]type{bool} ** entries.len;
+    var attrs: [entries.len]StructField.Attributes = undefined;
+
+    for (entries, &names, &attrs) |entry, *name, *attr| {
+        name.* = entry.name;
+        attr.* = .{ .default_value_ptr = &entry.default };
     }
 
-    break :packed_struct @Type(.{ .@"struct" = .{
-        .layout = .@"packed",
-        .fields = &fields,
-        .decls = &.{},
-        .is_tuple = false,
-    } });
+    break :packed_struct @Struct(.@"packed", null, &names, &types, &attrs);
 };
 
 /// An enum(u16) of the available modes. See entries for available values.
 pub const Mode = mode_enum: {
-    const EnumField = std.builtin.Type.EnumField;
-    var fields: [entries.len]EnumField = undefined;
-    for (entries, 0..) |entry, i| {
-        fields[i] = .{
-            .name = entry.name,
-            .value = @as(ModeTag.Backing, @bitCast(ModeTag{
-                .value = entry.value,
-                .ansi = entry.ansi,
-            })),
-        };
+    var names: [entries.len][]const u8 = undefined;
+    var values: [entries.len]ModeTag.Backing = undefined;
+    for (entries, &names, &values) |entry, *name, *value| {
+        name.* = entry.name;
+        value.* = @bitCast(ModeTag{
+            .value = entry.value,
+            .ansi = entry.ansi,
+        });
     }
 
-    break :mode_enum @Type(.{ .@"enum" = .{
-        .tag_type = ModeTag.Backing,
-        .fields = &fields,
-        .decls = &.{},
-        .is_exhaustive = true,
-    } });
+    break :mode_enum @Enum(ModeTag.Backing, .exhaustive, &names, &values);
 };
 
 /// The tag type for our enum is a u16 but we use a packed struct
@@ -296,6 +295,7 @@ const entries: []const ModeEntry = &.{
     .{ .name = "synchronized_output", .value = 2026 },
     .{ .name = "grapheme_cluster", .value = 2027 },
     .{ .name = "report_color_scheme", .value = 2031 },
+    .{ .name = "report_visibility", .value = 2033 },
     .{ .name = "in_band_size_reports", .value = 2048 },
 };
 
@@ -345,6 +345,13 @@ test "getReport known ANSI mode" {
     const report = state.getReport(.{ .value = 4, .ansi = true });
     try testing.expectEqual(Report.State.set, report.state);
     try testing.expectEqual(true, report.tag.ansi);
+}
+
+test "getReport DECECM permanently reset" {
+    const state: ModeState = .{};
+    const report = state.getReport(.{ .value = 117, .ansi = false });
+    try testing.expectEqual(Report.State.permanently_reset, report.state);
+    try testing.expectEqual(false, report.tag.ansi);
 }
 
 test "getReport unknown mode" {

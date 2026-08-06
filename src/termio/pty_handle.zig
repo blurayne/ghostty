@@ -74,6 +74,23 @@ pub const PtyHandle = struct {
         }
     }
 
+    /// Hand off each subscriber's renderer state mutex if its renderer
+    /// is waiting. Called at batch boundaries by the read pipeline so a
+    /// hot pty doesn't starve the renderers of the mirror surfaces.
+    /// Snapshots the list under the lock, then releases before yielding.
+    pub fn yieldToDemand(self: *PtyHandle, loop_io: std.Io) void {
+        // Stack snapshot for the common case of <=8 mirrors
+        var stack: [8]*termio.Termio = undefined;
+        self.mu.lock();
+        const n = @min(self.subscribers.items.len, stack.len);
+        @memcpy(stack[0..n], self.subscribers.items[0..n]);
+        self.mu.unlock();
+
+        for (stack[0..n]) |io| {
+            io.renderer_state.yieldToDemand(loop_io);
+        }
+    }
+
     /// Write bytes to the PTY master fd (used by mirror surfaces for input).
     pub fn writePty(self: *PtyHandle, buf: []const u8) void {
         var remaining = buf;
