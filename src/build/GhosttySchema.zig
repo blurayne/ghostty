@@ -18,6 +18,12 @@ pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/schemagen.zig"),
             .target = b.graph.host,
+            // Build at ReleaseFast regardless of the top-level optimize mode.
+            // The Zig 0.16 compiler SEGVs when codegen'ing the large uucode
+            // tables (pulled in transitively via Config) at -ODebug; a release
+            // mode avoids the crash. schemagen is a build-time tool, so a
+            // faster/optimized build is fine.
+            .optimize = .ReleaseFast,
             .strip = false,
             .omit_frame_pointer = false,
             .unwind_tables = .sync,

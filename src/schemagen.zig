@@ -9,6 +9,10 @@ const Config = @import("config/Config.zig");
 const help_strings = @import("help_strings");
 
 pub fn main(init: std.process.Init) !void {
+    // The inline-for below reflects over every Config field with per-field
+    // comptime work, which exceeds the default backward-branch budget.
+    @setEvalBranchQuota(1_000_000);
+
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer _ = gpa.deinit();
     const alloc = gpa.allocator();
