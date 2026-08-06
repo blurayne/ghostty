@@ -471,7 +471,7 @@ pub const StreamHandler = struct {
             };
             defer cmd.deinit(self.alloc);
 
-            if (self.terminal.kittyGraphics(self.alloc, &cmd)) |resp| {
+            if (self.terminal.kittyGraphics(global.io(), self.alloc, &cmd)) |resp| {
                 if (!resp.ok()) {
                     log.warn("iterm2 inline image: kitty graphics error: {s}", .{resp.message});
                 }
@@ -589,7 +589,7 @@ pub const StreamHandler = struct {
                 .do_not_move_cursor = header.do_not_move_cursor,
                 .display_inline = header.display_inline,
             },
-            .data = .{},
+            .data = .empty,
         };
         log.debug("iterm2 multipart: begin transfer name={s} inline={}", .{ header.name, header.display_inline });
     }
@@ -706,10 +706,10 @@ pub const StreamHandler = struct {
         defer if (home_path) |p| alloc.free(p);
 
         const download_dir: []const u8 = blk: {
-            if (std.posix.getenv("XDG_DOWNLOAD_DIR")) |d| {
+            if (global.environ().getPosix("XDG_DOWNLOAD_DIR")) |d| {
                 if (d.len > 0) break :blk d;
             }
-            if (std.posix.getenv("HOME")) |h| {
+            if (global.environ().getPosix("HOME")) |h| {
                 const path = try std.fmt.allocPrint(alloc, "{s}/Downloads", .{h});
                 home_path = path;
                 break :blk path;
@@ -721,19 +721,26 @@ pub const StreamHandler = struct {
         const dest_path = try std.fmt.allocPrint(alloc, "{s}/{s}", .{ download_dir, safe_name });
         defer alloc.free(dest_path);
 
-        std.fs.cwd().makePath(download_dir) catch |err| {
+        const io = global.io();
+        std.Io.Dir.cwd().createDirPath(io, download_dir) catch |err| {
             log.err("iterm2 download: cannot create directory {s}: {}", .{ download_dir, err });
             return;
         };
 
-        const file = std.fs.cwd().createFile(dest_path, .{ .exclusive = false }) catch |err| {
+        const file = std.Io.Dir.cwd().createFile(io, dest_path, .{ .exclusive = false }) catch |err| {
             log.err("iterm2 download: cannot create {s}: {}", .{ dest_path, err });
             return;
         };
-        defer file.close();
+        defer file.close(io);
 
-        file.writeAll(decoded) catch |err| {
+        var wbuf: [4096]u8 = undefined;
+        var fw = file.writer(io, &wbuf);
+        fw.interface.writeAll(decoded) catch |err| {
             log.err("iterm2 download: write error for {s}: {}", .{ dest_path, err });
+            return;
+        };
+        fw.interface.flush() catch |err| {
+            log.err("iterm2 download: flush error for {s}: {}", .{ dest_path, err });
             return;
         };
 
@@ -953,7 +960,7 @@ pub const StreamHandler = struct {
             };
             defer kitty_cmd.deinit(self.alloc);
 
-            if (self.terminal.kittyGraphics(self.alloc, &kitty_cmd)) |resp| {
+            if (self.terminal.kittyGraphics(global.io(), self.alloc, &kitty_cmd)) |resp| {
                 if (!resp.ok()) {
                     log.warn("sixel: kitty graphics error: {s}", .{resp.message});
                 }

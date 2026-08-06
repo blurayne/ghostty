@@ -634,7 +634,17 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
 
 /// Format the current UTC time as "YYYY-MM-DD HH:MM:SS UTC" into buf.
 fn buildTimestamp(buf: []u8) ![:0]const u8 {
-    const unix_secs: u64 = @intCast(std.time.timestamp());
+    // Zig 0.16 removed std.time.timestamp(); read the wall clock directly.
+    // This fork only builds on Linux (see the dev container); on other hosts
+    // we fall back to the epoch rather than pulling in libc at build time.
+    const unix_secs: u64 = secs: {
+        if (builtin.os.tag == .linux) {
+            var ts: std.os.linux.timespec = undefined;
+            _ = std.os.linux.clock_gettime(.REALTIME, &ts);
+            break :secs @intCast(ts.sec);
+        }
+        break :secs 0;
+    };
     const epoch_day = std.time.epoch.EpochSeconds{ .secs = unix_secs };
     const day_seconds = epoch_day.getDaySeconds();
     const year_day = epoch_day.getEpochDay().calculateYearDay();

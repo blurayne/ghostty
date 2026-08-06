@@ -6068,17 +6068,24 @@ pub fn completeClipboardPasteImage(
         self.config.clipboard_image_paste_directory,
         prefer_flatpak_dir,
         internal_os.isFlatpak(),
-        std.posix.getenv("XDG_CACHE_HOME"),
-        std.posix.getenv("HOME"),
+        global.environ().getPosix("XDG_CACHE_HOME"),
+        global.environ().getPosix("HOME"),
     );
     defer if (base_dir) |b| self.alloc.free(b);
 
+    const now_ms: i64 = ms: {
+        var ts: std.os.linux.timespec = undefined;
+        _ = std.os.linux.clock_gettime(.REALTIME, &ts);
+        break :ms @as(i64, @intCast(ts.sec)) * 1000 +
+            @divTrunc(@as(i64, @intCast(ts.nsec)), 1_000_000);
+    };
+    var img_rng: std.Random.IoSource = .{ .io = global.io() };
     const path = try apprt.clipboard_image.write(
         self.alloc,
         base_dir,
         png,
-        std.time.milliTimestamp(),
-        std.crypto.random.int(u32),
+        now_ms,
+        img_rng.interface().int(u32),
     );
     defer self.alloc.free(path);
 

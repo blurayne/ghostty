@@ -39,11 +39,11 @@ pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
     deps.help_strings.addImport(exe);
 
     // Config transitively imports input/Binding.zig which imports uucode.
-    // Use Debug optimize to keep memory usage low — schemagen is a build tool.
-    deps.addUucode(b, exe.root_module, b.graph.host, .Debug);
+    // Wire in the shared singleton uucode module (see SharedDeps.uucode_mod).
+    exe.root_module.addImport("uucode", deps.uucode_mod);
 
     const run = b.addRunArtifact(exe);
-    const json_out = run.captureStdOut();
+    const json_out = run.captureStdOut(.{});
 
     // Primary output: config.schema.json
     const install_json = b.addInstallFile(
@@ -57,7 +57,7 @@ pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
         "src/build/schema/gen_sublime_completions.py",
     });
     run_sublime.addFileArg(json_out);
-    const sublime_out = run_sublime.captureStdOut();
+    const sublime_out = run_sublime.captureStdOut(.{});
     const install_sublime = b.addInstallFile(
         sublime_out,
         "share/ghostty/schema/ghostty.sublime-completions",
@@ -69,7 +69,7 @@ pub fn init(b: *std.Build, deps: *const SharedDeps) !GhosttySchema {
         "src/build/schema/gen_vscode_snippets.py",
     });
     run_vscode.addFileArg(json_out);
-    const vscode_out = run_vscode.captureStdOut();
+    const vscode_out = run_vscode.captureStdOut(.{});
     const install_vscode = b.addInstallFile(
         vscode_out,
         "share/ghostty/schema/ghostty-vscode-snippets.json",

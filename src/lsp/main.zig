@@ -20,7 +20,7 @@ const embedded_schema_module = @import("config_schema");
 const embedded_schema: []const u8 = embedded_schema_module.data;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 

@@ -4,6 +4,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const global = @import("../global.zig");
 
 /// Prefix for all temp files we create. Used for both creation and (future)
 /// pruning.
@@ -12,7 +13,7 @@ pub const prefix = "ghostty-paste-";
 /// Resolve the directory to write clipboard images into. If `dir` is non-null
 /// it is returned as-is; otherwise the system temp dir is used.
 pub fn resolveDir(dir: ?[]const u8) []const u8 {
-    return dir orelse (std.posix.getenv("TMPDIR") orelse "/tmp");
+    return dir orelse (global.environ().getPosix("TMPDIR") orelse "/tmp");
 }
 
 /// Format the file name (not the full path) for a clipboard image into `buf`.
@@ -36,10 +37,11 @@ pub fn write(
     rand: u32,
 ) ![]u8 {
     const base = resolveDir(dir);
+    const io = global.io();
 
     // Ensure the target directory exists (e.g. a per-user cache dir under
     // Flatpak). Harmless for the system temp dir, which already exists.
-    try std.fs.cwd().makePath(base);
+    try std.Io.Dir.cwd().createDirPath(io, base);
 
     var name_buf: [64]u8 = undefined;
     const name = fileName(&name_buf, timestamp_ms, rand);
@@ -47,9 +49,12 @@ pub fn write(
     const path = try std.fs.path.join(alloc, &.{ base, name });
     errdefer alloc.free(path);
 
-    const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
-    defer file.close();
-    try file.writeAll(png);
+    const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = true });
+    defer file.close(io);
+    var wbuf: [4096]u8 = undefined;
+    var fw = file.writer(io, &wbuf);
+    try fw.interface.writeAll(png);
+    try fw.interface.flush();
 
     return path;
 }
@@ -108,7 +113,7 @@ test "clipboard image: write creates png file with bytes" {
 
     try testing.expect(std.mem.endsWith(u8, path, "ghostty-paste-999-7.png"));
 
-    const contents = try std.fs.cwd().readFileAlloc(testing.allocator, path, 1024);
+    const contents = try std.Io.Dir.cwd().readFileAlloc(global.io(), path, testing.allocator, .limited(1024));
     defer testing.allocator.free(contents);
     try testing.expectEqualStrings(png, contents);
 }

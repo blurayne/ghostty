@@ -49,7 +49,7 @@ pub fn parseLines(allocator: std.mem.Allocator, src: []const u8) ![]Line {
     var iter = std.mem.splitScalar(u8, src, '\n');
     while (iter.next()) |raw| {
         // Strip trailing \r (CRLF files).
-        const text = std.mem.trimRight(u8, raw, "\r");
+        const text = std.mem.trimEnd(u8, raw, "\r");
         const trimmed = std.mem.trim(u8, text, " \t");
 
         const kind: Line.Kind = if (trimmed.len == 0)
@@ -57,8 +57,8 @@ pub fn parseLines(allocator: std.mem.Allocator, src: []const u8) ![]Line {
         else if (trimmed[0] == '#')
             .comment
         else if (std.mem.indexOfScalar(u8, text, '=')) |eq_pos| blk: {
-            const key = std.mem.trimRight(u8, text[0..eq_pos], " \t");
-            const value = std.mem.trimLeft(u8, text[eq_pos + 1 ..], " \t");
+            const key = std.mem.trimEnd(u8, text[0..eq_pos], " \t");
+            const value = std.mem.trimStart(u8, text[eq_pos + 1 ..], " \t");
             if (key.len == 0) break :blk .malformed;
             break :blk .{ .assignment = .{ .key = key, .value = value } };
         } else

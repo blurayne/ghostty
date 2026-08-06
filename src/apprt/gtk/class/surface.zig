@@ -1863,7 +1863,8 @@ pub const Surface = extern struct {
         priv.gtk_enable_primary_paste = gsettings.get(.@"gtk-enable-primary-paste") orelse true;
 
         // Generate a stable UUID for DnD identification.
-        std.crypto.random.bytes(&priv.uuid);
+        var uuid_rng: std.Random.IoSource = .{ .io = global.io() };
+        uuid_rng.interface().bytes(&priv.uuid);
 
         // Set up to handle items being dropped on our surface. Files can be dropped
         // from Nautilus and strings can be dropped from many programs. The order

@@ -15,6 +15,7 @@ const gtk = @import("gtk");
 const pango = @import("pango");
 
 const build_config = @import("../../../build_config.zig");
+const global = @import("../../../global.zig");
 const configpkg = @import("../../../config.zig");
 const config_edit = @import("../../../config/edit.zig");
 const metadata = configpkg.metadata;
@@ -149,7 +150,7 @@ pub const ConfigEditorWindow = extern struct {
                 if (std.mem.indexOf(u8, written, " = ")) |sep| {
                     const raw = written[sep + 3 ..];
                     // Trim trailing newline.
-                    break :value_str std.mem.trimRight(u8, raw, "\n");
+                    break :value_str std.mem.trimEnd(u8, raw, "\n");
                 }
                 break :value_str written;
             };
@@ -473,7 +474,7 @@ pub const ConfigEditorWindow = extern struct {
                     const value_str: []const u8 = blk: {
                         if (std.mem.indexOf(u8, written, " = ")) |sep| {
                             const raw = written[sep + 3 ..];
-                            break :blk std.mem.trimRight(u8, raw, "\n");
+                            break :blk std.mem.trimEnd(u8, raw, "\n");
                         }
                         break :blk written;
                     };
@@ -1056,12 +1057,13 @@ pub const ConfigEditorWindow = extern struct {
         priv.writing_file = true;
         defer priv.writing_file = false;
 
-        const file = try std.fs.openFileAbsoluteZ(path, .{ .mode = .write_only });
-        defer file.close();
-        try file.seekFromEnd(0);
+        const io = global.io();
+        const file = try std.Io.Dir.openFileAbsolute(io, path, .{ .mode = .write_only });
+        defer file.close(io);
 
         var wbuf: [4096]u8 = undefined;
-        var file_writer = file.writer(&wbuf);
+        var file_writer = file.writer(io, &wbuf);
+        try file_writer.seekTo((try file.stat(io)).size);
         const writer = &file_writer.interface;
 
         try writer.writeAll("\n# --- config editor ---\n");
@@ -1077,6 +1079,7 @@ pub const ConfigEditorWindow = extern struct {
             try writer.print("{s} = {s}\n", .{ field.name, val });
             entry.setDirty(false);
         }
+        try writer.flush();
     }
 
     fn onSaveClicked(
@@ -1115,18 +1118,19 @@ pub const ConfigEditorWindow = extern struct {
         };
         defer std.heap.c_allocator.free(path);
 
+        const io = global.io();
         if (std.fs.path.dirname(path)) |dir| {
-            std.fs.cwd().makePath(dir) catch |err| {
+            std.Io.Dir.cwd().createDirPath(io, dir) catch |err| {
                 log.warn("sentinel: makePath({s}) failed: {}", .{ dir, err });
                 return;
             };
         }
 
-        const f = std.fs.createFileAbsolute(path, .{}) catch |err| {
+        const f = std.Io.Dir.createFileAbsolute(io, path, .{}) catch |err| {
             log.warn("sentinel: createFileAbsolute({s}) failed: {}", .{ path, err });
             return;
         };
-        f.close();
+        f.close(io);
         log.info("sentinel written: {s}", .{path});
     }
 
@@ -1147,7 +1151,7 @@ pub const ConfigEditorWindow = extern struct {
     ) callconv(.c) void {
         _ = self;
         const app = Application.default();
-        _ = app.core().mailbox.push(.open_config, .forever);
+        _ = app.core().mailbox.push(global.io(), .open_config, .forever);
     }
 
     fn onReloadClicked(

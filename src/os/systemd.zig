@@ -55,7 +55,7 @@ pub fn launchedBySystemd() bool {
 
             break :linux std.mem.eql(
                 u8,
-                std.mem.trimRight(u8, comm_data, "\n"),
+                std.mem.trimEnd(u8, comm_data, "\n"),
                 "systemd",
             );
         },

@@ -2015,7 +2015,7 @@ pub const Application = extern struct {
         const alloc = self.allocator();
         const path = getSentinelPath(alloc) catch return false;
         defer alloc.free(path);
-        std.fs.deleteFileAbsolute(path) catch return false;
+        std.Io.Dir.deleteFileAbsolute(global.io(), path) catch return false;
         return true;
     }
 

@@ -412,6 +412,9 @@ pub const Handler = struct {
                 self.writePty(response[0..encoded.len :0]);
             },
 
+            // Sixel graphics require a rendering surface, which this
+            // embedding stream handler does not provide; ignore it.
+            .sixel,
             .tmux,
             .xtgettcap,
             => {},

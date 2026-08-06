@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const global = @import("../global.zig");
 
 /// Returns true if the program was launched by D-Bus activation.
 ///
@@ -12,8 +13,8 @@ pub fn launchedByDbusActivation() bool {
         // On Linux, D-Bus activation sets `DBUS_STARTER_ADDRESS` and
         // `DBUS_STARTER_BUS_TYPE`. If these environment variables are present
         // (no matter the value) we were launched by D-Bus activation.
-        .linux => std.posix.getenv("DBUS_STARTER_ADDRESS") != null and
-            std.posix.getenv("DBUS_STARTER_BUS_TYPE") != null,
+        .linux => global.environ().getPosix("DBUS_STARTER_ADDRESS") != null and
+            global.environ().getPosix("DBUS_STARTER_BUS_TYPE") != null,
 
         // No other system supports D-Bus so always return false.
         else => false,

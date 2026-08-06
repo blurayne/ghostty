@@ -2,13 +2,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const posix = std.posix;
 const termio = @import("../termio.zig");
+const global = @import("../global.zig");
 
 const log = std.log.scoped(.pty_handle);
 
 pub const PtyHandle = struct {
     alloc: Allocator,
     refcount: std.atomic.Value(u32),
-    mu: std.Thread.Mutex,
+    mu: std.Io.Mutex,
     subscribers: std.ArrayListUnmanaged(*termio.Termio),
     /// PTY master fd for writing input bytes
     pty_fd: posix.fd_t,
@@ -18,8 +19,8 @@ pub const PtyHandle = struct {
         handle.* = .{
             .alloc = alloc,
             .refcount = std.atomic.Value(u32).init(1),
-            .mu = .{},
-            .subscribers = .{},
+            .mu = .init,
+            .subscribers = .empty,
             .pty_fd = pty_fd,
         };
         return handle;
@@ -31,22 +32,22 @@ pub const PtyHandle = struct {
 
     pub fn unref(self: *PtyHandle) void {
         if (self.refcount.fetchSub(1, .acq_rel) == 1) {
-            self.mu.lock();
+            self.mu.lockUncancelable(global.io());
             self.subscribers.deinit(self.alloc);
-            self.mu.unlock();
+            self.mu.unlock(global.io());
             self.alloc.destroy(self);
         }
     }
 
     pub fn subscribe(self: *PtyHandle, io: *termio.Termio) !void {
-        self.mu.lock();
-        defer self.mu.unlock();
+        self.mu.lockUncancelable(global.io());
+        defer self.mu.unlock(global.io());
         try self.subscribers.append(self.alloc, io);
     }
 
     pub fn unsubscribe(self: *PtyHandle, io: *termio.Termio) void {
-        self.mu.lock();
-        defer self.mu.unlock();
+        self.mu.lockUncancelable(global.io());
+        defer self.mu.unlock(global.io());
         for (self.subscribers.items, 0..) |sub, i| {
             if (sub == io) {
                 _ = self.subscribers.swapRemove(i);
@@ -61,13 +62,13 @@ pub const PtyHandle = struct {
     pub fn broadcast(self: *PtyHandle, buf: []const u8) void {
         // Stack snapshot for the common case of <=8 mirrors
         var stack: [8]*termio.Termio = undefined;
-        self.mu.lock();
+        self.mu.lockUncancelable(global.io());
         const n = @min(self.subscribers.items.len, stack.len);
         @memcpy(stack[0..n], self.subscribers.items[0..n]);
         if (self.subscribers.items.len > stack.len) {
             log.warn("broadcast: more than 8 subscribers, extras skipped", .{});
         }
-        self.mu.unlock();
+        self.mu.unlock(global.io());
 
         for (stack[0..n]) |io| {
             termio.Termio.processOutput(io, buf);
@@ -81,10 +82,10 @@ pub const PtyHandle = struct {
     pub fn yieldToDemand(self: *PtyHandle, loop_io: std.Io) void {
         // Stack snapshot for the common case of <=8 mirrors
         var stack: [8]*termio.Termio = undefined;
-        self.mu.lock();
+        self.mu.lockUncancelable(global.io());
         const n = @min(self.subscribers.items.len, stack.len);
         @memcpy(stack[0..n], self.subscribers.items[0..n]);
-        self.mu.unlock();
+        self.mu.unlock(global.io());
 
         for (stack[0..n]) |io| {
             io.renderer_state.yieldToDemand(loop_io);
@@ -95,11 +96,17 @@ pub const PtyHandle = struct {
     pub fn writePty(self: *PtyHandle, buf: []const u8) void {
         var remaining = buf;
         while (remaining.len > 0) {
-            const n = posix.write(self.pty_fd, remaining) catch |err| {
-                log.warn("writePty err={}", .{err});
-                return;
-            };
-            remaining = remaining[n..];
+            // Zig 0.16 removed std.posix.write; use the raw syscall wrapper.
+            const rc = posix.system.write(self.pty_fd, remaining.ptr, remaining.len);
+            switch (posix.errno(rc)) {
+                .SUCCESS => {},
+                else => |e| {
+                    log.warn("writePty err=E{s}", .{@tagName(e)});
+                    return;
+                },
+            }
+            if (rc == 0) return;
+            remaining = remaining[@intCast(rc)..];
         }
     }
 };

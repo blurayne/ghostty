@@ -15,15 +15,15 @@ RUN echo "messagebus:x:81:" >> /etc/group && \
 RUN --mount=type=cache,target=/root/.cache/mise-dl \
     curl -fsSL https://mise.run | sh
 
-# Install zig 0.15.2 — same version used by flatpak-builder (dependencies.yml).
+# Install zig 0.16.0 — same version used by flatpak-builder (dependencies.yml).
 # Baked into the image so zig-build / zig-test tasks don't need to download it.
 # zig expects its lib/ directory alongside the binary, so extract the whole
 # tarball into /usr/local/zig and add that to PATH.
 RUN --mount=type=cache,target=/root/.cache/zig-dl \
     mkdir -p /usr/local/zig /root/.cache/zig-dl && \
-    ZIG_TXZ=/root/.cache/zig-dl/zig-x86_64-linux-0.15.2.tar.xz && \
+    ZIG_TXZ=/root/.cache/zig-dl/zig-x86_64-linux-0.16.0.tar.xz && \
     if [ ! -f "$ZIG_TXZ" ]; then \
-      curl -fsSL https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz \
+      curl -fsSL https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz \
         -o "$ZIG_TXZ"; \
     fi && \
     tar -xJ --strip-components=1 -C /usr/local/zig < "$ZIG_TXZ"

@@ -34,7 +34,7 @@ pub fn readMessage(allocator: std.mem.Allocator, reader: *std.Io.Reader) !?[]u8 
         // Parse Content-Length header (case-insensitive prefix match).
         const prefix = "Content-Length:";
         if (std.ascii.startsWithIgnoreCase(line, prefix)) {
-            const rest = std.mem.trimLeft(u8, line[prefix.len..], " \t");
+            const rest = std.mem.trimStart(u8, line[prefix.len..], " \t");
             content_length = std.fmt.parseInt(usize, rest, 10) catch continue;
         }
         // Ignore other headers (e.g. Content-Type).
@@ -60,7 +60,7 @@ fn readLine(reader: *std.Io.Reader, buf: []u8) ![]u8 {
     const line_or_null = try reader.takeDelimiter('\n');
     const raw = line_or_null orelse return error.EndOfStream;
     // Strip trailing \r for CRLF.
-    const trimmed = std.mem.trimRight(u8, raw, "\r");
+    const trimmed = std.mem.trimEnd(u8, raw, "\r");
     if (trimmed.len > buf.len) return error.HeaderLineTooLong;
     @memcpy(buf[0..trimmed.len], trimmed);
     return buf[0..trimmed.len];

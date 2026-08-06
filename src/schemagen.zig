@@ -8,14 +8,14 @@ const std = @import("std");
 const Config = @import("config/Config.zig");
 const help_strings = @import("help_strings");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+pub fn main(init: std.process.Init) !void {
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer _ = gpa.deinit();
     const alloc = gpa.allocator();
 
     // Use a 64 KB buffer on stdout for performance.
     var buf: [65536]u8 = undefined;
-    var stdout_stream = std.fs.File.stdout().writerStreaming(&buf);
+    var stdout_stream = std.Io.File.stdout().writerStreaming(init.io, &buf);
     const out = &stdout_stream.interface;
 
     try out.writeAll("[\n");
@@ -239,7 +239,7 @@ fn formatFieldValue(comptime T: type, value: T, writer: *std.Io.Writer) !void {
                     s[prefix.len..]
                 else
                     s;
-                const trimmed = std.mem.trimRight(u8, stripped, "\n");
+                const trimmed = std.mem.trimEnd(u8, stripped, "\n");
                 try writer.writeAll(trimmed);
             } else switch (info.layout) {
                 .@"packed" => {
@@ -268,7 +268,7 @@ fn formatFieldValue(comptime T: type, value: T, writer: *std.Io.Writer) !void {
                     s[prefix.len..]
                 else
                     s;
-                const trimmed = std.mem.trimRight(u8, stripped, "\n");
+                const trimmed = std.mem.trimEnd(u8, stripped, "\n");
                 try writer.writeAll(trimmed);
             }
         },
