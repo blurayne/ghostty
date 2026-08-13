@@ -26,6 +26,7 @@ const Library = font.Library;
 const Presentation = font.Presentation;
 const RenderOptions = font.Glyph.RenderOptions;
 const SpriteFace = font.SpriteFace;
+const GlossaryFace = font.GlossaryFace;
 const Style = font.Style;
 
 const log = std.log.scoped(.font_codepoint_resolver);
@@ -58,9 +59,16 @@ descriptor_cache: DescriptorCache = .{},
 /// terminal rendering will look wrong.
 sprite: ?SpriteFace = null,
 
+/// Snapshot of the Glyph Protocol glossary. When non-null, any registered PUA
+/// codepoint is resolved to a `.glossary` special index and rendered from its
+/// stored outline instead of a system font. Owned by the resolver; refreshed
+/// via `SharedGrid.setGlossary`.
+glossary: ?GlossaryFace = null,
+
 pub fn deinit(self: *CodepointResolver, alloc: Allocator) void {
     self.collection.deinit(alloc);
     self.descriptor_cache.deinit(alloc);
+    if (self.glossary) |*g| g.deinit(alloc);
 }
 
 /// Looks up the font that should be used for a specific codepoint.
@@ -141,6 +149,15 @@ pub fn getIndex(
     if (self.sprite) |sprite| {
         if (sprite.hasCodepoint(cp, p)) {
             return .initSpecial(.sprite);
+        }
+    }
+
+    // Glyph Protocol glossary: a registered PUA codepoint takes priority over
+    // any system font, so an application's registered glyph wins over e.g. a
+    // Nerd Font that happens to cover the same PUA slot.
+    if (self.glossary) |*glossary| {
+        if (glossary.hasCodepoint(cp)) {
+            return .initSpecial(.glossary);
         }
     }
 
@@ -307,6 +324,7 @@ pub fn getPresentation(
 ) !Presentation {
     if (index.special()) |sp| return switch (sp) {
         .sprite => .text,
+        .glossary => self.glossary.?.presentation(glyph_index),
     };
 
     const face = try self.collection.getFace(index);
@@ -335,6 +353,12 @@ pub fn renderGlyph(
     // Special-case fonts are rendered directly.
     if (index.special()) |sp| switch (sp) {
         .sprite => return try self.sprite.?.renderGlyph(
+            alloc,
+            atlas,
+            glyph_index,
+            opts,
+        ),
+        .glossary => return try self.glossary.?.renderGlyph(
             alloc,
             atlas,
             glyph_index,

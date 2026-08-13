@@ -117,6 +117,12 @@ pub const Entry = struct {
     /// Stored glyph payload variants.
     pub const Glyph = union(enum) {
         glyf: Glyf.Outline,
+        /// Decoded, owned Glyph Protocol §8.7 color container bytes (COLR v0 +
+        /// CPAL + glyf outlines). Parsed and rasterized at render time.
+        colrv0: []const u8,
+        /// Decoded, owned §8.7 color container bytes carrying a COLR v1 (paint
+        /// graph) table. Parsed and rasterized at render time.
+        colrv1: []const u8,
     };
 
     /// The glyph itself. The tagged union only has glyf right now but
@@ -171,7 +177,8 @@ pub const Entry = struct {
         // future rasterization.
         const glyph: Glyph = switch (fmt) {
             .glyf => .{ .glyf = try req.decodeGlyfPayload(alloc) },
-            .colrv0, .colrv1 => return error.UnsupportedFormat,
+            .colrv0 => .{ .colrv0 = try req.decodeColorPayload(alloc) },
+            .colrv1 => .{ .colrv1 = try req.decodeColorPayload(alloc) },
         };
 
         // No more errors, since we never do glyph cleanup above.
@@ -189,6 +196,7 @@ pub const Entry = struct {
     pub fn deinit(self: *Entry, alloc: Allocator) void {
         switch (self.glyph) {
             .glyf => |*outline| outline.deinit(alloc),
+            .colrv0, .colrv1 => |bytes| alloc.free(bytes),
         }
         self.* = undefined;
     }

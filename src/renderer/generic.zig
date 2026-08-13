@@ -1230,6 +1230,23 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     state.terminal.flags.search_viewport_dirty = true;
                 }
 
+                // Glyph Protocol: if the glossary changed (a register/clear
+                // happened), refresh the render-side snapshot so registered PUA
+                // codepoints rasterize from their stored outlines instead of
+                // falling through to the system font. This is rare (usually a
+                // startup burst), so the snapshot copy + cache invalidation cost
+                // inside the critical section is acceptable. Cells that use the
+                // codepoints repaint via normal dirty tracking on this frame.
+                if (state.terminal.flags.dirty.glyph_glossary) {
+                    state.terminal.flags.dirty.glyph_glossary = false;
+                    self.font_grid.setGlossary(
+                        self.alloc,
+                        &state.terminal.glyph_glossary,
+                    ) catch |err| {
+                        log.warn("failed to update glyph protocol glossary err={}", .{err});
+                    };
+                }
+
                 // Get our scrollbar out of the terminal. We synchronize
                 // the scrollbar read with frame data updates because this
                 // naturally limits the number of calls to this method (it

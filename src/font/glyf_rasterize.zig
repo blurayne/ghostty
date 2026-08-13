@@ -137,20 +137,50 @@ pub fn rasterize(
     };
 }
 
-const Bounds = struct {
+pub const Bounds = struct {
     x_min: f64,
     y_min: f64,
     x_max: f64,
     y_max: f64,
 
-    fn width(self: Bounds) f64 {
+    pub fn width(self: Bounds) f64 {
         return self.x_max - self.x_min;
     }
 
-    fn height(self: Bounds) f64 {
+    pub fn height(self: Bounds) f64 {
         return self.y_max - self.y_min;
     }
+
+    /// Extend these bounds to also cover `other`.
+    pub fn unite(self: Bounds, other: Bounds) Bounds {
+        return .{
+            .x_min = @min(self.x_min, other.x_min),
+            .y_min = @min(self.y_min, other.y_min),
+            .x_max = @max(self.x_max, other.x_max),
+            .y_max = @max(self.y_max, other.y_max),
+        };
+    }
 };
+
+/// Compute the point bounds of a decoded outline, or null if it has no points.
+pub fn boundsOf(outline: glyf.Glyf.Outline) ?Bounds {
+    if (outline.points.len == 0) return null;
+    var bounds: Bounds = .{
+        .x_min = @floatFromInt(outline.points[0].x),
+        .y_min = @floatFromInt(outline.points[0].y),
+        .x_max = @floatFromInt(outline.points[0].x),
+        .y_max = @floatFromInt(outline.points[0].y),
+    };
+    for (outline.points[1..]) |p| {
+        const x: f64 = @floatFromInt(p.x);
+        const y: f64 = @floatFromInt(p.y);
+        bounds.x_min = @min(bounds.x_min, x);
+        bounds.y_min = @min(bounds.y_min, y);
+        bounds.x_max = @max(bounds.x_max, x);
+        bounds.y_max = @max(bounds.y_max, y);
+    }
+    return bounds;
+}
 
 /// Cell-relative pixel rectangle where the decoded outline bounds should be
 /// rasterized within the output bitmap.
@@ -189,7 +219,7 @@ const Bounds = struct {
 /// Constraints are applied to the outer box so the whitespace remains part of
 /// alignment decisions. `Placement` is the inner rectangle after that outer box
 /// has been constrained.
-const Placement = struct {
+pub const Placement = struct {
     /// Left edge of the rasterized outline bounds in bitmap pixels, measured
     /// from the bitmap's left edge.
     x: f64,
@@ -226,7 +256,7 @@ const Placement = struct {
     /// vertical whitespace around the outline; constraints should apply to that
     /// layout box rather than to the tight point bounds alone. This returns the
     /// final pixel rectangle for only the outline bounds that we will rasterize.
-    fn init(
+    pub fn init(
         bounds: Bounds,
         design: DesignMetrics,
         opts: Glyph.RenderOptions,
@@ -300,7 +330,7 @@ const Point = struct {
 /// point halfway between them, and a contour may begin with an off-curve point.
 /// This normalizes those cases while walking the closed contour and emits z2d
 /// line/cubic-curve operations in bitmap coordinates.
-fn appendContourPath(
+pub fn appendContourPath(
     alloc: Allocator,
     path: *z2d.Path,
     contour: []const glyf.Glyf.Outline.Point,

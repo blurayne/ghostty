@@ -1,8 +1,122 @@
 # Plan: Glyph Protocol — Rendering Integration
 Date: 2026-06-29
 Priority: P2
-Status: **ready to implement** — user decisions recorded 2026-06-29:
-Q1=`system=false`, Q2=copy, Q3=coarse.
+Status: **in progress (2026-07-09)** — implementing to make
+`raphamorim/glyph-protocol-examples` render in Ghostty. User decisions recorded
+2026-06-29: Q1=`system=false`, Q2=copy, Q3=coarse. Scope expanded 2026-07-09 to
+include **color** (`colrv0`/`colrv1`) — see "Revised architecture & phasing" below.
+
+> ## Revised architecture & phasing (2026-07-09)
+>
+> Deep re-read of the render pipeline changed two things from the body below.
+>
+> ### Correction: use the sprite special-index model, NOT a Collection face
+>
+> The body proposes injecting a `GlossaryFace` into the `Collection` priority
+> list ("Option A"). That is wrong for how Ghostty actually renders: the
+> **shaper** (HarfBuzz) assigns each cell a `glyph_index` from the *real* font,
+> and a registered PUA codepoint is in no real font, so it shapes to `.notdef`
+> (tofu) regardless of any injected face.
+>
+> Ghostty already solves this exact problem for box-drawing/powerline via the
+> **sprite font**: a "special" `Collection.Index` (`Index.Special`, idx ≥ 900,
+> `src/font/Collection.zig:900`) that bypasses HarfBuzz. `CodepointResolver`
+> returns `.initSpecial(.sprite)` for those codepoints
+> (`src/font/CodepointResolver.zig:143`) and renders them directly in
+> `renderGlyph` (`:335`).
+>
+> **Revised integration = mirror the sprite path:**
+> - Add `Index.Special.glossary` alongside `.sprite` (`Collection.zig`).
+> - `CodepointResolver` gains a glossary snapshot field (next to `.sprite`).
+>   `getIndex` returns `.initSpecial(.glossary)` for a PUA cp present in the
+>   snapshot (checked before the normal collection search so a glossary entry
+>   wins over a system Nerd Font). `getPresentation` returns `.text` for glyf /
+>   `.emoji` for colr. `renderGlyph` routes `.glossary` to the glossary rasterizer.
+> - `SharedGrid.setGlossary(snapshot)` swaps the resolver snapshot under the grid
+>   lock and evicts cached PUA glyphs (coarse, per Q3).
+> - `renderer/generic.zig` `updateFrame`: on `terminal.flags.dirty.glyph_glossary`,
+>   copy the glossary (per Q2) under the terminal mutex, call
+>   `font_grid.setGlossary`, clear the flag, force a full repaint.
+>
+> This reuses the grayscale rasterizer already shipped in
+> `src/font/glyf_rasterize.zig` (`rasterize(alloc, outline, design, opts) → Bitmap`).
+>
+> ### Color container payload (Glyph Protocol §8.7) — for P2/P3
+>
+> `fmt=colrv0`/`fmt=colrv1` payloads are NOT raw tables; they are a container:
+> ```
+> u16 n_glyphs; { u16 glyf_len; glyf_len bytes }×n_glyphs   # outlines, GID order
+> u16 colr_len; colr_len bytes                              # OpenType COLR table
+> u16 cpal_len; cpal_len bytes                              # OpenType CPAL table
+> ```
+> Rendering = walk the base GID's COLR record, rasterize each referenced glyf
+> layer, colour it from CPAL, composite into a BGRA bitmap in `atlas_color`.
+> `Glossary.Entry.Glyph` gains `colrv0`/`colrv1` variants and
+> `Glossary.Entry.init` stops returning `UnsupportedFormat`; `execute.zig`
+> advertises the new formats in the `s` response only once each is renderable.
+>
+> ### Phasing (each independently valuable; examples degrade per-format)
+> - **P1 — glyf rendering** (this plan's core). Nerd Font icon rows render.
+>   Grayscale atlas, no color. Buildable + unit-testable now.
+> - **P2 — colrv0**: COLR v0 (flat layered) + CPAL parse, layered rasterize into
+>   the color atlas. Renders "Using Glyph protocol" + a colrv0 emoji row.
+> - **P3 — colrv1**: COLR v1 paint graph (PaintGlyph/PaintSolid/PaintGradient/
+>   PaintTransform/PaintComposite…). Largest by far; needs a gradient-capable
+>   fill (verify z2d gradient support first). Renders "Rio Terminal Emulator".
+>
+> ### Implementation progress (2026-07-09)
+> **P1 (glyf rendering) — code complete, font layer verified.** Files:
+> `src/font/GlossaryFace.zig` (new, with tests), `main.zig` export,
+> `Collection.zig` (`Index.Special.glossary`), `CodepointResolver.zig` (glossary
+> field + deinit + getIndex/getPresentation/renderGlyph routing),
+> `SharedGrid.zig` (`setGlossary` + coarse cache invalidation),
+> `renderer/generic.zig` (dirty-flag hook). Core font tests pass via
+> `mise run zig-test -- -Dapp-runtime=none -Dtest-filter=registered` (exit 0).
+> The one renderer edit needs the full flatpak (GTK) build to compile-verify;
+> its `Glossary` types are confirmed identical (`apc/glyph.zig:160`).
+>
+> **Full flatpak (GTK) build passes (2026-07-09)** — the renderer hook and all
+> font changes compile end-to-end into a bundle (`dist/build/*.flatpak`). Only a
+> benign LLD `libfreetype.so` link warning is emitted. glyf rendering pending
+> manual visual verification (`test/glyph-protocol-examples.md`,
+> `test/glyph-protocol-glyf.py`).
+>
+> **P2 (colrv0) — code complete, font layer verified (2026-07-10).** New:
+> `src/font/opentype/cpal.zig` (CPAL palette parser), `opentype/colr.zig` (COLR
+> v0 base/layer parser), `src/font/colr_rasterize.zig` (§8.7 container parse +
+> layered composite → premultiplied BGRA), each unit-tested. `glyf_rasterize.zig`
+> exposes `Bounds`/`Placement`/`boundsOf`/`appendContourPath` for shared use.
+> Integration: `Glossary.Entry.Glyph.colrv0` (owned decoded container),
+> `request.decodeColorPayload`, `GlossaryFace` color path (presentation `.emoji`
+> → color atlas), `execute.zig` advertises `colrv0`. Core tests pass:
+> `mise run zig-test -- -Dapp-runtime=none -Dtest-filter=colr` (exit 0). No new
+> renderer/GTK code (reuses the P1 hook + the existing color-atlas path), so the
+> earlier full build covers linkage. Pending manual visual verification of the
+> colrv0 rows ("Using Glyph protocol" + twemoji).
+>
+> **P3 (colrv1) — code complete, font layer verified (2026-07-10).** New
+> `src/font/colrv1_rasterize.zig`: COLR v1 header/BaseGlyphList/LayerList parse +
+> recursive paint interpreter for the common subset — PaintColrLayers(1),
+> PaintSolid(2), PaintLinearGradient(4), PaintRadialGradient(6), PaintGlyph(10),
+> PaintColrGlyph(11), PaintTransform(12), PaintTranslate(14), PaintScale(16),
+> PaintScaleUniform(20), PaintRotate(24). Deferred as graceful no-ops: sweep
+> gradients, *AroundCenter/skew transforms, PaintComposite, and all `Var`
+> formats (demo payloads are non-variable subsets). Gradients evaluated manually
+> (project to color line + interpolate CPAL stops in sRGB) to avoid coord/premul
+> ambiguity; radial is a concentric approximation; linear ignores the p2
+> rotation vector. Base transform reuses `Placement` (em-square) for sizing
+> parity with glyf/colrv0. Integration: `Glossary.Entry.Glyph.colrv1`,
+> `GlossaryFace` colrv1 path, `execute.zig` advertises `colrv1`. Core tests pass
+> (`-Dtest-filter=colr`, exit 0). **Remaining: manual visual verification** of
+> the colrv1 rows ("Rio Terminal Emulator" via Nabla + noto_fruit emoji); expect
+> to iterate on gradient/transform accuracy from GUI feedback.
+>
+> ### Verification reality
+> Each phase compiles via `mise run zig-build` and unit-tests via
+> `mise run zig-test -Dtest-filter=…`, but final visual correctness (especially
+> P3) requires running `raphamorim/glyph-protocol-examples` in a real Ghostty
+> window — a human-in-the-loop check per phase. See
+> `test/glyph-protocol-examples.md`.
 
 ## Scope Clarification
 

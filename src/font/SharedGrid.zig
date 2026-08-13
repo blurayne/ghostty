@@ -35,6 +35,7 @@ const Presentation = font.Presentation;
 const Style = font.Style;
 const RenderOptions = font.Glyph.RenderOptions;
 const global = @import("../global.zig");
+const Glossary = @import("../terminal/apc/glyph/Glossary.zig");
 
 const log = std.log.scoped(.font_shared_grid);
 
@@ -135,6 +136,37 @@ fn reloadMetrics(self: *SharedGrid) !void {
 
     // Setup our sprite font.
     self.resolver.sprite = .{ .metrics = self.metrics };
+}
+
+/// Update the Glyph Protocol glossary snapshot used to render registered PUA
+/// codepoints, then invalidate any cached lookups/renders it affects.
+///
+/// This takes the grid write lock, so it is safe to call from the renderer
+/// thread while other threads read the grid. `glossary` is deep-copied into an
+/// owned snapshot, so the caller retains ownership of the passed glossary.
+///
+/// NOTE: `SharedGrid` may be shared across surfaces while the glossary is
+/// per-terminal; with multiple surfaces sharing one grid this is effectively
+/// last-writer-wins. That's acceptable for the common single-grid case and is
+/// tracked as a limitation for the multi-surface case.
+pub fn setGlossary(
+    self: *SharedGrid,
+    alloc: Allocator,
+    glossary: *const Glossary,
+) !void {
+    self.lock.lock();
+    defer self.lock.unlock();
+
+    if (self.resolver.glossary == null) self.resolver.glossary = .empty;
+    try self.resolver.glossary.?.updateSnapshot(alloc, glossary);
+
+    // Coarse invalidation (per plan Q3): glossary changes are rare (usually a
+    // startup burst), so we simply drop both caches. This forces registered
+    // (and newly-cleared) PUA codepoints to re-resolve and re-rasterize on the
+    // next frame. Orphaned atlas regions are left in place; they're reclaimed
+    // when the grid is reinitialized.
+    self.codepoints.clearRetainingCapacity();
+    self.glyphs.clearRetainingCapacity();
 }
 
 /// Returns the grid cell size.

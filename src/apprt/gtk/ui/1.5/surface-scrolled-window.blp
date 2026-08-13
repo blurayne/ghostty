@@ -42,14 +42,94 @@ template $GhostttySurfaceScrolledWindow: Adw.Bin {
         can-focus: false;
         focusable: false;
 
-        Gtk.Image {
-          styles ["split-drag-handle"]
-          icon-name: "view-list-symbolic";
-          pixel-size: 16;
-          can-focus: false;
-          focusable: false;
+        Gtk.Box {
+          Gtk.Image {
+            styles ["split-drag-handle"]
+            icon-name: "view-list-symbolic";
+            pixel-size: 16;
+            can-focus: false;
+            focusable: false;
+
+            // Right-click the handle icon to open the same context menu the
+            // split header shows. Useful because the handle only appears when
+            // the header (and its menu) is hidden.
+            Gtk.GestureClick handle_gesture {
+              button: 3;
+              pressed => $on_handle_menu() swapped;
+            }
+          }
+
+          Gtk.PopoverMenu handle_context_menu {
+            has-arrow: false;
+            halign: start;
+            menu-model: handle_context_menu_model;
+          }
         }
       }
+    }
+  }
+}
+
+// Mirror of split-header.blp's header_context_menu_model so the hover handle
+// offers the same actions when the split header itself is hidden. Keep in sync
+// with split-header.blp.
+menu handle_context_menu_model {
+  section {
+    item {
+      label: _("Copy");
+      action: "win.copy";
+    }
+    item {
+      label: _("Paste");
+      action: "win.paste";
+    }
+  }
+  section {
+    item {
+      label: _("Rename…");
+      action: "split-header.rename";
+    }
+    item {
+      label: _("Customize Colors…");
+      action: "split-header.customize";
+    }
+  }
+  section {
+    item {
+      label: _("Move to New Window");
+      action: "win.move-split-to-new-window";
+    }
+    item {
+      label: _("Copy as Source");
+      action: "split-header.copy-as-source";
+    }
+    item {
+      label: _("Attach Sourced Pane");
+      action: "split-header.attach-sourced-pane";
+    }
+  }
+  section {
+    item {
+      label: _("Toggle Titlebar");
+      action: "split-tree.toggle-header";
+    }
+  }
+  section {
+    item {
+      label: _("Split Right");
+      action: "split-tree.new-split";
+      target: "right";
+    }
+    item {
+      label: _("Split Down");
+      action: "split-tree.new-split";
+      target: "down";
+    }
+  }
+  section {
+    item {
+      label: _("About Ghostty");
+      action: "win.about";
     }
   }
 }

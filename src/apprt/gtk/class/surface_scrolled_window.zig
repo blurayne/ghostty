@@ -78,6 +78,7 @@ pub const SurfaceScrolledWindow = extern struct {
         surface_overlay: *gtk.Overlay,
         hover_handle: *adw.Bin,
         hover_motion: *gtk.EventControllerMotion,
+        handle_context_menu: *gtk.PopoverMenu,
         pub var offset: c_int = 0;
     };
 
@@ -85,6 +86,38 @@ pub const SurfaceScrolledWindow = extern struct {
         gtk.Widget.initTemplate(self.as(gtk.Widget));
         if (gtk_version.runtimeUntil(4, 20, 1)) self.disableKineticScroll();
         self.initHandleDragSource();
+        self.initHandleMenu();
+    }
+
+    /// The hover handle's context menu reuses the split header's `split-header`
+    /// actions, but the header widget is a sibling (not an ancestor) of the
+    /// handle, so those actions aren't reachable by default. Insert the header's
+    /// action group onto this widget, which IS a common ancestor of both, so the
+    /// `split-header.*` menu items resolve from the handle's popover.
+    fn initHandleMenu(self: *Self) void {
+        const group = self.private().header.getActionGroup() orelse return;
+        self.as(gtk.Widget).insertActionGroup("split-header", group.as(gio.ActionGroup));
+    }
+
+    /// Template callback (swapped): right-click on the hover handle icon opens
+    /// the split context menu. The GestureClick is configured for button 3 in
+    /// the template, so this only fires on right-click.
+    fn onHandleMenu(
+        self: *Self,
+        _: c_int,
+        x: f64,
+        y: f64,
+        _: *gtk.GestureClick,
+    ) callconv(.c) void {
+        const popover = self.private().handle_context_menu.as(gtk.Popover);
+        const rect = gdk.Rectangle{
+            .f_x = @intFromFloat(x),
+            .f_y = @intFromFloat(y),
+            .f_width = 1,
+            .f_height = 1,
+        };
+        popover.setPointingTo(&rect);
+        popover.popup();
     }
 
     fn disableKineticScroll(self: *Self) void {
@@ -397,11 +430,13 @@ pub const SurfaceScrolledWindow = extern struct {
             class.bindTemplateCallback("notify_surface", &propSurface);
             class.bindTemplateCallback("on_hover_motion", &onHoverMotion);
             class.bindTemplateCallback("on_hover_leave", &onHoverLeave);
+            class.bindTemplateCallback("on_handle_menu", &onHandleMenu);
             class.bindTemplateChildPrivate("header", .{});
             class.bindTemplateChildPrivate("scrolled_window", .{});
             class.bindTemplateChildPrivate("surface_overlay", .{});
             class.bindTemplateChildPrivate("hover_handle", .{});
             class.bindTemplateChildPrivate("hover_motion", .{});
+            class.bindTemplateChildPrivate("handle_context_menu", .{});
 
             // Properties
             gobject.ext.registerProperties(class, &.{

@@ -63,6 +63,10 @@ pub const SplitHeader = extern struct {
         title_override_notify_id: c_ulong = 0,
         zoom_notify_id: c_ulong = 0,
         split_tree: ?*SplitTree = null,
+        /// The "split-header" action group installed on this widget. Exposed so
+        /// sibling affordances (e.g. the surface's hover drag-handle) can reuse
+        /// the same actions for their own context menu.
+        action_group: ?*gio.SimpleActionGroup = null,
         header_mode: configpkg.Config.SplitHeaderMode = .auto,
         split_count: u32 = 1,
         pane_number: u32 = 1,
@@ -98,7 +102,14 @@ pub const SplitHeader = extern struct {
             .init("rename", actionRename, null),
             .init("customize", actionCustomize, null),
         };
-        _ = ext.actions.addAsGroup(Self, self, "split-header", &actions);
+        self.private().action_group = ext.actions.addAsGroup(Self, self, "split-header", &actions);
+    }
+
+    /// The "split-header" action group installed on this widget, or null if not
+    /// yet initialized. Used by the surface hover drag-handle to reuse these
+    /// actions in its own context menu.
+    pub fn getActionGroup(self: *Self) ?*gio.SimpleActionGroup {
+        return self.private().action_group;
     }
 
     fn actionCopyAsSource(

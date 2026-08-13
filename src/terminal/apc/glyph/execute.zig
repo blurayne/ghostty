@@ -13,6 +13,8 @@ const log = std.log.scoped(.glyph);
 /// fixed.
 pub const supported_formats: response.Response.Support.Formats = .{
     .glyf = true,
+    .colrv0 = true,
+    .colrv1 = true,
 };
 
 /// Execute a Glyph protocol request against the given state.

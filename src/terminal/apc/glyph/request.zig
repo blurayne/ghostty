@@ -314,6 +314,22 @@ pub const Request = union(enum) {
             };
         }
 
+        /// Base64-decode this request's payload into owned raw bytes, without
+        /// interpreting them. Used for color formats (colrv0/colrv1) whose
+        /// payload is a Glyph Protocol §8.7 container parsed at render time.
+        pub fn decodeColorPayload(self: Register, alloc: Allocator) DecodeError![]u8 {
+            const Decoder = std.base64.standard.Decoder;
+            const payload_bytes = self.payload();
+            const size = Decoder.calcSizeForSlice(payload_bytes) catch
+                return error.MalformedPayload;
+            if (size > max_payload_size) return error.PayloadTooLarge;
+
+            const data = try alloc.alloc(u8, size);
+            errdefer alloc.free(data);
+            Decoder.decode(data, payload_bytes) catch return error.MalformedPayload;
+            return data;
+        }
+
         /// Return the raw option portion of a valid register command.
         fn rawOptions(self: Register) []const u8 {
             assert(self.raw.len >= 2);

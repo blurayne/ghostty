@@ -900,10 +900,16 @@ pub const Index = packed struct(Index.Backing) {
     /// The special-case fonts that we support.
     pub const Special = enum(IndexInt) {
         // We start all special fonts at this index so they can be detected.
-        pub const start = std.math.maxInt(IndexInt);
+        // Each special font consumes one index counting down from the max, so
+        // `start` must move down by one for every special font we add.
+        pub const start = std.math.maxInt(IndexInt) - 1;
 
         /// Sprite drawing, this is rendered JIT using 2D graphics APIs.
-        sprite = start,
+        sprite = std.math.maxInt(IndexInt),
+
+        /// Glyph Protocol glossary: registered PUA outlines rasterized JIT
+        /// from a `font.GlossaryFace` snapshot.
+        glossary = std.math.maxInt(IndexInt) - 1,
     };
 
     style: Style = .regular,

@@ -1,7 +1,7 @@
 # Plan: iTerm2 Image Protocol (OSC 1337) — Remaining Features
 Date: 2026-06-29
 Priority: P2
-Status: in-progress
+Status: complete — merged to `main` (commit `1a9b1450f`, merge `7d5226db9`; ABI fix `5b67ee9d4`)
 
 ## Goal
 
@@ -115,16 +115,17 @@ struct gains a `name: ?[]u8 = null` field.
 ## Phases
 
 1. **Phase 1** — Plan (this document). ✓
-2. **Phase 2** — Extend `Iterm2InlineImage` struct and `osc.zig` command enum.
+2. **Phase 2** — Extend `Iterm2InlineImage` struct and `osc.zig` command enum. ✓
 3. **Phase 3** — Parser (`iterm2.zig`): `name=`, `%` dims, `doNotMoveCursor`, `dispositionType`,
-   multipart command emission.
+   multipart command emission. ✓
 4. **Phase 4** — Stream handler: `iterm2InlineImage` improvements (format magic, `doNotMoveCursor`,
-   percent dims, format check) + download helper + multipart state machine.
-5. **Phase 5** — Wire new commands through `stream.zig` and `stream_terminal.zig`.
+   percent dims, format check) + download helper + multipart state machine. ✓
+5. **Phase 5** — Wire new commands through `stream.zig` and `stream_terminal.zig`. ✓
 6. **Phase 6** — Unit tests: multipart assembly, percent dims, `doNotMoveCursor`,
-   `dispositionType`, download filename sanitization.
-7. **Phase 7** — Build verification (`mise run zig-build`). Parser tests pass.
-8. **Phase 8** — Commit on `feat/iterm2-image-protocol`.
+   `dispositionType`, download filename sanitization. ✓ (41 `OSC: 1337` tests in `iterm2.zig`;
+   download sanitization covered inline in `stream_handler.zig` rather than a separate test file)
+7. **Phase 7** — Build verification (`mise run zig-build`). Parser tests pass. ✓
+8. **Phase 8** — Commit on `feat/iterm2-image-protocol`. ✓ (merged to `main`)
 
 ## Test Approach
 
