@@ -1539,6 +1539,18 @@ link: RepeatableLink = .{},
 /// `link`). If you want to customize URL matching, use `link` and disable this.
 @"link-url": bool = true,
 
+/// When a URL is matched by `link-url`, require a modifier (control on Linux,
+/// command on macOS) to be held to *open* it with a left-click. URLs still
+/// highlight on plain hover regardless of this setting, so they remain
+/// discoverable, and control/command-click always opens.
+///
+/// Set this to `false` to open matched URLs with a plain left-click (no
+/// modifier). Note that a single click directly on a URL will then open it;
+/// click-and-drag to select text still works.
+///
+/// This does not affect OSC 8 hyperlinks or custom `link` entries.
+@"link-url-require-mods": bool = true,
+
 /// Enable hyperlinks created with the OSC 8 escape sequence. When disabled,
 /// OSC 8 hyperlinks are not highlighted, previewed, copied, or opened.
 ///
@@ -4078,11 +4090,13 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
     // Add our default command palette entries
     try result.@"command-palette-entry".init(alloc);
 
-    // Add our default link for URL detection
+    // Add our default link for URL detection. We highlight on plain hover so
+    // URLs are always discoverable; whether a click opens without a modifier
+    // is gated separately by `link-url-require-mods` at click time.
     try result.link.links.append(alloc, .{
         .regex = url.regex,
         .action = .{ .open = {} },
-        .highlight = .{ .hover_mods = inputpkg.ctrlOrSuper(.{}) },
+        .highlight = .hover,
     });
 
     return result;

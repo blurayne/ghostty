@@ -339,6 +339,7 @@ const DerivedConfig = struct {
     title_report: bool,
     links: []DerivedConfig.Link,
     link_osc8: bool,
+    link_url_require_mods: bool,
     link_previews: configpkg.LinkPreviews,
     scroll_to_bottom: configpkg.Config.ScrollToBottom,
     notify_on_command_finish: configpkg.Config.NotifyOnCommandFinish,
@@ -426,6 +427,7 @@ const DerivedConfig = struct {
             .title_report = config.@"title-report",
             .links = links,
             .link_osc8 = config.@"link-osc8",
+            .link_url_require_mods = config.@"link-url-require-mods",
             .link_previews = config.@"link-previews",
             .scroll_to_bottom = config.@"scroll-to-bottom",
             .notify_on_command_finish = config.@"notify-on-command-finish",
@@ -4463,6 +4465,16 @@ fn processLinks(self: *Surface, pos: apprt.CursorPos) !bool {
     const link = try self.linkAtPos(pos) orelse return false;
     switch (link.action) {
         .open => {
+            // Auto-detected URLs/paths highlight on plain hover, but opening
+            // them with a click requires a modifier unless the user opted out
+            // via `link-url-require-mods = false`. A modifier-held click always
+            // opens. This does not affect OSC 8 hyperlinks below.
+            if (self.config.link_url_require_mods and
+                !self.mouseModsWithCapture(self.mouse.mods).ctrlOrSuper())
+            {
+                return false;
+            }
+
             const str = try self.io.terminal.screens.active.selectionString(self.alloc, .{
                 .sel = link.selection,
                 .trim = false,
