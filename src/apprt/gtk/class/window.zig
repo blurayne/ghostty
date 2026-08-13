@@ -621,6 +621,7 @@ pub const Window = extern struct {
             .init("toggle-tab-bar", actionToggleTabBar, null),
             .init("toggle-decoration", actionToggleDecoration, null),
             .init("toggle-tab-overview", actionToggleTabOverview, null),
+            .init("toggle-tab-switcher", actionToggleTabSwitcher, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -892,6 +893,12 @@ pub const Window = extern struct {
         const tab_overview = priv.tab_overview;
         const is_open = tab_overview.getOpen() != 0;
         tab_overview.setOpen(@intFromBool(!is_open));
+    }
+
+    /// Toggle the tab switcher dialog for this window.
+    pub fn toggleTabSwitcher(self: *Self) void {
+        _ = self;
+        log.info("toggle_tab_switcher invoked (stub)", .{});
     }
 
     /// Toggle the visible property.
@@ -2869,6 +2876,14 @@ pub const Window = extern struct {
         self: *Self,
     ) callconv(.c) void {
         self.toggleTabOverview();
+    }
+
+    fn actionToggleTabSwitcher(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        self.toggleTabSwitcher();
     }
 
     const C = Common(Self, Private);

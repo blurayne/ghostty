@@ -7139,6 +7139,13 @@ pub const Keybinds = struct {
             .toggle_command_palette,
         );
 
+        // Toggle tab switcher
+        try self.set.put(
+            alloc,
+            .{ .key = .{ .unicode = 'k' }, .mods = inputpkg.ctrlOrSuper(.{ .shift = true }) },
+            .toggle_tab_switcher,
+        );
+
         // Mac-specific keyboard bindings.
         if (comptime builtin.target.os.tag.isDarwin()) {
             try self.set.put(

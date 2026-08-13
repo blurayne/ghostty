@@ -605,6 +605,11 @@ pub const Action = union(enum) {
     /// found by running `ghostty +version`.
     toggle_tab_overview,
 
+    /// Open a keyboard-navigable tab switcher dialog for the current window.
+    ///
+    /// Only implemented on Linux (GTK).
+    toggle_tab_switcher,
+
     /// Change the title of the current focused surface via a pop-up prompt.
     prompt_surface_title,
 
@@ -1481,6 +1486,7 @@ pub const Action = union(enum) {
             .move_tab,
             .move_tab_to_new_window,
             .toggle_tab_overview,
+            .toggle_tab_switcher,
             .new_split,
             .goto_split,
             .goto_window,
@@ -4686,6 +4692,11 @@ test "parse: goto_split_index" {
 test "parse: toggle_split_header" {
     const result = try Action.parse("toggle_split_header");
     try std.testing.expectEqual(Action.toggle_split_header, result);
+}
+
+test "parse: toggle_tab_switcher" {
+    const result = try Action.parse("toggle_tab_switcher");
+    try std.testing.expectEqual(Action.toggle_tab_switcher, result);
 }
 
 test "parse: toggle_tab_bar" {
