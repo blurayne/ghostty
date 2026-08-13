@@ -362,8 +362,13 @@ menu context_menu_model {
       label: _("Split");
 
       item {
-        label: _("Change Title…");
+        label: _("Change Split Title…");
         action: "surface.prompt-title";
+      }
+
+      item {
+        label: _("Change Tab Title…");
+        action: "tab.prompt-tab-title";
       }
 
       item {
