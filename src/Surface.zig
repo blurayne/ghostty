@@ -5220,6 +5220,12 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             .tab,
         ),
 
+        .prompt_window_title => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .prompt_title,
+            .window,
+        ),
+
         .set_surface_title => |v| {
             const title = try self.alloc.dupeZ(u8, v);
             defer self.alloc.free(title);
@@ -5236,6 +5242,16 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             return try self.rt_app.performAction(
                 .{ .surface = self },
                 .set_tab_title,
+                .{ .title = title },
+            );
+        },
+
+        .set_window_title => |v| {
+            const title = try self.alloc.dupeZ(u8, v);
+            defer self.alloc.free(title);
+            return try self.rt_app.performAction(
+                .{ .surface = self },
+                .set_window_title,
                 .{ .title = title },
             );
         },
@@ -5377,6 +5393,12 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             .{ .surface = self },
             .move_tab,
             .{ .amount = position },
+        ),
+
+        .move_tab_to_new_window => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .move_tab_to_new_window,
+            {},
         ),
 
         .new_split => |direction| return try self.rt_app.performAction(

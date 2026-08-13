@@ -26,6 +26,7 @@
 12ya
 -4rh1t3ct0r7
 52dyd
+a-lang
 aalhendi
 aaron-ang
 abdurrahmanski
@@ -39,6 +40,7 @@ akimiojr
 alaasdk
 alanmoyano
 alaviss
+alex19ep
 alexbathome
 alexfeijoo44
 alexjuca
@@ -89,6 +91,7 @@ damyanbogoev
 danneu
 danulqua
 dariogriffo
+dave92082
 davidsanchez222
 deblasis
 dervedro
@@ -117,6 +120,7 @@ exlee
 -f1813483-netizen
 fallintoplace
 faukah
+figelwump
 filip7
 flou
 fornwall
@@ -127,6 +131,7 @@ gagbo
 ghokun
 gmile
 gordonbondon
+gotenksin
 gpanders
 guilhermetk
 -guysoft LLM communication (likely automated)
@@ -246,6 +251,7 @@ pluiedev
 pouwerkerk
 poweruser64
 prakhar54-byte
+prihlop
 priyans-hu
 puzza007
 qappell
@@ -274,9 +280,11 @@ sanjj1
 secrus
 seruman
 seyoungjeong
+shorsher
 silveirapf
 simonbcn
 slsrepo
+steven-tk
 sunshine-syz
 svmhdvn
 tasselx
@@ -309,6 +317,7 @@ yak3d
 yamshta
 ydah
 -zaviro
+zenangst
 zenyr
 zeshi09
 zubb

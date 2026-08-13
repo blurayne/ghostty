@@ -447,6 +447,12 @@ fn actionCommands(action: Action.Key) []const Command {
             },
         },
 
+        .move_tab_to_new_window => comptime &.{.{
+            .action = .move_tab_to_new_window,
+            .title = i18n.N_("Move Tab to New Window"),
+            .description = i18n.N_("Move the current tab to a new window."),
+        }},
+
         .toggle_tab_overview => comptime &.{.{
             .action = .toggle_tab_overview,
             .title = i18n.N_("Toggle Tab Overview"),
@@ -463,6 +469,12 @@ fn actionCommands(action: Action.Key) []const Command {
             .action = .prompt_tab_title,
             .title = i18n.N_("Change Tab Title…"),
             .description = i18n.N_("Prompt for a new title for the current tab."),
+        }},
+
+        .prompt_window_title => comptime &.{.{
+            .action = .prompt_window_title,
+            .title = "Change Window Title…",
+            .description = "Prompt for a new title for the current window.",
         }},
 
         .new_split => comptime &.{
@@ -597,11 +609,18 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = i18n.N_("Show the on-screen keyboard if present."),
         }},
 
-        .open_config => comptime &.{.{
-            .action = .open_config,
-            .title = i18n.N_("Open Config"),
-            .description = i18n.N_("Open the config file."),
-        }},
+        .open_config => comptime &.{
+            .{
+                .action = .{ .open_config = .os_open },
+                .title = i18n.N_("Open Config Using OS editor"),
+                .description = i18n.N_("Open the config file with the OS's default editor."),
+            },
+            .{
+                .action = .{ .open_config = .new_window },
+                .title = i18n.N_("Open Config in New Terminal Window"),
+                .description = i18n.N_("Open the config file in a new window using $EDITOR or $VISUAL."),
+            },
+        },
 
         .reload_config => comptime &.{.{
             .action = .reload_config,
@@ -727,6 +746,7 @@ fn actionCommands(action: Action.Key) []const Command {
         .set_font_size,
         .set_surface_title,
         .set_tab_title,
+        .set_window_title,
         .search,
         .scroll_to_row,
         .scroll_page_fractional,

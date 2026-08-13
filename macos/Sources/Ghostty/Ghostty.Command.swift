@@ -27,6 +27,7 @@ extension Ghostty {
             "toggle_tab_overview",
             "toggle_tab_bar",
             "toggle_window_decorations",
+            "prompt_window_title",
             "show_gtk_inspector",
         ]
 

@@ -30,6 +30,7 @@ const Tab = @import("tab.zig").Tab;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
+const TitleDialog = @import("title_dialog.zig").TitleDialog;
 
 const log = std.log.scoped(.gtk_ghostty_window);
 
@@ -214,6 +215,19 @@ pub const Window = extern struct {
                 },
             );
         };
+
+        pub const @"title-override" = struct {
+            pub const name = "title-override";
+            const impl = gobject.ext.defineProperty(
+                name,
+                Self,
+                ?[:0]const u8,
+                .{
+                    .default = null,
+                    .accessor = C.privateStringFieldAccessor("title_override"),
+                },
+            );
+        };
     };
 
     const Private = struct {
@@ -267,6 +281,9 @@ pub const Window = extern struct {
 
         /// Whether the user has manually hidden the tab bar via the tab menu.
         tab_bar_hidden: bool = false,
+
+        /// The manually overridden title.
+        title_override: ?[:0]const u8 = null,
 
         // Template bindings
         tab_overview: *adw.TabOverview,
@@ -586,6 +603,7 @@ pub const Window = extern struct {
             .init("prompt-surface-title", actionPromptSurfaceTitle, null),
             .init("prompt-tab-title", actionPromptTabTitle, null),
             .init("prompt-context-tab-title", actionPromptContextTabTitle, null),
+            .init("prompt-window-title", actionPromptWindowTitle, null),
             .init("ring-bell", actionRingBell, null),
             .init("split-right", actionSplitRight, null),
             .init("split-left", actionSplitLeft, null),
@@ -616,8 +634,20 @@ pub const Window = extern struct {
     /// Create a new tab with the given parent. The tab will be inserted
     /// at the position dictated by the `window-new-tab-position` config.
     /// The new tab will be selected.
-    pub fn newTab(self: *Self, parent_: ?*CoreSurface) void {
-        _ = self.newTabPage(parent_, .tab, .none);
+    pub fn newTab(self: *Self, parent_: ?*CoreSurface, overrides: struct {
+        command: ?configpkg.Command = null,
+        shell_integration: ?configpkg.Config.ShellIntegration = null,
+        working_directory: ?[:0]const u8 = null,
+        title: ?[:0]const u8 = null,
+
+        pub const none: @This() = .{};
+    }) void {
+        _ = self.newTabPage(parent_, .tab, .{
+            .command = overrides.command,
+            .shell_integration = overrides.shell_integration,
+            .working_directory = overrides.working_directory,
+            .title = overrides.title,
+        });
     }
 
     pub fn newTabForWindow(
@@ -625,6 +655,7 @@ pub const Window = extern struct {
         parent_: ?*CoreSurface,
         overrides: struct {
             command: ?configpkg.Command = null,
+            shell_integration: ?configpkg.Config.ShellIntegration = null,
             working_directory: ?[:0]const u8 = null,
             title: ?[:0]const u8 = null,
 
@@ -636,6 +667,7 @@ pub const Window = extern struct {
             .window,
             .{
                 .command = overrides.command,
+                .shell_integration = overrides.shell_integration,
                 .working_directory = overrides.working_directory,
                 .title = overrides.title,
             },
@@ -648,6 +680,7 @@ pub const Window = extern struct {
         context: apprt.surface.NewSurfaceContext,
         overrides: struct {
             command: ?configpkg.Command = null,
+            shell_integration: ?configpkg.Config.ShellIntegration = null,
             working_directory: ?[:0]const u8 = null,
             title: ?[:0]const u8 = null,
 
@@ -662,6 +695,7 @@ pub const Window = extern struct {
             priv.config,
             .{
                 .command = overrides.command,
+                .shell_integration = overrides.shell_integration,
                 .working_directory = overrides.working_directory,
                 .title = overrides.title,
             },
@@ -828,6 +862,29 @@ pub const Window = extern struct {
         assert(desired_pos < total);
 
         return tab_view.reorderPage(page, desired_pos) != 0;
+    }
+
+    pub fn moveTabToNewWindow(self: *Self, surface: *Surface) bool {
+        const tab_view = self.private().tab_view;
+        const tab = ext.getAncestor(
+            Tab,
+            surface.as(gtk.Widget),
+        ) orelse return false;
+        const page = tab_view.getPage(tab.as(gtk.Widget));
+
+        // Skip if this is the only tab in the existing window
+        if (tab_view.getNPages() <= 1) return false;
+
+        const app = Application.default();
+        const window = Window.new(app, .none);
+
+        tab_view.transferPage(
+            page,
+            window.private().tab_view,
+            0,
+        );
+        window.as(gtk.Window).present();
+        return true;
     }
 
     pub fn toggleTabOverview(self: *Self) void {
@@ -1551,6 +1608,57 @@ pub const Window = extern struct {
         });
     }
 
+    pub fn setTitleOverride(self: *Self, title: ?[]const u8) void {
+        const priv: *Private = self.private();
+
+        if (priv.title_override) |v| glib.free(@ptrCast(@constCast(v)));
+        priv.title_override = null;
+
+        if (title) |v| priv.title_override = glib.ext.dupeZ(u8, v);
+
+        self.as(gobject.Object).notifyByPspec(properties.@"title-override".impl.param_spec);
+    }
+
+    fn titleDialogSet(_: *TitleDialog, title_: [*:0]const u8, self: *Self) callconv(.c) void {
+        const title = std.mem.span(title_);
+        self.setTitleOverride(if (title.len == 0) null else title);
+    }
+
+    pub fn promptWindowTitle(self: *Self) void {
+        const priv: *Private = self.private();
+
+        var value = std.mem.zeroes(gobject.Value);
+        _ = value.init(gobject.ext.types.string);
+        defer value.unset();
+
+        self.as(gobject.Object).getProperty("title", &value);
+
+        const title_: ?[*:0]const u8 = value.getString();
+        const title: ?[:0]const u8 = if (title_) |v| std.mem.span(v) else null;
+
+        const dialog = TitleDialog.new(.window, priv.title_override orelse title);
+        _ = TitleDialog.signals.set.connect(
+            dialog,
+            *Self,
+            titleDialogSet,
+            self,
+            .{},
+        );
+
+        dialog.present(self.as(gtk.Widget));
+    }
+
+    fn closureTitle(
+        _: *Self,
+        _: ?*Config,
+        title_: ?[*:0]const u8,
+        title_override_: ?[*:0]const u8,
+    ) callconv(.c) ?[*:0]const u8 {
+        if (title_override_) |v| return glib.ext.dupeZ(u8, std.mem.span(v));
+        if (title_) |v| return glib.ext.dupeZ(u8, std.mem.span(v));
+        return glib.ext.dupeZ(u8, "Ghostty");
+    }
+
     fn closureSubtitle(
         _: *Self,
         config_: ?*Config,
@@ -1579,7 +1687,7 @@ pub const Window = extern struct {
             priv.handle_active_state_source = null;
         }
 
-        priv.command_palette.set(null);
+        priv.command_palette.deinit();
 
         if (priv.config) |v| {
             v.unref();
@@ -1603,6 +1711,7 @@ pub const Window = extern struct {
         const priv = self.private();
         priv.tab_bindings.unref();
         priv.winproto.deinit();
+        if (priv.title_override) |v| glib.free(@ptrCast(@constCast(v)));
 
         gobject.Object.virtual_methods.finalize.call(
             Class.parent,
@@ -2501,6 +2610,14 @@ pub const Window = extern struct {
         self.performBindingAction(.prompt_tab_title);
     }
 
+    fn actionPromptWindowTitle(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Window,
+    ) callconv(.c) void {
+        self.performBindingAction(.prompt_window_title);
+    }
+
     fn actionSplitRight(
         _: *gio.SimpleAction,
         _: ?*glib.Variant,
@@ -2757,6 +2874,7 @@ pub const Window = extern struct {
                 properties.@"tabs-wide".impl,
                 properties.@"toolbar-style".impl,
                 properties.@"titlebar-style".impl,
+                properties.@"title-override".impl,
             });
 
             // Bindings
@@ -2787,6 +2905,7 @@ pub const Window = extern struct {
             class.bindTemplateCallback("notify_quick_terminal", &propQuickTerminal);
             class.bindTemplateCallback("notify_scale_factor", &propScaleFactor);
             class.bindTemplateCallback("titlebar_style_is_tabs", &closureTitlebarStyleIsTab);
+            class.bindTemplateCallback("computed_title", &closureTitle);
             class.bindTemplateCallback("computed_subtitle", &closureSubtitle);
 
             // Virtual methods

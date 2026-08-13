@@ -108,6 +108,17 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8, forkP
             result = b.resolveTargetQuery(query);
         }
 
+        // The full Ghostty build no longer supports iOS; Fail early
+        // with a clear message rather than partway through the build.
+        if (result.result.os.tag == .ios and !emit_lib_vt) {
+            std.log.err(
+                "iOS is not a supported target for the full Ghostty build; " ++
+                    "only libghostty-vt supports iOS (-Demit-lib-vt)",
+                .{},
+            );
+            return error.UnsupportedTarget;
+        }
+
         // If we have no minimum OS version, we set the default based on
         // our tag. Not all tags have a minimum so this may be null.
         if (result.query.os_version_min == null) {
@@ -336,22 +347,39 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8, forkP
     // may be fixed in 0.17.0. We may want to revisit this afterwards; although
     // I'm not too sure if that helps to clean up rpath, this may just be the
     // better option. See https://codeberg.org/ziglang/zig/issues/31760.
-    if ((target.result.os.tag == .linux) and target.query.isNativeCpu()) {
-        const in_nix_shell = env.get("IN_NIX_SHELL") != null;
-        if (b.option(
-            bool,
-            "patchelf",
-            "Patch interpreter and rpath in the built binary (default if IN_NIX_SHELL is set)",
-        ) orelse in_nix_shell) {
-            var patchelf: PatchElf = .{};
-            if (b.findProgram(&.{"ld.so"}, &.{})) |ld_so| {
-                patchelf.interp = std.Io.Dir.realPathFileAbsoluteAlloc(b.graph.io, ld_so, b.allocator) catch null;
-            } else |_| {}
-            if (env.get("LD_LIBRARY_PATH")) |ld_library_path| {
-                patchelf.rpath = if (ld_library_path.len > 0) ld_library_path else null;
-            }
-            if (patchelf.interp != null or patchelf.rpath != null) {
-                config.patchelf = patchelf;
+    if (b.option(
+        []const u8,
+        "patch-interp",
+        "Inject the supplied path as the dynamic linker in the built binary. " ++
+            "Under Nix, this defaults to the dynamic linker found in PATH.",
+    )) |interp| {
+        PatchElf.setInterp(&config, interp);
+    } else patch_interp: {
+        if (!(target.result.os.tag == .linux) or !target.query.isNativeCpu()) break :patch_interp;
+        if (env.get("IN_NIX_SHELL") == null) break :patch_interp;
+
+        if (b.findProgram(&.{"ld.so"}, &.{})) |ld_so| {
+            PatchElf.setInterp(
+                &config,
+                std.Io.Dir.realPathFileAbsoluteAlloc(b.graph.io, ld_so, b.allocator) catch break :patch_interp,
+            );
+        } else |_| {}
+    }
+
+    if (b.option(
+        []const u8,
+        "patch-rpath",
+        "Inject the supplied colon-delimited search path as the rpath in the built binary. " ++
+            "This defaults to LD_LIBRARY_PATH if we're in a Nix shell environment.",
+    )) |rpath| {
+        PatchElf.setRpath(&config, rpath);
+    } else patch_rpath: {
+        if (!(target.result.os.tag == .linux) or !target.query.isNativeCpu()) break :patch_rpath;
+        if (env.get("IN_NIX_SHELL") == null) break :patch_rpath;
+
+        if (env.get("LD_LIBRARY_PATH")) |ld_library_path| {
+            if (ld_library_path.len > 0) {
+                PatchElf.setRpath(&config, ld_library_path);
             }
         }
     }
@@ -558,6 +586,24 @@ pub fn init(b: *std.Build, appVersion: []const u8, libVersion: []const u8, forkP
 const PatchElf = struct {
     interp: ?[]const u8 = null,
     rpath: ?[]const u8 = null,
+
+    fn setInterp(config: *Config, interp: []const u8) void {
+        if (config.patchelf) |*patchelf| {
+            patchelf.interp = interp;
+            return;
+        }
+
+        config.patchelf = .{ .interp = interp };
+    }
+
+    fn setRpath(config: *Config, rpath: []const u8) void {
+        if (config.patchelf) |*patchelf| {
+            patchelf.rpath = rpath;
+            return;
+        }
+
+        config.patchelf = .{ .rpath = rpath };
+    }
 };
 
 /// Add a patchelf step for the supplied `artifact`, depending on the supplied
@@ -748,13 +794,6 @@ pub fn osVersionMin(tag: std.Target.Os.Tag) ?std.Target.Query.OsVersion {
             .patch = 0,
         } },
 
-        // The full Ghostty path compiles metal shaders that require iOS 14.
-        .ios => .{ .semver = .{
-            .major = 14,
-            .minor = 0,
-            .patch = 0,
-        } },
-
         // This should never happen currently. If we add a new target then
         // we should add a new case here.
         else => null,
@@ -765,7 +804,8 @@ pub fn osVersionMin(tag: std.Target.Os.Tag) ?std.Target.Query.OsVersion {
 ///
 /// This should only be used for Darwin targets.
 pub fn osVersionMinLibVt(tag: std.Target.Os.Tag) ?std.Target.Query.OsVersion {
-    // lib-vt has no newer deployment target requirement.
+    // lib-vt is the only thing we still build for iOS, so its deployment
+    // target lives here rather than in osVersionMin.
     if (tag == .ios) return .{ .semver = .{ .major = 13, .minor = 0, .patch = 0 } };
     return osVersionMin(tag);
 }
