@@ -549,6 +549,11 @@ extension Ghostty {
                 // header bar widget, so this action is a no-op on this platform.
                 Ghostty.logger.debug("toggle_split_header is a no-op on macOS")
 
+            case GHOSTTY_ACTION_TOGGLE_TAB_BAR:
+                // Not applicable on macOS: the tab bar is a GTK/Adw concept, so this
+                // action is a no-op on this platform.
+                Ghostty.logger.debug("toggle_tab_bar is a no-op on macOS")
+
             case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
                 return toggleSplitZoom(app, target: target)
 

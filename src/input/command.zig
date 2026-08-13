@@ -564,6 +564,12 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Toggle split-header visibility for the current tab.",
         }},
 
+        .toggle_tab_bar => comptime &.{.{
+            .action = .toggle_tab_bar,
+            .title = "Toggle Tab Bar",
+            .description = "Toggle the tab bar visibility.",
+        }},
+
         // No default command because goto_split_index requires a numeric parameter.
         .goto_split_index => comptime &.{},
 

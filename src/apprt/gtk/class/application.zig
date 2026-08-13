@@ -821,6 +821,20 @@ pub const Application = extern struct {
                     },
                 }
             },
+            .toggle_tab_bar => {
+                switch (target) {
+                    .app => return false,
+                    .surface => |core_target| {
+                        const surface = core_target.rt_surface.surface;
+                        const window = ext.getAncestor(
+                            Window,
+                            surface.as(gtk.Widget),
+                        ) orelse return false;
+                        _ = window.as(gtk.Widget).activateAction("win.toggle-tab-bar", null);
+                        return true;
+                    },
+                }
+            },
 
             // Unimplemented
             .secure_input,

@@ -5452,6 +5452,12 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             {},
         ),
 
+        .toggle_tab_bar => return try self.rt_app.performAction(
+            .{ .surface = self },
+            .toggle_tab_bar,
+            {},
+        ),
+
         .toggle_split_zoom => return try self.rt_app.performAction(
             .{ .surface = self },
             .toggle_split_zoom,

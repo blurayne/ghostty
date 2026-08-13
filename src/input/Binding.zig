@@ -682,6 +682,11 @@ pub const Action = union(enum) {
     /// The header widget is wired in a later phase.
     toggle_split_header,
 
+    /// Toggle the tab bar visibility for the current window.
+    ///
+    /// Only implemented on Linux (GTK).
+    toggle_tab_bar,
+
     /// Reset the window to the default size. The "default size" is the
     /// size that a new window would be created with. This has no effect
     /// if the window is fullscreen.
@@ -1451,6 +1456,7 @@ pub const Action = union(enum) {
             .goto_split_index,
             .move_split_to_new_window,
             .toggle_split_header,
+            .toggle_tab_bar,
             .inspector,
             => .surface,
         };
@@ -4645,6 +4651,11 @@ test "parse: goto_split_index" {
 test "parse: toggle_split_header" {
     const result = try Action.parse("toggle_split_header");
     try std.testing.expectEqual(Action.toggle_split_header, result);
+}
+
+test "parse: toggle_tab_bar" {
+    const result = try Action.parse("toggle_tab_bar");
+    try std.testing.expectEqual(Action.toggle_tab_bar, result);
 }
 
 test "parse: move_split_to_new_window" {

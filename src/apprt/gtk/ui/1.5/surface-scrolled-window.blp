@@ -110,8 +110,16 @@ menu handle_context_menu_model {
   }
   section {
     item {
-      label: _("Toggle Titlebar");
+      label: _("Toggle Split Header");
       action: "split-tree.toggle-header";
+    }
+    item {
+      label: _("Toggle Tab Bar");
+      action: "win.toggle-tab-bar";
+    }
+    item {
+      label: _("Toggle Window Decorations");
+      action: "win.toggle-decoration";
     }
   }
   section {

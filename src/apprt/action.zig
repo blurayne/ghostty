@@ -165,6 +165,11 @@ pub const Action = union(Key) {
     /// The header widget is wired in a later phase.
     toggle_split_header,
 
+    /// Toggle the tab bar visibility for the current window.
+    ///
+    /// Only implemented on Linux (GTK).
+    toggle_tab_bar,
+
     /// Toggle whether a split is zoomed or not. A zoomed split is resized
     /// to take up the entire window.
     toggle_split_zoom,
@@ -392,6 +397,7 @@ pub const Action = union(Key) {
         goto_split_index,
         move_split_to_new_window,
         toggle_split_header,
+        toggle_tab_bar,
         toggle_split_zoom,
         present_terminal,
         size_limit,
