@@ -1,0 +1,73 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $GhosttyTabSwitcher: Adw.Bin {
+  Adw.Dialog dialog {
+    title: _("Tab Switcher");
+    content-width: 500;
+    content-height: 400;
+    closed => $closed();
+
+    Adw.ToolbarView {
+      [top]
+      Adw.HeaderBar {
+        title-widget: Gtk.SearchEntry search {
+          placeholder-text: _("Search tabs");
+          activate => $search_activated();
+          stop-search => $search_stopped();
+        };
+
+        [end]
+        Gtk.CheckButton show_splits {
+          label: _("Show splits");
+          toggled => $show_splits_toggled();
+        }
+      }
+
+      Gtk.ScrolledWindow {
+        vexpand: true;
+        hscrollbar-policy: never;
+
+        Gtk.ListView view {
+          single-click-activate: true;
+          activate => $row_activated();
+
+          model: Gtk.SingleSelection model {
+            model: Gtk.FilterListModel filter_model {
+              incremental: true;
+
+              filter: Gtk.StringFilter {
+                expression: expr item as <$GhosttyTabSwitcherItem>.title;
+                search: bind search.text;
+              };
+            };
+          };
+
+          factory: Gtk.BuilderListItemFactory {
+            template Gtk.ListItem {
+              child: Gtk.Box {
+                spacing: 8;
+
+                Gtk.Label {
+                  hexpand: true;
+                  xalign: 0;
+                  ellipsize: end;
+                  label: bind template.item as <$GhosttyTabSwitcherItem>.title;
+                }
+
+                Gtk.Label {
+                  styles [
+                    "dim-label",
+                    "numeric",
+                  ]
+
+                  label: bind template.item as <$GhosttyTabSwitcherItem>.split-count-label;
+                }
+              };
+            }
+          };
+        }
+      }
+    }
+  }
+}

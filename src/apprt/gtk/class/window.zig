@@ -29,6 +29,7 @@ const Surface = @import("surface.zig").Surface;
 const Tab = @import("tab.zig").Tab;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
+const TabSwitcher = @import("tab_switcher.zig").TabSwitcher;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
 const TitleDialog = @import("title_dialog.zig").TitleDialog;
 
@@ -274,6 +275,9 @@ pub const Window = extern struct {
 
         /// A weak reference to a command palette.
         command_palette: WeakRef(CommandPalette) = .empty,
+
+        /// A weak reference to a tab switcher dialog.
+        tab_switcher: WeakRef(TabSwitcher) = .empty,
 
         /// Tab page that the context menu was opened for.
         /// setup by `setup-menu`.
@@ -897,8 +901,18 @@ pub const Window = extern struct {
 
     /// Toggle the tab switcher dialog for this window.
     pub fn toggleTabSwitcher(self: *Self) void {
-        _ = self;
-        log.info("toggle_tab_switcher invoked (stub)", .{});
+        const priv = self.private();
+
+        // Reuse the stored tab switcher if we still have one, else create it.
+        const tab_switcher = priv.tab_switcher.get() orelse tab_switcher: {
+            const tab_switcher = TabSwitcher.new();
+            priv.tab_switcher.set(tab_switcher);
+            break :tab_switcher tab_switcher;
+        };
+        defer tab_switcher.unref();
+
+        // Present (or hide) the dialog modally over this window.
+        tab_switcher.toggle(self);
     }
 
     /// Toggle the visible property.
