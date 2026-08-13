@@ -2337,6 +2337,13 @@ pub const Application = extern struct {
         ) catch |err| log.warn("unable to open url: {}", .{err});
     }
 
+    /// Open a URL using the same path as the `open_url` apprt action (desktop
+    /// portal with a system-opener fallback). Exposed so apprt UI such as
+    /// surface context menus can open links and selections.
+    pub fn openUrl(self: *Application, value: apprt.action.OpenUrl) void {
+        Action.openUrl(self, value);
+    }
+
     /// Find a surface by its 16-byte UUID, walking all windows, tabs, and
     /// split trees in this process. Returns null if not found.
     pub fn findSurfaceByUuid(self: *Self, uuid: [16]u8) ?*Surface {

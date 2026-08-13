@@ -1958,6 +1958,26 @@ pub const Surface = extern struct {
                 actionPromptTitle,
                 null,
             ),
+            .init(
+                "open-link-in-browser",
+                actionOpenLinkInBrowser,
+                null,
+            ),
+            .init(
+                "copy-link",
+                actionCopyLink,
+                null,
+            ),
+            .init(
+                "copy-link-text",
+                actionCopyLinkText,
+                null,
+            ),
+            .init(
+                "open-selection-in-browser",
+                actionOpenSelectionInBrowser,
+                null,
+            ),
             .initStateful(
                 "notify-on-next-command-finish",
                 actionNotifyOnNextCommandFinish,
@@ -2735,6 +2755,74 @@ pub const Surface = extern struct {
         _ = surface.performBindingAction(.prompt_surface_title) catch |err| {
             log.warn("unable to perform prompt title action err={}", .{err});
         };
+    }
+
+    /// The URL currently under the mouse, if any. Used by the window to decide
+    /// whether to show link items in the context menu.
+    pub fn getMouseHoverUrl(self: *Self) ?[:0]const u8 {
+        return self.private().mouse_hover_url;
+    }
+
+    /// Whether the hovered link has display text distinct from its URI (OSC 8).
+    /// Used to decide whether to show the "Copy Link Text" menu item.
+    pub fn hoveredLinkHasDistinctText(self: *Self) bool {
+        const surface = self.core() orelse return false;
+        const alloc = Application.default().allocator();
+        const text = (surface.hoveredLinkText(alloc) catch return false) orelse return false;
+        alloc.free(text);
+        return true;
+    }
+
+    fn actionOpenLinkInBrowser(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const url = self.private().mouse_hover_url orelse return;
+        if (url.len == 0) return;
+        Application.default().openUrl(.{ .kind = .text, .url = url });
+    }
+
+    fn actionCopyLink(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const url = self.private().mouse_hover_url orelse return;
+        if (url.len == 0) return;
+        self.setClipboard(.standard, &.{.{ .mime = "text/plain", .data = url }}, false);
+    }
+
+    fn actionCopyLinkText(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const surface = self.core() orelse return;
+        const alloc = Application.default().allocator();
+        const text = (surface.hoveredLinkText(alloc) catch |err| {
+            log.warn("error reading hovered link text err={}", .{err});
+            return;
+        }) orelse return;
+        defer alloc.free(text);
+        self.setClipboard(.standard, &.{.{ .mime = "text/plain", .data = text }}, false);
+    }
+
+    fn actionOpenSelectionInBrowser(
+        _: *gio.SimpleAction,
+        _: ?*glib.Variant,
+        self: *Self,
+    ) callconv(.c) void {
+        const surface = self.core() orelse return;
+        const alloc = Application.default().allocator();
+        const sel = (surface.selectionString(alloc) catch |err| {
+            log.warn("error reading selection err={}", .{err});
+            return;
+        }) orelse return;
+        defer alloc.free(sel);
+        const trimmed = std.mem.trim(u8, sel, " \t\r\n");
+        if (trimmed.len == 0) return;
+        Application.default().openUrl(.{ .kind = .text, .url = trimmed });
     }
 
     pub fn actionNotifyOnNextCommandFinish(

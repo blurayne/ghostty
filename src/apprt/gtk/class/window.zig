@@ -2227,25 +2227,59 @@ pub const Window = extern struct {
         return menu;
     }
 
+    /// Builds the dynamic "link/selection" section for the surface context
+    /// menu based on what is currently hovered or selected. Returns null when
+    /// neither a link is hovered nor text is selected. Caller owns the menu.
+    fn buildLinkSelectionSection(surface: *Surface) ?*gio.Menu {
+        const has_link = if (surface.getMouseHoverUrl()) |u| u.len > 0 else false;
+        const has_selection = if (surface.core()) |c| c.hasSelection() else false;
+        if (!has_link and !has_selection) return null;
+
+        const menu = gio.Menu.new();
+        if (has_link) {
+            menu.append(i18n._("Open Link in Browser"), "surface.open-link-in-browser");
+            menu.append(i18n._("Copy Link"), "surface.copy-link");
+            if (surface.hoveredLinkHasDistinctText()) {
+                menu.append(i18n._("Copy Link Text"), "surface.copy-link-text");
+            }
+        }
+        if (has_selection) {
+            menu.append(i18n._("Open Selection in Browser"), "surface.open-selection-in-browser");
+        }
+        return menu;
+    }
+
     fn surfaceMenu(
         surface: *Surface,
         self: *Self,
     ) callconv(.c) void {
         self.syncActions();
 
-        // When the window has no visible decoration (no header bar), show a
-        // richer flat context menu so the user can still reach window/tab/split
-        // actions without the header bar buttons.
         const popover = surface.getContextMenu();
-        if (!self.getHeaderbarVisible()) {
-            const menu = buildNoDecorationMenu();
-            defer menu.unref();
-            popover.setMenuModel(menu.as(gio.MenuModel));
+
+        // Base menu: when the window has no visible decoration (no header bar),
+        // show a richer flat menu so window/tab/split actions remain reachable;
+        // otherwise use the Blueprint-declared static model. The surface saves
+        // the original model after initTemplate so it survives no-deco swaps.
+        var owned_base: ?*gio.Menu = null;
+        defer if (owned_base) |m| m.unref();
+        const base: ?*gio.MenuModel = if (!self.getHeaderbarVisible()) base: {
+            const m = buildNoDecorationMenu();
+            owned_base = m;
+            break :base m.as(gio.MenuModel);
+        } else surface.getContextMenuOriginalModel();
+
+        // Prepend a dynamic link/selection section when a link is hovered or
+        // text is selected, otherwise use the base model as-is.
+        if (buildLinkSelectionSection(surface)) |sec| {
+            defer sec.unref();
+            const combined = gio.Menu.new();
+            defer combined.unref();
+            combined.appendSection(null, sec.as(gio.MenuModel));
+            if (base) |b| combined.appendSection(null, b);
+            popover.setMenuModel(combined.as(gio.MenuModel));
         } else {
-            // Restore the original Blueprint-declared model. The surface
-            // saves it immediately after initTemplate so it is always the
-            // static menu even after a previous no-deco swap.
-            popover.setMenuModel(surface.getContextMenuOriginalModel());
+            popover.setMenuModel(base);
         }
     }
 

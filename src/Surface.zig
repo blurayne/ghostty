@@ -4532,6 +4532,67 @@ fn osc8URI(self: *Surface, pin: terminal.Pin) ?[]const u8 {
     return entry.uri.slice(page.memory);
 }
 
+/// Returns the display text of the currently hovered OSC 8 hyperlink when it
+/// differs from its URI, or null otherwise. Regex URL matches have text equal
+/// to the URL and therefore return null. Caller owns the returned slice.
+///
+/// This is used by apprt context menus to offer a "Copy Link Text" action only
+/// when the visible text differs from the link destination.
+pub fn hoveredLinkText(self: *Surface, alloc: Allocator) !?[:0]const u8 {
+    if (!self.mouse.over_link) return null;
+    const pos = try self.rt_surface.getCursorPos();
+
+    self.renderer_state.mutex.lockUncancelable(global.io());
+    defer self.renderer_state.mutex.unlock(global.io());
+
+    const link = try self.linkAtPos(pos) orelse return null;
+    // Only OSC 8 hyperlinks can have display text distinct from their URI.
+    if (link.action != ._open_osc8) return null;
+
+    const start_pin = link.selection.start();
+    const page = start_pin.node.page();
+    const link_id = page.lookupHyperlink(start_pin.rowAndCell().cell) orelse return null;
+
+    // Expand to the full run of cells sharing this hyperlink id. Hyperlink ids
+    // are per-page, so we stop if iteration crosses into a different page.
+    const end: terminal.Pin = end: {
+        var it = start_pin.cellIterator(.right_down, null);
+        var prev = it.next().?;
+        while (it.next()) |p| {
+            if (p.node != start_pin.node) break :end prev;
+            if (page.lookupHyperlink(p.rowAndCell().cell) != link_id) break :end prev;
+            prev = p;
+        }
+        break :end prev;
+    };
+    const start: terminal.Pin = start: {
+        var it = start_pin.cellIterator(.left_up, null);
+        var prev = it.next().?;
+        while (it.next()) |p| {
+            if (p.node != start_pin.node) break :start prev;
+            if (page.lookupHyperlink(p.rowAndCell().cell) != link_id) break :start prev;
+            prev = p;
+        }
+        break :start prev;
+    };
+
+    const sel = terminal.Selection.init(start, end, false);
+    const text = try self.io.terminal.screens.active.selectionString(alloc, .{
+        .sel = sel,
+        .trim = false,
+    });
+
+    // If the visible text is identical to the URI, there's nothing distinct
+    // worth copying separately.
+    if (self.osc8URI(start_pin)) |uri| {
+        if (std.mem.eql(u8, text, uri)) {
+            alloc.free(text);
+            return null;
+        }
+    }
+    return text;
+}
+
 pub fn mousePressureCallback(
     self: *Surface,
     stage: input.MousePressureStage,
