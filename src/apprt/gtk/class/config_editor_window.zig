@@ -1151,7 +1151,7 @@ pub const ConfigEditorWindow = extern struct {
     ) callconv(.c) void {
         _ = self;
         const app = Application.default();
-        _ = app.core().mailbox.push(global.io(), .open_config, .forever);
+        _ = app.core().mailbox.push(global.io(), .{ .open_config = .os_open }, .forever);
     }
 
     fn onReloadClicked(

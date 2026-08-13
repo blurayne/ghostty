@@ -104,7 +104,9 @@ test "clipboard image: write creates png file with bytes" {
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    const dir_path = try tmp.dir.realpathAlloc(testing.allocator, ".");
+    var realpath_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const resolved = realpath_buf[0..try tmp.dir.realPathFile(global.io(), ".", &realpath_buf)];
+    const dir_path = try testing.allocator.dupe(u8, resolved);
     defer testing.allocator.free(dir_path);
 
     const png = "\x89PNG\r\n\x1a\nDATA";
