@@ -2,6 +2,13 @@
 
 A file for [guiding coding agents](https://agents.md/).
 
+## Protocol Feature Tracker
+
+`TODO.md` (repo root) tracks terminal / agent-protocol feature coverage with checkmarks.
+`PROTOCOLS.md` (repo root) compares coverage against upstream Ghostty and the cmux fork.
+Detailed per-feature plans live in `docs/agents/plans/`. Consult and update `TODO.md`
+when adding or completing protocol work.
+
 ## Dev Container
 
 All development, file operations, and builds MUST run inside the dev container.
@@ -18,7 +25,13 @@ Never run `zig build` or `flatpak-builder` directly on the host.
 Build artifacts land in `dist/build/` after a successful build.
 First build downloads the GNOME 50 runtime (~1 GB) into a named Docker volume — subsequent builds reuse it.
 
-**Disk management:** Only keep 4 flatpak build cache entries. Run `mise run clean` to wipe all build artifacts and reclaim space when disk is low.
+**Disk management:** flatpak builds are disk-heavy and the disk is frequently near-full. Each `mise run build` leaves a stale, no-longer-needed per-run module build tree under `.flatpak-builder/build/` (e.g. `ghostty-1`, `ghostty-2`, …) plus the `flatpak/builddir` output — these are **not** reused across builds and silently accumulate until packaging fails with "No space left on device". **Before every build, delete this stale build output to reclaim space:**
+
+```bash
+rm -rf .flatpak-builder/build flatpak/builddir
+```
+
+Do **NOT** delete `.flatpak-builder/downloads/` (bundled source tarballs — re-downloading is slow and fails on a flaky network) or `.flatpak-builder/cache/` (the built-dependency ostree cache that keeps builds incremental). Removing those forces a full re-download of the runtime + all sources on the next build. `mise run clean` wipes **everything** — those caches and the Docker volumes included — so use it only as a last resort when the disk is critically low, and expect a slow, network-dependent rebuild afterward. Keep at most ~4 flatpak build cache entries.
 
 ## Commands
 

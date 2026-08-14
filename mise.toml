@@ -17,6 +17,42 @@ fi
 flatpak install --user --bundle --reinstall -y dist/build/com.mitchellh.ghostty.flatpak
 """
 
+[tasks.backup-flatpak]
+description = "Back up the currently installed Ghostty Flatpak so a new build can be tested/reverted"
+run = """
+set -e
+APP=com.mitchellh.ghostty
+if ! flatpak info --user "$APP" >/dev/null 2>&1; then
+  echo "No --user install of $APP found; nothing to back up."
+  exit 1
+fi
+REF=$(flatpak info --user --show-ref "$APP")
+BRANCH=${REF##*/}
+COMMIT=$(flatpak info --user --show-commit "$APP")
+DEST="${XDG_DATA_HOME:-$HOME/.local/share}/ghostty-flatpak-backups"
+mkdir -p "$DEST"
+OUT="$DEST/$APP.backup.flatpak"
+echo "Backing up $REF ..."
+flatpak build-bundle "${XDG_DATA_HOME:-$HOME/.local/share}/flatpak/repo" "$OUT" "$APP" "$BRANCH"
+echo "$COMMIT $BRANCH $(date -Iseconds)" > "$OUT.info"
+echo "Saved backup -> $OUT ($(du -h "$OUT" | cut -f1))"
+"""
+
+[tasks.restore-flatpak]
+description = "Reinstall the Ghostty Flatpak from the last backup-flatpak (revert a bad build)"
+run = """
+set -e
+APP=com.mitchellh.ghostty
+OUT="${XDG_DATA_HOME:-$HOME/.local/share}/ghostty-flatpak-backups/$APP.backup.flatpak"
+if [ ! -f "$OUT" ]; then
+  echo "No backup at $OUT. Run: mise run backup-flatpak first."
+  exit 1
+fi
+[ -f "$OUT.info" ] && echo "Restoring backup: $(cat "$OUT.info")"
+flatpak install --user --bundle --reinstall -y "$OUT"
+echo "Restored $APP from backup."
+"""
+
 [tasks.zig-build]
 description = "Run zig build inside dev container (fast compile check, no flatpak)"
 run = "docker compose run --build --rm builder zig build -Demit-macos-app=false"
