@@ -290,6 +290,37 @@ pub const Keyboard = struct {
     last_trigger: ?u64 = null,
 };
 
+/// Why a child process exit is being reported to the user. This selects the
+/// wording of the message written into the terminal — the two cases look
+/// nothing alike to a user and must not share copy.
+const ExitReason = enum {
+    /// The command exited so quickly we assume it never really started —
+    /// a bad binary path, a missing interpreter, an immediate crash.
+    launch_failure,
+
+    /// The command ran, then exited with a non-zero status. It launched
+    /// fine; it just failed.
+    nonzero_exit,
+
+    /// Headline written above the command in the detail block.
+    fn heading(self: ExitReason) []const u8 {
+        return switch (self) {
+            .launch_failure => "Ghostty failed to launch the requested command:",
+            .nonzero_exit => "Command exited with a non-zero status:",
+        };
+    }
+
+    /// Closing hint written below the exit code. Only a split is kept open
+    /// for `.nonzero_exit`, so that case names the split rather than the
+    /// window.
+    fn dismissHint(self: ExitReason) []const u8 {
+        return switch (self) {
+            .launch_failure => "Press any key to close the window.",
+            .nonzero_exit => "Press any key to close the split.",
+        };
+    }
+};
+
 /// The configuration that a surface has, this is copied from the main
 /// Config struct usually to prevent sharing a single value.
 const DerivedConfig = struct {
@@ -1311,7 +1342,7 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
 
         // If a native GUI notification was not shown, update our terminal to
         // note the abnormal exit.
-        self.childExitedAbnormally(info) catch |err| {
+        self.childExitedAbnormally(info, .launch_failure) catch |err| {
             log.err("error handling abnormal child exit err={}", .{err});
             return;
         };
@@ -1367,6 +1398,7 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
 fn childExitedAbnormally(
     self: *Surface,
     info: apprt.surface.Message.ChildExited,
+    reason: ExitReason,
 ) !void {
     var arena = ArenaAllocator.init(self.alloc);
     defer arena.deinit();
@@ -1406,7 +1438,7 @@ fn childExitedAbnormally(
     // Output our error message
     try t.setAttribute(.{ .@"8_fg" = .bright_red });
     try t.setAttribute(.{ .bold = {} });
-    try t.printString("Ghostty failed to launch the requested command:");
+    try t.printString(reason.heading());
     try t.setAttribute(.{ .unset = {} });
 
     t.carriageReturn();
@@ -1438,7 +1470,7 @@ fn childExitedAbnormally(
     t.carriageReturn();
     try t.linefeed();
     try t.linefeed();
-    try t.printString("Press any key to close the window.");
+    try t.printString(reason.dismissHint());
 
     // Hide the cursor
     t.modes.set(.cursor_visible, false);
@@ -6757,4 +6789,30 @@ test "queueIo frees allocated writes in readonly mode" {
         .alloc = testing.allocator,
         .data = data,
     } }, .unlocked);
+}
+
+test "ExitReason: heading distinguishes launch failure from non-zero exit" {
+    const testing = std.testing;
+
+    try testing.expectEqualStrings(
+        "Ghostty failed to launch the requested command:",
+        ExitReason.launch_failure.heading(),
+    );
+    try testing.expectEqualStrings(
+        "Command exited with a non-zero status:",
+        ExitReason.nonzero_exit.heading(),
+    );
+}
+
+test "ExitReason: dismiss hint names the thing that will close" {
+    const testing = std.testing;
+
+    try testing.expectEqualStrings(
+        "Press any key to close the window.",
+        ExitReason.launch_failure.dismissHint(),
+    );
+    try testing.expectEqualStrings(
+        "Press any key to close the split.",
+        ExitReason.nonzero_exit.dismissHint(),
+    );
 }
