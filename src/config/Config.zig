@@ -1425,6 +1425,21 @@ input: RepeatableReadableIO = .{},
 /// This is primarily useful for scripts or debugging.
 @"wait-after-command": bool = false,
 
+/// If true, keep a split open after the command running in it exits with a
+/// non-zero exit code, instead of closing the split immediately. The split
+/// shows the command, its runtime and its exit code, and stays until you
+/// dismiss it with any keypress or the banner's close button.
+///
+/// This only applies to surfaces that are part of a split, because closing
+/// a split destroys output you can still see the rest of. A lone window or
+/// tab closes on exit as usual; use `wait-after-command` to keep those open
+/// too.
+///
+/// This has no effect on macOS.
+///
+/// Available since: 1.4.0
+@"wait-after-failed-command": bool = true,
+
 /// The number of milliseconds of runtime below which we consider a process exit
 /// to be abnormal. This is used to show an error message when the process exits
 /// too quickly.
