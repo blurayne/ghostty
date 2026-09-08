@@ -3,6 +3,7 @@
 //! also OS-specific features and conventions.
 
 const builtin = @import("builtin");
+const build_config = @import("../build_config.zig");
 
 const dbus = @import("dbus.zig");
 const desktop = @import("desktop.zig");
@@ -69,6 +70,10 @@ test {
 
     if (comptime builtin.os.tag == .linux) {
         _ = kernel_info;
+
+        // flatpak.zig imports gio_c, which only exists in a -Dflatpak=true
+        // build, so only pull its tests in when we have it.
+        if (comptime build_config.flatpak) _ = flatpak;
     } else if (comptime builtin.os.tag.isDarwin()) {
         _ = mach;
         _ = macos;

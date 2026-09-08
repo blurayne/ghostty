@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const posix = std.posix;
+const build_config = @import("../build_config.zig");
 const global = @import("../global.zig");
 const xev = global.xev;
 
@@ -69,6 +70,33 @@ pub const FlatpakHostCommand = struct {
     state_mutex: std.Io.Mutex = .init,
     state_cv: std.Io.Condition = .init,
 
+    /// Exit status we synthesize when the Flatpak session helper
+    /// (`org.freedesktop.Flatpak`) disappears from the bus while our command
+    /// is still running. The helper is the parent of every host command, so
+    /// when it is torn down (e.g. systemd's default `OOMPolicy=stop` on
+    /// `flatpak-session-helper.service`) its children are SIGKILLed and no
+    /// `HostCommandExited` signal is ever emitted. 137 is `128 + SIGKILL`,
+    /// the standard shell convention for a signal-terminated process, so this
+    /// is a truthful status rather than a sentinel: the child really was
+    /// killed. The `warn` log emitted alongside it is what distinguishes this
+    /// from a child that genuinely exited 137.
+    pub const host_died_status: u8 = 137;
+
+    /// Payload of the `.started` state. Named (rather than anonymous) so
+    /// that `transitionExited` can hand it back by value to whichever path
+    /// won the race to end the command.
+    const Started = struct {
+        pid: u32,
+        loop_xev: ?*xev.Loop,
+        completion: ?*Completion,
+        subscription: gio_c.guint,
+        loop: *gio_c.GMainLoop,
+
+        /// Watcher id from `g_bus_watch_name_on_connection`, or 0 if none
+        /// is registered.
+        name_watcher: gio_c.guint = 0,
+    };
+
     /// State the process is in. This can't be inspected directly, you
     /// must use getters on the struct to get access.
     const State = union(enum) {
@@ -81,13 +109,7 @@ pub const FlatpakHostCommand = struct {
         err: void,
 
         /// Process started with the given pid on the host.
-        started: struct {
-            pid: u32,
-            loop_xev: ?*xev.Loop,
-            completion: ?*Completion,
-            subscription: gio_c.guint,
-            loop: *gio_c.GMainLoop,
-        },
+        started: Started,
 
         /// Process exited
         exited: struct {
@@ -454,39 +476,62 @@ pub const FlatpakHostCommand = struct {
         self.state = state;
     }
 
-    fn onExit(
-        bus: ?*gio_c.GDBusConnection,
-        _: [*c]const u8,
-        _: [*c]const u8,
-        _: [*c]const u8,
-        _: [*c]const u8,
-        params: ?*gio_c.GVariant,
-        ud: ?*anyopaque,
-    ) callconv(.c) void {
-        const self = @as(*FlatpakHostCommand, @ptrCast(@alignCast(ud)));
-        const state = state: {
-            self.state_mutex.lockUncancelable(global.io());
-            defer self.state_mutex.unlock(global.io());
-            break :state self.state.started;
+    /// Move the command from `.started` to `.exited` with the given status.
+    ///
+    /// This is the single choke point for ending a command, shared by the
+    /// `HostCommandExited` signal and by helper-death detection. It is
+    /// idempotent: if we are not in `.started` (already exited, never
+    /// started, or errored) it returns null and changes nothing, so a late
+    /// or duplicate signal is a harmless no-op. When `expect_pid` is
+    /// non-null it must match the running pid, which is how `onExit` filters
+    /// out the exits of *other* host commands — `HostCommandExited` is
+    /// broadcast for all of them.
+    ///
+    /// On success the previous `.started` payload is returned so the caller
+    /// can run the GLib teardown via `finishExit`. Any pending async waiter's
+    /// result is recorded here too, under the same lock, so the state and the
+    /// completion never disagree.
+    ///
+    /// Blocking `wait()` callers unblock via the `state_cv` broadcast.
+    fn transitionExited(
+        self: *FlatpakHostCommand,
+        status: u8,
+        expect_pid: ?u32,
+    ) ?Started {
+        self.state_mutex.lockUncancelable(global.io());
+        defer self.state_mutex.unlock(global.io());
+
+        const started = switch (self.state) {
+            .started => |v| v,
+            else => return null,
         };
+        if (expect_pid) |pid| if (started.pid != pid) return null;
 
-        var pid: u32 = 0;
-        var exit_status_raw: u32 = 0;
-        gio_c.g_variant_get(params.?, "(uu)", &pid, &exit_status_raw);
-        if (state.pid != pid) return;
+        self.state = .{ .exited = .{
+            .pid = started.pid,
+            .status = status,
+        } };
+        if (started.completion) |completion| completion.result = status;
+        self.state_cv.broadcast(global.io());
 
-        const exit_status = posix.W.EXITSTATUS(exit_status_raw);
-        // Update our state
-        self.updateState(.{
-            .exited = .{
-                .pid = pid,
-                .status = exit_status,
-            },
-        });
-        if (state.completion) |completion| {
-            completion.result = exit_status;
+        return started;
+    }
+
+    /// GLib-side teardown for a command that has just left `.started`.
+    /// Must only be called with a `Started` returned by `transitionExited`,
+    /// which guarantees exactly one caller reaches here per command.
+    fn finishExit(
+        self: *FlatpakHostCommand,
+        bus: *gio_c.GDBusConnection,
+        started: Started,
+    ) void {
+        _ = self;
+
+        // Notify the async waiter, if any. The result was already recorded
+        // by transitionExited.
+        if (started.completion) |completion| {
             completion.timer.?.run(
-                state.loop_xev.?,
+                started.loop_xev.?,
                 &completion.c_xev,
                 0,
                 anyopaque,
@@ -508,14 +553,124 @@ pub const FlatpakHostCommand = struct {
                 }).callback,
             );
         }
-        log.debug("HostCommand exited pid={} status={}", .{ pid, exit_status });
 
         // We're done now, so we can unsubscribe
-        gio_c.g_dbus_connection_signal_unsubscribe(bus.?, state.subscription);
+        gio_c.g_dbus_connection_signal_unsubscribe(bus, started.subscription);
 
         // We are also done with our loop so we can exit.
-        gio_c.g_main_loop_quit(state.loop);
+        gio_c.g_main_loop_quit(started.loop);
+    }
+
+    fn onExit(
+        bus: ?*gio_c.GDBusConnection,
+        _: [*c]const u8,
+        _: [*c]const u8,
+        _: [*c]const u8,
+        _: [*c]const u8,
+        params: ?*gio_c.GVariant,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const self = @as(*FlatpakHostCommand, @ptrCast(@alignCast(ud)));
+
+        // HostCommandExited is broadcast for every host command, so parse
+        // first and let transitionExited filter on the pid.
+        var pid: u32 = 0;
+        var exit_status_raw: u32 = 0;
+        gio_c.g_variant_get(params.?, "(uu)", &pid, &exit_status_raw);
+        const exit_status = posix.W.EXITSTATUS(exit_status_raw);
+
+        const started = self.transitionExited(exit_status, pid) orelse return;
+        log.debug("HostCommand exited pid={} status={}", .{ pid, exit_status });
+        self.finishExit(bus.?, started);
     }
 
     fn noopCallback(_: ?*anyopaque, _: *xev.Loop, _: *Completion, _: WaitError!u8) void {}
 };
+
+// The tests below only compile under `-Dflatpak=true`, because
+// FlatpakHostCommand imports `gio_c` which only exists in that build. They
+// are reached via `_ = flatpak;` in os/main.zig, gated the same way.
+//
+// `loop` is left `undefined`: transitionExited never dereferences it, it
+// only carries it across to finishExit, which is the part that needs a live
+// bus and is therefore not unit-testable.
+const testing = std.testing;
+
+fn testCommand(state: FlatpakHostCommand.State) FlatpakHostCommand {
+    return .{
+        .argv = &.{},
+        .stdin = 0,
+        .stdout = 1,
+        .stderr = 2,
+        .state = state,
+    };
+}
+
+fn testStarted(pid: u32) FlatpakHostCommand.State {
+    return .{ .started = .{
+        .pid = pid,
+        .loop_xev = null,
+        .completion = null,
+        .subscription = 7,
+        .loop = undefined,
+    } };
+}
+
+test "flatpak: transitionExited from started sets exited status" {
+    if (comptime !build_config.flatpak) return error.SkipZigTest;
+
+    var cmd = testCommand(testStarted(1234));
+    const started = cmd.transitionExited(3, 1234) orelse
+        return error.TestExpectedTransition;
+
+    try testing.expectEqual(@as(u32, 1234), started.pid);
+    try testing.expectEqual(@as(FlatpakHostCommand.gio_c.guint, 7), started.subscription);
+    try testing.expectEqual(@as(u32, 0), started.name_watcher);
+    try testing.expect(cmd.state == .exited);
+    try testing.expectEqual(@as(u32, 1234), cmd.state.exited.pid);
+    try testing.expectEqual(@as(u8, 3), cmd.state.exited.status);
+}
+
+test "flatpak: transitionExited is a no-op when already exited" {
+    if (comptime !build_config.flatpak) return error.SkipZigTest;
+
+    var cmd = testCommand(.{ .exited = .{ .pid = 1234, .status = 0 } });
+    try testing.expect(cmd.transitionExited(FlatpakHostCommand.host_died_status, null) == null);
+
+    // The first exit wins; a late signal must not overwrite it.
+    try testing.expect(cmd.state == .exited);
+    try testing.expectEqual(@as(u8, 0), cmd.state.exited.status);
+}
+
+test "flatpak: transitionExited is a no-op from init" {
+    if (comptime !build_config.flatpak) return error.SkipZigTest;
+
+    var cmd = testCommand(.{ .init = {} });
+    try testing.expect(cmd.transitionExited(FlatpakHostCommand.host_died_status, null) == null);
+    try testing.expect(cmd.state == .init);
+}
+
+test "flatpak: transitionExited ignores pid mismatch" {
+    if (comptime !build_config.flatpak) return error.SkipZigTest;
+
+    // HostCommandExited fires for every host command, not just ours.
+    var cmd = testCommand(testStarted(1234));
+    try testing.expect(cmd.transitionExited(0, 5678) == null);
+    try testing.expect(cmd.state == .started);
+    try testing.expectEqual(@as(u32, 1234), cmd.state.started.pid);
+}
+
+test "flatpak: transitionExited records the result on a pending completion" {
+    if (comptime !build_config.flatpak) return error.SkipZigTest;
+
+    var completion: FlatpakHostCommand.Completion = .{};
+    var cmd = testCommand(testStarted(1234));
+    cmd.state.started.completion = &completion;
+
+    _ = cmd.transitionExited(FlatpakHostCommand.host_died_status, null) orelse
+        return error.TestExpectedTransition;
+    try testing.expectEqual(
+        @as(u8, FlatpakHostCommand.host_died_status),
+        try completion.result.?,
+    );
+}
