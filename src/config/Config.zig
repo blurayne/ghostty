@@ -1432,10 +1432,15 @@ input: RepeatableReadableIO = .{},
 ///
 /// This only applies to surfaces that are part of a split, because closing
 /// a split destroys output you can still see the rest of. A lone window or
-/// tab closes on exit as usual; use `wait-after-command` to keep those open
-/// too.
+/// tab closes on exit as usual.
 ///
-/// This has no effect on macOS.
+/// `wait-after-command` takes precedence over this option. It keeps every
+/// surface open after *any* exit, zero or not, so when it is true this
+/// option never comes into play and the split shows the shorter "Process
+/// exited" notice rather than the command, runtime and exit code.
+///
+/// This has no effect on macOS, where splits are managed by the Swift
+/// application and libghostty is not told which surfaces are split.
 ///
 /// Available since: 1.4.0
 @"wait-after-failed-command": bool = true,
