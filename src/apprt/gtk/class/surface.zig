@@ -886,14 +886,24 @@ pub const Surface = extern struct {
 
     pub fn bindIsSplit(self: *Self, tree: *SplitTree) void {
         const priv = self.private();
-        if (priv.is_split_binding) |bind| bind.unbind();
+        if (priv.is_split_binding) |binding| {
+            binding.unbind();
+            binding.unref();
+            priv.is_split_binding = null;
+        }
 
-        priv.is_split_binding = tree.as(gobject.Object).bindProperty(
+        const binding = tree.as(gobject.Object).bindProperty(
             "is-split",
             self.as(gobject.Object),
             "is-split",
             .{ .sync_create = true },
         );
+        // The ref created by bindProperty is owned by the binding itself.
+        // We need another ref to prevent the binding object from being
+        // freed if the source object (SplitTree) is finalized. Otherwise
+        // our pointer to the binding could become stale.
+        binding.ref();
+        priv.is_split_binding = binding;
     }
 
     /// Callback used to determine whether unfocused-split-fill / unfocused-split-opacity
@@ -1411,19 +1421,11 @@ pub const Surface = extern struct {
                 if (entry.native == keycode) break :w3c entry.key;
             } else .unidentified;
 
-            // Consult the pre-remapped XKB keyval/keysym to get the (possibly)
-            // remapped key. If the W3C key or the remapped key
-            // is eligible for remapping, we use it.
-            //
-            // See the docs for `shouldBeRemappable` for why we even have to
-            // do this in the first place.
-            if (gtk_key.keyFromKeyval(keyval)) |remapped| {
-                if (w3c_key.shouldBeRemappable() or remapped.shouldBeRemappable())
-                    break :keycode remapped;
-            }
-
-            // Return the original physical key
-            break :keycode w3c_key;
+            break :keycode gtk_key.remapKey(
+                w3c_key,
+                keyval,
+                key_event.isModifier() != 0,
+            );
         };
 
         // Get our modifier for the event
@@ -1608,7 +1610,11 @@ pub const Surface = extern struct {
             // https://gitlab.gnome.org/GNOME/libadwaita/-/commit/a7738a4d269bfdf4d8d5429ca73ccdd9b2450421
             // https://gitlab.gnome.org/GNOME/libadwaita/-/commit/9759d3fd81129608dd78116001928f2aed974ead
             if (gtk_xft_dpi <= 0) {
-                log.warn("gtk-xft-dpi has invalid value ({}), using default", .{gtk_xft_dpi});
+                // -1 is a valid value which specifies default scale.
+                // https://docs.gtk.org/gtk4/property.Settings.gtk-xft-dpi.html
+                if (gtk_xft_dpi != -1) {
+                    log.warn("gtk-xft-dpi has invalid value ({}), using default", .{gtk_xft_dpi});
+                }
                 break :xft_scale 1.0;
             }
 
@@ -1766,7 +1772,7 @@ pub const Surface = extern struct {
         self: *Self,
         clipboard_type: apprt.Clipboard,
         state: apprt.ClipboardRequest,
-    ) !bool {
+    ) !apprt.ClipboardReadResult {
         return try Clipboard.request(
             self,
             clipboard_type,
@@ -1778,7 +1784,12 @@ pub const Surface = extern struct {
         self: *Self,
         clipboard_type: apprt.Clipboard,
     ) !bool {
-        return Clipboard.requestImage(self, clipboard_type);
+        // Clipboard.requestImage speaks the tri-state ClipboardReadResult
+        // that the rest of the clipboard API uses. This entry point only
+        // reports whether a request actually started, so a performable
+        // keybind can fall through when it didn't.
+        const result = try Clipboard.requestImage(self, clipboard_type);
+        return result == .started;
     }
 
     pub fn setClipboard(
@@ -1995,6 +2006,12 @@ pub const Surface = extern struct {
         if (priv.config) |v| {
             v.unref();
             priv.config = null;
+        }
+
+        if (priv.is_split_binding) |binding| {
+            binding.unbind();
+            binding.unref();
+            priv.is_split_binding = null;
         }
 
         if (priv.vadj_signal_group) |group| {
@@ -4524,22 +4541,25 @@ const Clipboard = struct {
         );
     }
 
-    /// Request data from the clipboard (read the clipboard). This
-    /// completes asynchronously and will call the `completeClipboardRequest`
-    /// core surface API when done.
-    ///
-    /// Returns true if the request was started, false if the clipboard
-    /// doesn't contain text (allowing performable keybinds to pass through).
+    /// Request data from the clipboard (read the clipboard). A started
+    /// request completes asynchronously and will call the
+    /// `completeClipboardRequest` core surface API when done.
     pub fn request(
         self: *Surface,
         clipboard_type: apprt.Clipboard,
         state: apprt.ClipboardRequest,
-    ) Allocator.Error!bool {
+    ) Allocator.Error!apprt.ClipboardReadResult {
+        // The GTK apprt doesn't support the Kitty clipboard protocol
+        // yet.
+        if (state == .kitty_read or
+            state == .kitty_write or
+            state == .list) return .unsupported;
+
         // Get our requested clipboard
         const clipboard = get(
             self.private().gl_area.as(gtk.Widget),
             clipboard_type,
-        ) orelse return false;
+        ) orelse return .unsupported;
 
         // For paste requests, check if clipboard has text format available.
         // This is a synchronous check that allows performable keybinds to
@@ -4558,7 +4578,7 @@ const Clipboard = struct {
                 }
 
                 log.debug("clipboard has no text format, not starting paste request", .{});
-                return false;
+                return .unavailable;
             }
         }
 
@@ -4581,7 +4601,7 @@ const Clipboard = struct {
             ud,
         );
 
-        return true;
+        return .started;
     }
 
     /// Request an image from the clipboard, write it to a temp file, and paste
@@ -4590,17 +4610,17 @@ const Clipboard = struct {
     pub fn requestImage(
         self: *Surface,
         clipboard_type: apprt.Clipboard,
-    ) Allocator.Error!bool {
+    ) Allocator.Error!apprt.ClipboardReadResult {
         const clipboard = get(
             self.private().gl_area.as(gtk.Widget),
             clipboard_type,
-        ) orelse return false;
+        ) orelse return .unsupported;
 
         // Only start if the clipboard actually offers a PNG image.
         const formats = clipboard.getFormats();
         if (formats.containMimeType("image/png") == 0) {
             log.debug("clipboard has no image format, not starting image paste", .{});
-            return false;
+            return .unavailable;
         }
 
         const alloc = Application.default().allocator();
@@ -4608,7 +4628,7 @@ const Clipboard = struct {
         errdefer alloc.destroy(ud);
         ud.* = .{
             .self = self.ref(),
-            .state = .{ .paste = {} },
+            .state = .{ .paste = clipboard_type },
         };
         errdefer self.unref();
 
@@ -4618,7 +4638,7 @@ const Clipboard = struct {
             ud,
         );
 
-        return true;
+        return .started;
     }
 
     fn clipboardReadTexture(
@@ -4676,16 +4696,15 @@ const Clipboard = struct {
 
         const surface = self.private().core_surface orelse return;
         surface.completeClipboardRequest(
-            .paste,
-            text,
-            false,
+            .{ .paste = .standard },
+            .{ .contents = &.{.{ .mime = "text/plain", .data = text }} },
         ) catch |err| switch (err) {
             error.UnsafePaste,
             error.UnauthorizedPaste,
             => {
                 showClipboardConfirmation(
                     self,
-                    .paste,
+                    .{ .paste = .standard },
                     text,
                 );
                 return;
@@ -4729,7 +4748,7 @@ const Clipboard = struct {
                 .request = &req,
                 .@"can-remember" = switch (req) {
                     .osc_52_read, .osc_52_write => true,
-                    .paste => false,
+                    .paste, .list, .kitty_read, .kitty_write => false,
                 },
                 .@"clipboard-contents" = contents_buf,
             },
@@ -4766,7 +4785,7 @@ const Clipboard = struct {
         if (remember) switch (req.*) {
             .osc_52_read => surface.config.clipboard_read = .allow,
             .osc_52_write => surface.config.clipboard_write = .allow,
-            .paste => {},
+            .paste, .list, .kitty_read, .kitty_write => {},
         };
 
         // Get our text
@@ -4783,11 +4802,10 @@ const Clipboard = struct {
             ?[:0]const u8,
         ) orelse return;
 
-        surface.completeClipboardRequest(
-            req.*,
-            text,
-            true,
-        ) catch |err| {
+        surface.completeClipboardRequest(req.*, .{
+            .contents = &.{.{ .mime = "text/plain", .data = text }},
+            .confirmed = true,
+        }) catch |err| {
             log.warn("failed to complete clipboard request: {}", .{err});
         };
     }
@@ -4805,7 +4823,7 @@ const Clipboard = struct {
         if (remember) switch (req.*) {
             .osc_52_read => surface.config.clipboard_read = .deny,
             .osc_52_write => surface.config.clipboard_write = .deny,
-            .paste => @panic("paste should not be able to be remembered"),
+            .paste, .list, .kitty_read, .kitty_write => @panic("request should not be able to be remembered"),
         };
     }
 
@@ -4843,8 +4861,7 @@ const Clipboard = struct {
         const surface = self.private().core_surface orelse return;
         surface.completeClipboardRequest(
             req.state,
-            str,
-            false,
+            .{ .contents = &.{.{ .mime = "text/plain", .data = str }} },
         ) catch |err| switch (err) {
             error.UnsafePaste,
             error.UnauthorizedPaste,
