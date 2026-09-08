@@ -45,6 +45,10 @@ pub fn getTitle(self: *Self) ?[:0]const u8 {
     return self.surface.getTitle();
 }
 
+pub fn isSplit(self: *Self) bool {
+    return self.surface.getIsSplit();
+}
+
 pub fn getContentScale(self: *const Self) !apprt.ContentScale {
     return self.surface.getContentScale();
 }
