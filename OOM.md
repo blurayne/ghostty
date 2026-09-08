@@ -83,6 +83,21 @@ DropInPaths=/home/markusg/.config/systemd/user/flatpak-session-helper.service.d/
 
 To revert: delete the drop-in and `systemctl --user daemon-reload`.
 
+### This mitigation is temporary — remove it
+
+`OOMPolicy=continue` is damage control, not a cure, and it is **not meant to stay indefinitely**. It papers over the fact that a runaway process can still drive the machine into a global OOM; it only stops that OOM from taking every sibling session with it. Leaving it in place forever means silently accepting that `flatpak-session-helper` may end up in a half-reaped state after a kill, with systemd no longer cleaning the unit up as its author intended.
+
+Remove the drop-in once any of the following is true:
+
+- Ghostty runs as a **native package** rather than a Flatpak — the shared-cgroup topology disappears and the drop-in becomes meaningless.
+- The **source-side fix** below has landed *and* the memory ceiling has been raised (larger swap / zram), so a dead helper is reported cleanly and global OOM stops being reachable in normal use.
+- The workload that produced the 10.8 GB Python process is capped or retired.
+
+```bash
+rm -rf ~/.config/systemd/user/flatpak-session-helper.service.d
+systemctl --user daemon-reload
+```
+
 ## Recovering killed sessions
 
 The processes are unrecoverable — nothing from before the 13:38 sweep survived, and the helper cgroup came back holding only its own two tasks. But Claude Code streams every session to disk under `~/.claude/projects/<escaped-cwd>/<session-id>.jsonl`, so the *conversations* are intact and resumable. Transcripts whose last write lands in the 13:36–13:38 kill window:
