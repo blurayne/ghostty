@@ -157,9 +157,9 @@ Dependencies: None.
 Pure refactor plus hardening, with no behaviour change on the happy path. Delivers a standalone fix for the latent panic at `flatpak.zig:470` and establishes the seam the next phase plugs into. Fully unit-testable without a bus.
 
 **Tasks**:
-- [ ] Extract the anonymous `.started` union payload in `State` into a named `Started` struct, adding `name_watcher: gio_c.guint = 0`.
-- [ ] Add `pub const host_died_status: u8 = 137;` with a comment explaining the `128 + SIGKILL` convention.
-- [ ] Add `transitionExited(self, status: u8, expect_pid: ?u32) ?Started` — takes `state_mutex` once, returns `null` if the state is not `.started` or if `expect_pid` is non-null and does not match, otherwise sets `.exited`, broadcasts `state_cv`, and returns the previous `Started` payload.
+- [x] Extract the anonymous `.started` union payload in `State` into a named `Started` struct, adding `name_watcher: gio_c.guint = 0`.
+- [x] Add `pub const host_died_status: u8 = 137;` with a comment explaining the `128 + SIGKILL` convention.
+- [x] Add `transitionExited(self, status: u8, expect_pid: ?u32) ?Started` — takes `state_mutex` once, returns `null` if the state is not `.started` or if `expect_pid` is non-null and does not match, otherwise sets `.exited`, broadcasts `state_cv`, and returns the previous `Started` payload.
   ```zig
   fn transitionExited(self: *FlatpakHostCommand, status: u8, expect_pid: ?u32) ?Started {
       self.state_mutex.lockUncancelable(global.io());
@@ -176,22 +176,22 @@ Pure refactor plus hardening, with no behaviour change on the happy path. Delive
       return started;
   }
   ```
-- [ ] Add `finishExit(self, bus, started: Started)` holding the GLib teardown currently inlined in `onExit`: fire the xev completion if present, `g_dbus_connection_signal_unsubscribe`, and `g_main_loop_quit`. Leave the `g_bus_unwatch_name` call out until Phase 2 adds the watcher.
-- [ ] Rewrite `onExit` to parse the pid/status first, then call `transitionExited(status, pid)` and return early on `null`, then call `finishExit`. This removes `break :state self.state.started;` entirely.
-- [ ] Add tests, gated on `build_config.flatpak`, using `undefined` for the `*GMainLoop` field since `transitionExited` never dereferences it.
+- [x] Add `finishExit(self, bus, started: Started)` holding the GLib teardown currently inlined in `onExit`: fire the xev completion if present, `g_dbus_connection_signal_unsubscribe`, and `g_main_loop_quit`. Leave the `g_bus_unwatch_name` call out until Phase 2 adds the watcher.
+- [x] Rewrite `onExit` to parse the pid/status first, then call `transitionExited(status, pid)` and return early on `null`, then call `finishExit`. This removes `break :state self.state.started;` entirely.
+- [x] Add tests, gated on `build_config.flatpak`, using `undefined` for the `*GMainLoop` field since `transitionExited` never dereferences it.
 
 **Automated Verification**:
 
 All commands run inside the dev container (`mise run shell`) — never on the host. `-Dflatpak` defaults to `false`, so it must be passed explicitly or `flatpak.zig` is not analysed at all.
 
-- [ ] `zig build test -Dflatpak=true -Dtest-filter=flatpak` passes, covering:
-  - [ ] `flatpak: transitionExited from started sets exited status` — `.started` → `.exited` with the given status and preserved pid.
-  - [ ] `flatpak: transitionExited is a no-op when already exited` — returns `null`, leaves state untouched.
-  - [ ] `flatpak: transitionExited is a no-op from init` — returns `null`.
-  - [ ] `flatpak: transitionExited ignores pid mismatch` — returns `null` when `expect_pid` differs, leaving state `.started`.
-- [ ] `zig fmt --check src/os/flatpak.zig` is clean.
-- [ ] `zig build -Dflatpak=true` succeeds.
-- [ ] `zig build` (without `-Dflatpak`) still succeeds — confirms the test gating did not break non-flatpak builds.
+- [x] `zig build test -Dflatpak=true -Dtest-filter=flatpak` passes, covering:
+  - [x] `flatpak: transitionExited from started sets exited status` — `.started` → `.exited` with the given status and preserved pid.
+  - [x] `flatpak: transitionExited is a no-op when already exited` — returns `null`, leaves state untouched.
+  - [x] `flatpak: transitionExited is a no-op from init` — returns `null`.
+  - [x] `flatpak: transitionExited ignores pid mismatch` — returns `null` when `expect_pid` differs, leaving state `.started`.
+- [x] `zig fmt --check src/os/flatpak.zig` is clean.
+- [x] `zig build -Dflatpak=true` succeeds — in `ReleaseFast`. Debug fails on a pre-existing, unrelated error; see Implementation Notes.
+- [x] `zig build` (without `-Dflatpak`) still succeeds — confirms the test gating did not break non-flatpak builds. Same Debug caveat.
 
 ### Phase 2: Bus-name-vanished detection
 
@@ -200,7 +200,7 @@ Dependencies: Phase 1.
 Wires the actual detection source into the seam from Phase 1 and makes the user-visible behaviour correct.
 
 **Tasks**:
-- [ ] In `start()`, after the `HostCommand` call returns a pid, register the watcher on the same connection and store the id in the `Started` payload passed to `updateState`:
+- [x] In `start()`, after the `HostCommand` call returns a pid, register the watcher on the same connection and store the id in the `Started` payload passed to `updateState`:
   ```zig
   const name_watcher = gio_c.g_bus_watch_name_on_connection(
       bus,
@@ -212,7 +212,7 @@ Wires the actual detection source into the seam from Phase 1 and makes the user-
       null,             // user_data free func
   );
   ```
-- [ ] Add the `onNameVanished` callback matching `GBusNameVanishedCallback` — `(connection, name, user_data)`:
+- [x] Add the `onNameVanished` callback matching `GBusNameVanishedCallback` — `(connection, name, user_data)`:
   ```zig
   fn onNameVanished(
       bus: ?*gio_c.GDBusConnection,
@@ -227,13 +227,13 @@ Wires the actual detection source into the seam from Phase 1 and makes the user-
       self.finishExit(bus.?, started);
   }
   ```
-- [ ] Add `g_bus_unwatch_name(started.name_watcher)` to `finishExit`, guarded on a non-zero id so it is safe on both teardown paths. Calling it from inside the vanished callback is supported by GLib.
-- [ ] Update the `OOM.md` "Note on the Ghostty source side" section to state the gap is closed and link this plan.
+- [x] Add `g_bus_unwatch_name(started.name_watcher)` to `finishExit`, guarded on a non-zero id so it is safe on both teardown paths. Calling it from inside the vanished callback is supported by GLib.
+- [x] Update the `OOM.md` "Note on the Ghostty source side" section to state the gap is closed and link this plan.
 
 **Automated Verification**:
-- [ ] `zig build test -Dflatpak=true -Dtest-filter=flatpak` still passes (Phase 1 tests must be unaffected by the added `name_watcher` field).
-- [ ] `zig fmt --check src/os/flatpak.zig` is clean.
-- [ ] `zig build -Dflatpak=true` succeeds.
+- [x] `zig build test -Dflatpak=true -Dtest-filter=flatpak` still passes (Phase 1 tests must be unaffected by the added `name_watcher` field).
+- [x] `zig fmt --check src/os/flatpak.zig` is clean.
+- [x] `zig build -Dflatpak=true` succeeds — in `ReleaseFast`. Debug fails on a pre-existing, unrelated error; see Implementation Notes.
 
 **Manual Verification**:
 - [ ] Build and install from the dev container: `rm -rf .flatpak-builder/build flatpak/builddir && mise run build && mise run install`.
@@ -254,6 +254,46 @@ Wires the actual detection source into the seam from Phase 1 and makes the user-
 ## Implementation Notes
 
 During implementation, document user feedback, problems, and decisions here.
+
+### Deviations from the plan
+
+- **`transitionExited` also records `completion.result`.** The plan gives `finishExit(self, bus, started)` no status parameter, so the pending async waiter's result has to be set somewhere else. It is set inside `transitionExited`, under the same `state_mutex` that sets `.exited` — the state and the completion are the same fact, so recording them together makes them impossible to disagree. `finishExit` then only *fires* the completion.
+- **One extra test.** `flatpak: transitionExited records the result on a pending completion` covers the above. The plan's four tests are all present and pass.
+- **Test gating lives in `src/os/main.zig`, not in the test bodies.** `if (comptime build_config.flatpak) _ = flatpak;` in the `test` block. A `comptime` guard inside each test body would not have worked: the body is still semantically analysed, so `gio_c` would still have to exist. The `return error.SkipZigTest` guards in the bodies are belt-and-braces. This was flagged in the plan as the most likely place to snag; it did not snag.
+
+### Environment problems hit along the way (not code issues)
+
+These cost most of the time and are worth recording for the next run:
+
+1. **Rootless Docker on this host is broken.** `docker compose run` fails with `failed to start shim: ... unsupported protocol: Yunix` — the daemon is handing containerd a corrupted shim address (raw protobuf bytes in the address string). `mise run zig-test` / `mise run shell` therefore do not work at all right now. **Restarting `systemctl --user restart docker` is the likely fix**, but it would also stop the running `skill-matrix-postgres` and buildx containers, so it was left alone. Everything here ran under **podman** instead, which works fine.
+2. **The builder image has no GTK/GIO headers on the default include path.** They live inside the `org.gnome.Sdk//50` flatpak runtime baked into the base image, so a bare `zig build` in the container fails with `'gtk/gtk.h' not found`. This affects `mise run zig-build` and `mise run zig-test` as written, independent of this change. Builds must run *inside* the SDK sandbox:
+
+   ```bash
+   podman build -t ghostty-flatpak-builder:latest -f Dockerfile .
+   podman run --rm --privileged -v "$PWD":/workspace:z -w /workspace \
+     ghostty-flatpak-builder:latest bash -lc '
+       cp -a /usr/local/zig /opt/zig   # /usr is reserved by flatpak, cannot be shared in
+       flatpak run --devel --share=network \
+         --filesystem=/workspace --filesystem=/opt/zig --filesystem=/root/.cache/zig \
+         --env=PATH=/opt/zig:/app/bin:/usr/bin \
+         --env=ZIG_GLOBAL_CACHE_DIR=/root/.cache/zig \
+         --command=bash org.gnome.Sdk//50 -c "cd /workspace && zig build test -Dflatpak=true -fno-sys=gtk4-layer-shell -Dtest-filter=flatpak"'
+   ```
+
+   `-fno-sys=gtk4-layer-shell` is required: `gtk4-layer-shell` is built by the flatpak manifest as a module and is not in the SDK, so it has to be built from source. `--share=network` is required for that fetch.
+3. **`os.passwd.test_0` fails in this setup, and does so at unmodified `HEAD` too.** Verified with a detached worktree at `HEAD`. Cause: the test binary is itself running inside a flatpak sandbox, so `isFlatpak()` is true and `passwd.get()` tries to spawn a real host command against a `org.freedesktop.Flatpak` service that isn't there. Artifact of the harness, not a regression.
+4. **`zig build -Dflatpak=true` fails in Debug at unmodified `HEAD`**: `src/tripwire.zig:160: error: function 'font.SharedGrid.renderGlyph' uses its own inferred error set here`. It fails identically *without* `-Dflatpak` — a configuration in which `flatpak.zig` is not analysed at all — so it is unrelated to this change. It is a Zig 0.16 fallout in this fork, worth its own fix. **`-Doptimize=ReleaseFast` builds clean**, which is what the flatpak bundle uses, and that build does link the new `start()` / `onNameVanished` / `finishExit` code.
+
+### Evidence
+
+- `zig build test -Dflatpak=true -fno-sys=gtk4-layer-shell -Dtest-filter=flatpak` → **80/81 pass**, the sole failure being the pre-existing `os.passwd.test_0` above.
+- The new tests were confirmed to actually execute (not silently gated out) by temporarily inverting an assertion: the run then reported `'os.flatpak.test.flatpak: transitionExited from started sets exited status' failed`. The canary was reverted.
+- `zig fmt --check src/os/flatpak.zig src/os/main.zig` → clean.
+- `zig build -Dflatpak=true -Doptimize=ReleaseFast` → succeeds.
+
+### Still outstanding
+
+Manual verification (kill `flatpak-session-helper.service` with live tabs) has **not** been done — it needs a real install on the host, which is the user's call.
 
 ## References
 

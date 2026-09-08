@@ -127,4 +127,14 @@ Or `claude --resume` with no argument for the interactive picker. Uncommitted ed
 
 ## Note on the Ghostty source side
 
-`src/os/flatpak.zig` learns that a host process died *only* via the `HostCommandExited` D-Bus signal (subscribed at `start()`, handled in `onExit`, line ~457). When `flatpak-session-helper` is killed outright it never emits that signal, so `state` stays `.started` forever and the surface is never told to show an exit. That is why the tabs hung silently rather than reporting "process exited". A source-side fix would watch the `org.freedesktop.Flatpak` bus name and synthesise an exit for still-`.started` commands when the name vanishes. Not implemented — the systemd drop-in addresses the practical problem.
+`src/os/flatpak.zig` learned that a host process died *only* via the `HostCommandExited` D-Bus signal (subscribed at `start()`, handled in `onExit`). When `flatpak-session-helper` is killed outright it never emits that signal, so `state` stayed `.started` forever and the surface was never told to show an exit. That is why the tabs hung silently rather than reporting "process exited".
+
+**Fixed.** `start()` now also watches the `org.freedesktop.Flatpak` bus name via `g_bus_watch_name_on_connection`. When the name loses its owner, `onNameVanished` synthesises an exit with status 137 (`128 + SIGKILL`) for a still-`.started` command, which unblocks the async waiter, the blocking `wait()` callers, and the per-command GLib loop alike. Both exit paths funnel through one idempotent `transitionExited`, so a late or duplicate `HostCommandExited` is a no-op. The log line
+
+```
+warn(flatpak): host service vanished, reporting child as killed pid=… status=137
+```
+
+is what distinguishes helper death from a child that genuinely exited 137. Design and rationale: [`docs/agents/plans/2026-09-08-flatpak-host-death-detection.md`](docs/agents/plans/2026-09-08-flatpak-host-death-detection.md).
+
+This makes helper death *visible and clean*; it does not prevent it. The `OOMPolicy=continue` drop-in above remains the complementary — and still temporary — mitigation.

@@ -452,6 +452,28 @@ pub const FlatpakHostCommand = struct {
 
         var pid: u32 = 0;
         gio_c.g_variant_get(reply, "(u)", &pid);
+
+        // The helper only tells us about exits via HostCommandExited, which
+        // it obviously can't send if it is killed itself. Watch its bus name
+        // so we notice that case too. This is registered on the same
+        // connection and from threadMain's thread-default GMainContext, so
+        // onNameVanished is dispatched on the same thread as onExit and the
+        // two can't interleave.
+        //
+        // We only get here after a successful HostCommand call on this name,
+        // so it has an owner and the immediate-vanish case can't fire
+        // spuriously. Even if it did, transitionExited would ignore it.
+        const name_watcher = gio_c.g_bus_watch_name_on_connection(
+            bus,
+            "org.freedesktop.Flatpak",
+            gio_c.G_BUS_NAME_WATCHER_FLAGS_NONE,
+            null, // name_appeared: a restarted helper doesn't revive our child
+            onNameVanished,
+            self,
+            null, // user_data free func
+        );
+        errdefer gio_c.g_bus_unwatch_name(name_watcher);
+
         log.debug("HostCommand started pid={} subscription={}", .{
             pid,
             subscription_id,
@@ -464,6 +486,7 @@ pub const FlatpakHostCommand = struct {
                 .loop = loop,
                 .completion = null,
                 .loop_xev = null,
+                .name_watcher = name_watcher,
             },
         });
     }
@@ -554,8 +577,10 @@ pub const FlatpakHostCommand = struct {
             );
         }
 
-        // We're done now, so we can unsubscribe
+        // We're done now, so we can unsubscribe. Unwatching from inside the
+        // vanished callback is supported by GLib.
         gio_c.g_dbus_connection_signal_unsubscribe(bus, started.subscription);
+        if (started.name_watcher != 0) gio_c.g_bus_unwatch_name(started.name_watcher);
 
         // We are also done with our loop so we can exit.
         gio_c.g_main_loop_quit(started.loop);
@@ -581,6 +606,25 @@ pub const FlatpakHostCommand = struct {
 
         const started = self.transitionExited(exit_status, pid) orelse return;
         log.debug("HostCommand exited pid={} status={}", .{ pid, exit_status });
+        self.finishExit(bus.?, started);
+    }
+
+    /// `org.freedesktop.Flatpak` lost its bus owner: the session helper died
+    /// and took every host command with it. No HostCommandExited is coming,
+    /// so report the child as killed ourselves.
+    fn onNameVanished(
+        bus: ?*gio_c.GDBusConnection,
+        _: [*c]const u8,
+        ud: ?*anyopaque,
+    ) callconv(.c) void {
+        const self = @as(*FlatpakHostCommand, @ptrCast(@alignCast(ud)));
+
+        // No expected pid: this kills whatever we were running.
+        const started = self.transitionExited(host_died_status, null) orelse return;
+        log.warn("host service vanished, reporting child as killed pid={} status={}", .{
+            started.pid,
+            host_died_status,
+        });
         self.finishExit(bus.?, started);
     }
 
