@@ -1391,6 +1391,26 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     // state is updated, and now its up to the user to decide what to do.
     if (self.config.wait_after_command) return;
 
+    // A command that failed in a split keeps the split open so the user can
+    // read what went wrong. Runtime is deliberately not consulted here: the
+    // abnormal branch above is about a command that never got started, this
+    // is about one that ran and then failed, and a build that fails after
+    // four seconds is exactly the case worth keeping on screen.
+    //
+    // The banner was already set above via the show_child_exited action, so
+    // we only need to add the detail block and skip the close.
+    if (self.config.wait_after_failed_command and
+        info.exit_code != 0 and
+        self.rt_surface.isSplit())
+    {
+        self.childExitedAbnormally(info, .nonzero_exit) catch |err| {
+            // A split held open with no message still beats one that
+            // vanished, so we don't fall through to close() here.
+            log.err("error writing failed command message err={}", .{err});
+        };
+        return;
+    }
+
     // If we aren't waiting after the command, then we exit immediately
     // with no confirmation.
     self.close();
