@@ -2708,8 +2708,23 @@ test "glyph protocol APC with write_pty callback" {
     var s: Stream = .init(.{ .allocator = testing.allocator, .handler = handler });
     defer s.deinit();
 
+    // Derive the expected reply from the formats we actually advertise
+    // instead of hardcoding them. This fork enables colrv0/colrv1 that
+    // upstream does not, and a literal here would have to be re-edited on
+    // every upstream merge -- in an upstream file, which is exactly where
+    // you least want a local diff. response.zig's own formatWire tests pin
+    // the encoding itself; this test only checks that an `s` request
+    // reports our supported set.
     s.nextSlice("\x1B_25a1;s\x1B\\");
-    try testing.expectEqualStrings("\x1B_25a1;s;fmt=glyf\x1B\\", S.last_response.?);
+    {
+        var expect_buf: [128]u8 = undefined;
+        var expect_writer: std.Io.Writer = .fixed(&expect_buf);
+        const expect_resp: apc.glyph.Response = .{
+            .support = .{ .fmt = apc.glyph.supported_formats },
+        };
+        try expect_resp.formatWire(&expect_writer);
+        try testing.expectEqualStrings(expect_writer.buffered(), S.last_response.?);
+    }
 
     s.nextSlice("\x1B_25a1;r;cp=e0a0;AAAAAAAAAAAAAA==\x1B\\");
     try testing.expectEqualStrings("\x1B_25a1;r;cp=e0a0;status=0\x1B\\", S.last_response.?);

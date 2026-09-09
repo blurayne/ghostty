@@ -155,6 +155,11 @@ pub const request = @import("glyph/request.zig");
 pub const response = @import("glyph/response.zig");
 pub const execute = @import("glyph/execute.zig").execute;
 
+/// The payload formats this build advertises in reply to an `s` request.
+/// Exported so callers and tests can ask what we support rather than
+/// hardcoding the set.
+pub const supported_formats = @import("glyph/execute.zig").supported_formats;
+
 pub const CommandParser = request.CommandParser;
 pub const Request = request.Request;
 pub const Response = response.Response;
