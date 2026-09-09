@@ -1425,6 +1425,18 @@ input: RepeatableReadableIO = .{},
 /// This is primarily useful for scripts or debugging.
 @"wait-after-command": bool = false,
 
+/// Whether the split focus dialog hides rows that do not match the search.
+///
+/// When true, typing in the search box shows only matching rows and the
+/// window and tab rows leading to them, expanded automatically. When false
+/// the whole tree stays visible and matches are only highlighted.
+///
+/// The dialog's "Hide non-matching" checkbox overrides this for the current
+/// session; this option sets what the checkbox starts as.
+///
+/// Available since: 1.4.0
+@"split-focus-hide-unmatched": bool = true,
+
 /// The number of milliseconds of runtime below which we consider a process exit
 /// to be abnormal. This is used to show an error message when the process exits
 /// too quickly.
