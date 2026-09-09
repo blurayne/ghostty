@@ -372,4 +372,5 @@ pub fn Common(
 
 test {
     @import("std").testing.refAllDecls(@This());
+    _ = @import("class/split_focus_match.zig");
 }
