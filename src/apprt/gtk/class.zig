@@ -373,4 +373,9 @@ pub fn Common(
 test {
     @import("std").testing.refAllDecls(@This());
     _ = @import("class/split_focus_match.zig");
+
+    // Temporary until the dialog in a later task references this class.
+    // Importing the file runs its `comptime` block, which is what forces
+    // the whole class to be analysed.
+    _ = @import("class/split_focus_item.zig");
 }
