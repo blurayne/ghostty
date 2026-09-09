@@ -459,6 +459,10 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = i18n.N_("Toggle the tab overview."),
         }},
 
+        // No command yet -- this gets its own command palette entry once
+        // the split focus dialog ships.
+        .toggle_split_focus => comptime &.{},
+
         .toggle_tab_switcher => comptime &.{.{
             .action = .toggle_tab_switcher,
             .title = i18n.N_("Tab Switcher"),

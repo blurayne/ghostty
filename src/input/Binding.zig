@@ -605,7 +605,16 @@ pub const Action = union(enum) {
     /// found by running `ghostty +version`.
     toggle_tab_overview,
 
-    /// Open a keyboard-navigable tab switcher dialog for the current window.
+    /// Open a keyboard-navigable tree of every window, tab and split, and
+    /// focus whichever one you choose.
+    ///
+    /// Only implemented on Linux (GTK).
+    toggle_split_focus,
+
+    /// Open a keyboard-navigable tab switcher for the current window.
+    ///
+    /// WARNING: This action has been deprecated and is an alias for
+    /// `toggle_split_focus`. Use that instead.
     ///
     /// Only implemented on Linux (GTK).
     toggle_tab_switcher,
@@ -1486,6 +1495,7 @@ pub const Action = union(enum) {
             .move_tab,
             .move_tab_to_new_window,
             .toggle_tab_overview,
+            .toggle_split_focus,
             .toggle_tab_switcher,
             .new_split,
             .goto_split,

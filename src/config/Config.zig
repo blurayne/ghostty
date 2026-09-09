@@ -7212,11 +7212,11 @@ pub const Keybinds = struct {
             .toggle_command_palette,
         );
 
-        // Toggle tab switcher
+        // Toggle split focus
         try self.set.put(
             alloc,
             .{ .key = .{ .unicode = 'k' }, .mods = inputpkg.ctrlOrSuper(.{ .shift = true }) },
-            .toggle_tab_switcher,
+            .toggle_split_focus,
         );
 
         // Mac-specific keyboard bindings.
