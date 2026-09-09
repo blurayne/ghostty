@@ -175,6 +175,15 @@ readonly: bool = false,
 /// the wall clock time that has elapsed between timestamps.
 command_timer: ?std.Io.Timestamp = null,
 
+/// True once we have seen any OSC 133 semantic prompt marker, i.e. shell
+/// integration is loaded and talking to us. This is what lets us tell
+/// "no command was running" apart from "we have no idea what was running",
+/// which look identical if you only inspect `command_timer`.
+///
+/// It is never reset: integration can start mid-session (a shell sourced
+/// late), but it cannot meaningfully stop.
+shell_integration_seen: bool = false,
+
 /// Search state
 search: ?Search = null,
 
@@ -1214,10 +1223,12 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         },
 
         .start_command => {
+            self.shell_integration_seen = true;
             self.command_timer = .now(global.io(), .awake);
         },
 
         .stop_command => |v| timer: {
+            self.shell_integration_seen = true;
             const end: std.Io.Timestamp = .now(global.io(), .awake);
             const start = self.command_timer orelse break :timer;
             self.command_timer = null;
@@ -1316,6 +1327,24 @@ fn selectionScrollTick(self: *Surface) !void {
     try self.queueRender();
 }
 
+/// Whether the exit code we were just handed actually describes a command
+/// that failed, or is stale shell state.
+///
+/// A shell exiting via `exit` or Ctrl-D inherits `$?` from whatever ran
+/// last, so "run something that fails, then close the pane" reports that
+/// command's status even though nothing failed at the moment of exit.
+/// OSC 133 tells us the difference: if shell integration is loaded and no
+/// command was in flight, we were sitting at a prompt.
+///
+/// Without integration we have no markers at all and must not guess. That
+/// is the `ghostty -e ./deploy.sh` case -- no shell to integrate with, and
+/// exactly the case this feature exists for -- so we treat the code as
+/// meaningful and let the caller act on it.
+fn exitCodeDescribesCommand(self: *const Surface) bool {
+    if (!self.shell_integration_seen) return true;
+    return self.command_timer != null;
+}
+
 fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     // Mark our flag that we exited immediately
     self.child_exited = true;
@@ -1401,6 +1430,7 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     // we only need to add the detail block and skip the close.
     if (self.config.wait_after_failed_command and
         info.exit_code != 0 and
+        self.exitCodeDescribesCommand() and
         self.rt_surface.isSplit())
     {
         self.childExitedAbnormally(info, .nonzero_exit) catch |err| {
@@ -6837,4 +6867,43 @@ test "ExitReason: dismiss hint names the thing that will close" {
         "Press any key to close the split.",
         ExitReason.nonzero_exit.dismissHint(),
     );
+}
+
+test "exitCodeDescribesCommand: without shell integration we cannot tell, so trust the code" {
+    const testing = std.testing;
+
+    // `ghostty -e ./deploy.sh` -- no shell, so no OSC 133 will ever arrive.
+    // Suppressing here would disable the feature exactly where it matters.
+    const surface = try testing.allocator.create(Surface);
+    defer testing.allocator.destroy(surface);
+    surface.shell_integration_seen = false;
+    surface.command_timer = null;
+
+    try testing.expect(surface.exitCodeDescribesCommand());
+}
+
+test "exitCodeDescribesCommand: at a prompt the code is stale shell state" {
+    const testing = std.testing;
+
+    // Shell integration is loaded and no command is in flight: the child is
+    // a shell exiting via `exit`/Ctrl-D, carrying $? from whatever ran last.
+    const surface = try testing.allocator.create(Surface);
+    defer testing.allocator.destroy(surface);
+    surface.shell_integration_seen = true;
+    surface.command_timer = null;
+
+    try testing.expect(!surface.exitCodeDescribesCommand());
+}
+
+test "exitCodeDescribesCommand: a command in flight owns the exit code" {
+    const testing = std.testing;
+
+    // Integration loaded and a command was running when the child died --
+    // e.g. `exec ./deploy.sh`, or the shell killed mid-command.
+    const surface = try testing.allocator.create(Surface);
+    defer testing.allocator.destroy(surface);
+    surface.shell_integration_seen = true;
+    surface.command_timer = .now(global.io(), .awake);
+
+    try testing.expect(surface.exitCodeDescribesCommand());
 }

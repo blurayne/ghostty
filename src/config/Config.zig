@@ -1434,6 +1434,15 @@ input: RepeatableReadableIO = .{},
 /// a split destroys output you can still see the rest of. A lone window or
 /// tab closes on exit as usual.
 ///
+/// A shell exiting via `exit` or Ctrl-D inherits its status from whatever
+/// ran last, so closing a pane after a failed command would otherwise hold
+/// the split open for a command that had already finished. When shell
+/// integration is active, Ghostty uses its prompt markers to tell the two
+/// apart and only holds the split open when a command was actually running.
+/// Without shell integration there are no markers to go on -- notably when
+/// the split runs a command directly rather than a shell -- and the exit
+/// code is taken at face value.
+///
 /// `wait-after-command` takes precedence over this option. It keeps every
 /// surface open after *any* exit, zero or not, so when it is true this
 /// option never comes into play and the split shows the shorter "Process
