@@ -73,7 +73,24 @@ ZT build -Dflatpak=true -Doptimize=ReleaseFast -fno-sys=gtk4-layer-shell -Demit-
 
 Debug exe builds fail on a pre-existing `src/tripwire.zig:160` error — always use `-Doptimize=ReleaseFast`.
 
-**`-Dtest-filter` does not narrow the run much** (a filtered run still executes ~75 tests) and exit 0 with a filter that matches nothing looks identical to success. After adding tests, confirm they actually execute by temporarily inverting one assertion and checking the named test fails.
+**`-Dtest-filter` does not narrow the run much** (a filtered run still executes thousands of tests) and exit 0 with a filter that matches nothing looks identical to success. After adding tests, confirm they actually execute by temporarily inverting one assertion and checking the named test fails.
+
+**Zig analyses declarations lazily, so a new file with no tests is NOT compiled just because something imports it.** Adding `_ = @import("class/whatever.zig");` to a test block pulls in that file's *tests*; it does not analyse its functions. A file of pure `pub fn`s can contain arbitrary type errors and every build will still pass. Verified on this branch: a type error inside `SplitFocusItem.getKind` went undetected until a `comptime` block referenced the function, after which the build failed with `comptime: src/apprt/gtk/class/split_focus_item.zig:342:24` in the trace.
+
+For any new file whose functions have no callers yet, end it with:
+
+```zig
+comptime {
+    // Nothing calls into this file until a later task wires it up, and
+    // Zig only analyses what is referenced -- without this the build
+    // would happily accept anything in here.
+    _ = &TypeName.functionOne;
+    _ = &TypeName.functionTwo;
+    // ... every public function
+}
+```
+
+and prove it works the same way: inject a type error *inside one of the named functions* (not at file scope — an unused file-scope `const` is lazily analysed regardless and proves nothing), confirm the build fails, then revert.
 
 ## File Structure
 
