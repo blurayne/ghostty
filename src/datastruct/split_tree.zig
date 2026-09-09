@@ -2818,8 +2818,23 @@ test "even tiling: 3 horizontal panes get equal ratios" {
     split3.deinit();
     defer equal3.deinit();
 
-    // The root split should have ratio ≈ 1/3 (left pane A takes 1/3 of space).
-    const root_ratio: f16 = equal3.nodes[0].split.ratio;
-    // f16 represents 1/3 as approximately 0.3333; allow a small tolerance.
-    try testing.expect(@abs(root_ratio - @as(f16, 1.0 / 3.0)) < 0.01);
+    // Splitting at .root wraps the existing tree rather than flattening it,
+    // so the shape is (A|B)|C, not A|B|C. The root therefore weighs two
+    // leaves against one and equalizes to 2/3, while the inner split stays
+    // at 1/2 -- which is what makes all three panes exactly one third wide.
+    // Assert the widths, not the ratios: the widths are the property this
+    // feature promises, and they hold whatever shape the tree happens to
+    // take.
+    const root = equal3.nodes[0].split;
+    const inner = equal3.nodes[root.left.idx()].split;
+
+    const third: f16 = 1.0 / 3.0;
+    const width_a: f16 = root.ratio * inner.ratio;
+    const width_b: f16 = root.ratio * (1.0 - inner.ratio);
+    const width_c: f16 = 1.0 - root.ratio;
+
+    // f16 represents these to about three decimals; allow a small tolerance.
+    try testing.expect(@abs(width_a - third) < 0.01);
+    try testing.expect(@abs(width_b - third) < 0.01);
+    try testing.expect(@abs(width_c - third) < 0.01);
 }
