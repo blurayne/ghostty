@@ -378,4 +378,5 @@ test {
     // Importing the file runs its `comptime` block, which is what forces
     // the whole class to be analysed.
     _ = @import("class/split_focus_item.zig");
+    _ = @import("class/split_focus_filter.zig");
 }
