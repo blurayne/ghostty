@@ -63,7 +63,7 @@ cd /home/markusg/Private/ghostty && podman run --rm -v "$PWD":/workspace:z -w /w
 for i in $(seq 1 100); do sleep 20; grep -q "EXIT=" /tmp/t.log && break; done; tail -40 /tmp/t.log
 ```
 
-**Two pre-existing test failures. Do NOT fix them:** `termio.Exec.test.execCommand: shell command, empty passwd` and `… error passwd`. The test binary runs inside a flatpak sandbox, so `isFlatpak()` is true and it tries to spawn a host command against a service that isn't there. Baseline is **3862/3905 passing, 2 failing**.
+**Two pre-existing test failures. Do NOT fix them:** `termio.Exec.test.execCommand: shell command, empty passwd` and `… error passwd`. The test binary runs inside a flatpak sandbox, so `isFlatpak()` is true and it tries to spawn a host command against a service that isn't there. Baseline on this branch is **3857/3900 passing, 2 failing**. (If you see 3862/3905 quoted anywhere, that is the baseline for `feat/wait-after-failed-command`, which carries 5 tests this branch does not — `feat/split-focus` is based on `main`.)
 
 **`zig build test` passing does NOT mean Ghostty compiles.** The test binary does not exercise the whole GTK apprt. Every task that touches apprt code must also run the exe build:
 
