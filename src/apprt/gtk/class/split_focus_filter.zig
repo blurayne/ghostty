@@ -95,17 +95,32 @@ pub const SplitFocusFilter = extern struct {
     /// re-filter incrementally instead of rebuilding the whole list.
     pub fn setNeedle(self: *Self, needle: ?[:0]const u8) void {
         const priv = self.private();
-        const old_len = if (priv.needle) |n| n.len else 0;
-        const new_len = if (needle) |n| n.len else 0;
+        const old_needle: []const u8 = priv.needle orelse "";
+        const new_needle: []const u8 = needle orelse "";
 
+        // Unchanged text still means an unchanged result set: skip the
+        // allocation and the forced re-filter pass.
+        if (std.mem.eql(u8, old_needle, new_needle)) return;
+
+        // Dupe before freeing: the caller may pass back a borrow obtained
+        // from getNeedle (e.g. `f.setNeedle(f.getNeedle())`), which points
+        // into the buffer we are about to free. Freeing first would make
+        // `new_needle` read freed memory.
+        const owned = if (needle) |n| glib.ext.dupeZ(u8, n) else null;
         if (priv.needle) |v| glib.free(@ptrCast(@constCast(v)));
-        priv.needle = if (needle) |n| glib.ext.dupeZ(u8, n) else null;
+        priv.needle = owned;
 
-        // A longer needle can only remove rows; a shorter one can only
-        // add them. Anything else is a general change.
-        const change: gtk.FilterChange = if (new_len > old_len)
+        // Matching is plain substring, so the new match set is a subset
+        // of the old one only when the old needle is a *prefix* of the
+        // new one -- not merely when the new needle is longer. E.g. "de"
+        // -> "src" is longer but not a superset restriction: rows hidden
+        // under "de" (like "src/foo") must be re-tested, not skipped. Use
+        // a prefix test in both directions, the same trick
+        // gtk_string_filter_set_search relies on. Empty is a prefix of
+        // everything, so clearing the box is correctly `.less_strict`.
+        const change: gtk.FilterChange = if (std.mem.startsWith(u8, new_needle, old_needle))
             .more_strict
-        else if (new_len < old_len)
+        else if (std.mem.startsWith(u8, old_needle, new_needle))
             .less_strict
         else
             .different;
