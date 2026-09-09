@@ -137,10 +137,14 @@ pub const SplitFocusItem = extern struct {
         return self.private().kind;
     }
 
+    /// Borrowed, and backed by this item's arena -- it dies with the
+    /// item in `finalize`. Copy it if you need it to outlive the row.
     pub fn getTitle(self: *Self) ?[:0]const u8 {
         return self.private().title;
     }
 
+    /// Borrowed, same lifetime as `getTitle`. Null for window and tab
+    /// rows, and for splits whose working directory is unknown.
     pub fn getPwd(self: *Self) ?[:0]const u8 {
         return self.private().pwd;
     }
