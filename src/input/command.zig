@@ -459,15 +459,15 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = i18n.N_("Toggle the tab overview."),
         }},
 
-        // No command yet -- this gets its own command palette entry once
-        // the split focus dialog ships.
-        .toggle_split_focus => comptime &.{},
-
-        .toggle_tab_switcher => comptime &.{.{
-            .action = .toggle_tab_switcher,
-            .title = i18n.N_("Tab Switcher"),
-            .description = i18n.N_("Open the tab switcher for the current window."),
+        .toggle_split_focus => comptime &.{.{
+            .action = .toggle_split_focus,
+            .title = i18n.N_("Focus Window, Tab or Split"),
+            .description = i18n.N_("Search every window, tab and split, and focus the one you pick."),
         }},
+
+        // No command -- this is the deprecated name for toggle_split_focus
+        // and only the current name gets advertised.
+        .toggle_tab_switcher => comptime &.{},
 
         .prompt_surface_title => comptime &.{.{
             .action = .prompt_surface_title,

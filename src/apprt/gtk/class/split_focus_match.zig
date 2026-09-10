@@ -63,7 +63,7 @@ test "find: an empty needle never highlights" {
 }
 
 test "find: offsets are bytes, not codepoints" {
-    // "über" is 5 bytes: u=1, ü=2, b=1, e=1, r=1. A Pango attribute range
+    // "über" is 5 bytes: ü=2, b=1, e=1, r=1. A Pango attribute range
     // is in bytes, so a match after a multi-byte character must not shift.
     const r = find("über-deploy", "deploy") orelse return error.TestExpectedMatch;
     try std.testing.expectEqual(@as(usize, 6), r.start);

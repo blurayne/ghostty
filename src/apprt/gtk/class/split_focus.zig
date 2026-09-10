@@ -257,9 +257,12 @@ pub const SplitFocus = extern struct {
             else
                 @min(cur + page_step, last),
 
-            gdk.KEY_Home => 0,
-            gdk.KEY_End => last,
-
+            // Home and End are deliberately absent. Up/Down/Page do
+            // nothing in a single-line entry, so taking them costs the
+            // user nothing, but every Home/End -- plain, with Ctrl, with
+            // Shift -- moves or extends the text cursor. Jumping to the
+            // first or last row is not worth breaking editing in the box
+            // the user is typing into.
             else => return 0,
         };
 
@@ -427,12 +430,14 @@ pub const SplitFocus = extern struct {
 
     /// Force every visible row to rebind.
     ///
-    /// With "Hide non-matching" off, typing changes which characters are
-    /// highlighted but not which rows exist, so the list view has no
-    /// reason to call the factory again and the highlight would sit on the
-    /// previous needle. Swapping the factory out and back is the cheapest
-    /// way to say "redo the rows" without disturbing the model, and so
-    /// without disturbing the selection.
+    /// Needed in both modes. A row only rebinds when the model says it
+    /// changed, and typing changes which characters are highlighted, not
+    /// which rows exist -- with hiding off nothing changes at all, and
+    /// with it on the rows that survive the new needle are not part of the
+    /// `items-changed` either. Both would keep the previous needle's
+    /// highlight. Swapping the factory out and back is the cheapest way to
+    /// say "redo the rows" without disturbing the model, and so without
+    /// disturbing the selection.
     fn refreshRows(self: *Self) void {
         const priv = self.private();
         priv.view.setFactory(null);
