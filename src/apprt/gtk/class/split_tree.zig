@@ -581,6 +581,14 @@ pub const SplitTree = extern struct {
         target: *Surface,
         dir: Surface.Tree.Split.Direction,
     ) Allocator.Error!void {
+        // Dropping a tab onto a pane within its own tree makes no sense
+        // (there's nowhere to move it to) and, worse, would have us call
+        // `setTree` twice on the same object below -- the second call
+        // would tear down everything the first one just installed. Callers
+        // (e.g. `Surface.propDropValue`) are expected to have already
+        // filtered this out; this is a defensive backstop.
+        if (source == self) return;
+
         const app = Application.default();
         const alloc = app.allocator();
 
@@ -638,8 +646,30 @@ pub const SplitTree = extern struct {
             handle = insert_handle;
         }
 
-        self.setTree(&acc);
+        // Tear down `source` before installing `acc` on `self`. `Window`
+        // connects its surface-level signal handlers (present-request,
+        // clipboard-write, menu, etc.) with itself as the closure data for
+        // every tab in the window, and disconnects them the same way --
+        // by matching against the Window pointer, not against which tree
+        // a surface came from (see `Window.tabSplitTreeChanged` /
+        // `disconnectSurfaceHandlers`). On a same-window drop, `self` and
+        // `source` share that Window, so if we installed `acc` first, the
+        // `changed` signal from `source.setTree(null)` right after would
+        // strip the handlers we just connected off the surfaces we just
+        // grafted in. Doing teardown first avoids that: `acc` and `parts`
+        // are already independent, fully-owned clones of every surface
+        // being moved (built above via `clone`/`flattenAlong` and then
+        // `split()`), so nothing here still depends on `source`'s tree.
         source.setTree(null);
+        self.setTree(&acc);
+
+        // Re-bind `is-split` on every moved surface so it tracks `self`
+        // going forward, the same way `moveSplit`'s cross-tree branch
+        // does for its single surface.
+        for (parts) |*part| {
+            var it = part.iterator();
+            while (it.next()) |entry| entry.view.bindIsSplit(self);
+        }
     }
 
     fn disconnectSurfaceHandlers(self: *Self) void {
