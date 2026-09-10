@@ -563,6 +563,85 @@ pub const SplitTree = extern struct {
         }
     }
 
+    /// Move every terminal of `source`'s tree into this tree, at `dir`
+    /// relative to `target`. `source`'s tree is left empty; it is up to
+    /// the caller to tear down `source`'s tab if that leaves it empty
+    /// (see `Window.closeEmptiedTab` / `Window.closeEmptiedTabIdle`).
+    ///
+    /// The target split must be located within this tree.
+    ///
+    /// Layout follows `tab-drop-layout`: `.preserve` grafts the source
+    /// tree in one piece; `.flatten` takes it apart along the drop axis
+    /// first, so its panes become siblings of the target rather than a
+    /// nested group -- except for any subtree split the other way, which
+    /// stays whole.
+    pub fn moveTree(
+        self: *Self,
+        source: *Self,
+        target: *Surface,
+        dir: Surface.Tree.Split.Direction,
+    ) Allocator.Error!void {
+        const app = Application.default();
+        const alloc = app.allocator();
+
+        const source_tree = source.getTree() orelse return;
+        const target_tree = self.getTree() orelse return;
+        const target_handle = target_tree.locate(target) orelse {
+            log.warn("moveTree: target is not placed in this split tree", .{});
+            return;
+        };
+
+        const config_obj = app.getConfig();
+        defer config_obj.unref();
+        const layout = config_obj.get().@"tab-drop-layout";
+
+        // The pieces we're grafting in, left-to-right / top-to-bottom in
+        // source order.
+        var parts: []Surface.Tree = switch (layout) {
+            .preserve => blk: {
+                const one = try alloc.alloc(Surface.Tree, 1);
+                one[0] = try source_tree.clone(alloc);
+                break :blk one;
+            },
+            .flatten => try source_tree.flattenAlong(alloc, dir),
+        };
+        defer {
+            for (parts) |*p| p.deinit();
+            alloc.free(parts);
+        }
+        if (parts.len == 0) return;
+
+        // The first piece lands on `dir`'s side of `target`. `split()`
+        // always relocates whatever was already at the handle we split
+        // on to make room for the new piece, so growing the chain
+        // further (for every piece after the first) always means
+        // inserting toward the "positive" side of the axis (right/down)
+        // of the piece we just inserted, regardless of which side of
+        // `target` the whole group ends up on. This is what keeps
+        // pieces in source order instead of reversed -- attaching every
+        // piece to `target` itself, rather than to the previously
+        // inserted piece, would reverse them.
+        const continuation: Surface.Tree.Split.Direction = if (dir.isHorizontal())
+            .right
+        else
+            .down;
+
+        var acc = try target_tree.split(alloc, target_handle, dir, 0.5, &parts[0]);
+        defer acc.deinit();
+        var handle: Surface.Tree.Node.Handle = @enumFromInt(target_tree.nodes.len);
+
+        for (parts[1..]) |*part| {
+            const insert_handle: Surface.Tree.Node.Handle = @enumFromInt(acc.nodes.len);
+            const next = try acc.split(alloc, handle, continuation, 0.5, part);
+            acc.deinit();
+            acc = next;
+            handle = insert_handle;
+        }
+
+        self.setTree(&acc);
+        source.setTree(null);
+    }
+
     fn disconnectSurfaceHandlers(self: *Self) void {
         const tree = self.getTree() orelse return;
         var it = tree.iterator();
@@ -1905,3 +1984,10 @@ const SplitTreeSplit = extern struct {
         pub const bindTemplateCallback = C.Class.bindTemplateCallback;
     };
 };
+
+// Canary to force lazy analysis of `SplitTree.moveTree` until Task 3 wires
+// it up from a real call site (Surface's tab-drop handler). Remove once
+// that call site exists and reaches this function on its own.
+comptime {
+    _ = &SplitTree.moveTree;
+}

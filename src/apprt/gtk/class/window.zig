@@ -2481,14 +2481,15 @@ pub const Window = extern struct {
         // Update or clear the source tree.
         if (tree_after_remove.isEmpty()) {
             source_tree.setTree(null);
-            if (ext.getAncestor(Tab, source_tree.as(gtk.Widget))) |src_tab| {
-                if (ext.getAncestor(adw.TabView, source_tree.as(gtk.Widget))) |tv| {
-                    tv.closePage(tv.getPage(src_tab.as(gtk.Widget)));
-                }
-            }
         } else {
             source_tree.setTree(&tree_after_remove);
         }
+
+        // If that emptied the source tab entirely, close it. This call
+        // happens synchronously and outside of any drag-and-drop
+        // teardown, so there's no need to defer it to an idle callback
+        // the way `closeEmptiedTabIdle` does for drop handlers.
+        closeEmptiedTab(source_tree.as(gtk.Widget));
 
         // Create a new tab wrapping the existing surface.
         const tab = Tab.newWithSurface(priv.config, surface);
@@ -2519,6 +2520,46 @@ pub const Window = extern struct {
             .{},
         );
         tabSplitTreeChanged(split_tree, null, split_tree.getTree(), self);
+    }
+
+    /// If the split tree ancestor of `widget` has become empty, close the
+    /// tab that contains it.
+    ///
+    /// Shared by `addTabWithSurface` (which calls this synchronously right
+    /// after removing a surface from its source tree) and the tab-drop
+    /// path in `Surface`, which instead goes through `closeEmptiedTabIdle`
+    /// because it can't safely close the page synchronously.
+    pub fn closeEmptiedTab(widget: *gtk.Widget) void {
+        const source_tree = ext.getAncestor(SplitTree, widget) orelse return;
+        if (source_tree.getTree()) |tree| if (!tree.isEmpty()) return;
+
+        const tab = ext.getAncestor(Tab, source_tree.as(gtk.Widget)) orelse return;
+        const tv = ext.getAncestor(adw.TabView, source_tree.as(gtk.Widget)) orelse return;
+        tv.closePage(tv.getPage(tab.as(gtk.Widget)));
+    }
+
+    /// Same as `closeEmptiedTab`, but deferred to a glib idle callback.
+    ///
+    /// Used for the tab-drop path: libadwaita's own drag machinery may
+    /// still be mid-teardown for the dragged page when our drop handler
+    /// runs, and closing the page synchronously in that window can fight
+    /// Adw's own teardown of the same page. Running on an idle callback
+    /// lets that teardown finish first.
+    ///
+    /// Takes a strong ref on `widget` that is released once the idle
+    /// callback runs, so the widget (and its ancestor chain up to the
+    /// tab) is safe to have already been torn down by then --
+    /// `closeEmptiedTab` tolerates that by bailing out as soon as any
+    /// ancestor lookup fails.
+    pub fn closeEmptiedTabIdle(widget: *gtk.Widget) void {
+        widget.ref();
+        _ = glib.idleAddOnce(closeEmptiedTabIdleCb, widget);
+    }
+
+    fn closeEmptiedTabIdleCb(ud: ?*anyopaque) callconv(.c) void {
+        const widget: *gtk.Widget = @ptrCast(@alignCast(ud orelse return));
+        defer widget.unref();
+        closeEmptiedTab(widget);
     }
 
     fn tabSplitTreeChanged(
