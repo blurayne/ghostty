@@ -553,17 +553,25 @@ pub const SplitFocus = extern struct {
         // `setNeedle` -- used here and not kept.
         const needle = self.private().filter.getNeedle() orelse "";
 
-        const title = item.getTitle() orelse "";
-        title_label.setText(title.ptr);
-        setHighlight(title_label, title, needle);
+        // The composed label: "Window: x", "Tab: y", or a split's own
+        // title -- falling back to "Split #n" when it has none.
+        const display = item.getDisplay() orelse item.getTitle() orelse "";
+        title_label.setText(display.ptr);
+        setHighlight(title_label, display, needle);
 
-        if (item.getPwd()) |pwd| {
-            pwd_label.setText(pwd.ptr);
-            setHighlight(pwd_label, pwd, needle);
+        // The working directory earns its place only when it says
+        // something the title does not. A pane titled with its own path
+        // would otherwise read "~/src (~/src)".
+        if (if (item.pwdIsRedundant()) null else item.getPwd()) |pwd| {
+            var buf: [std.fs.max_path_bytes + 2]u8 = undefined;
+            const text = std.fmt.bufPrintZ(&buf, "({s})", .{pwd}) catch pwd;
+            pwd_label.setText(text.ptr);
+            setHighlight(pwd_label, text, needle);
             pwd_label.as(gtk.Widget).setVisible(1);
         } else {
-            // Window and tab rows, and splits with no known working
-            // directory. Hide rather than leave an empty gap.
+            // Window and tab rows, splits with no known working
+            // directory, and splits whose title already is the path.
+            // Hide rather than leave an empty gap.
             pwd_label.setText("");
             pwd_label.setAttributes(null);
             pwd_label.as(gtk.Widget).setVisible(0);

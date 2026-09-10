@@ -59,6 +59,9 @@ pub const SplitFocusItem = extern struct {
         title: ?[:0]const u8 = null,
         pwd: ?[:0]const u8 = null,
 
+        /// Composed at construction: what the row displays.
+        display: ?[:0]const u8 = null,
+
         /// Weak throughout: the dialog must not keep a window, a tab or a
         /// surface alive, and any of them can close while it is open.
         window: WeakRef(Window) = .empty,
@@ -74,7 +77,14 @@ pub const SplitFocusItem = extern struct {
 
     /// Create a new item. `title` and `pwd` are copied. The caller owns
     /// the returned reference.
-    pub fn new(kind: Kind, title: []const u8, pwd: ?[]const u8) *Self {
+    /// `index` is the row's 1-based position among its siblings. It is
+    /// only used to name a split that has no title of its own.
+    pub fn new(
+        kind: Kind,
+        title: []const u8,
+        pwd: ?[]const u8,
+        index: usize,
+    ) *Self {
         const self = gobject.ext.newInstance(Self, .{});
 
         const priv = self.private();
@@ -84,7 +94,46 @@ pub const SplitFocusItem = extern struct {
         priv.title = alloc.dupeZ(u8, title) catch null;
         priv.pwd = if (pwd) |v| alloc.dupeZ(u8, v) catch null else null;
 
+        // The label the row actually shows. Windows and tabs are named
+        // by kind because their titles alone read as just more terminal
+        // titles; a split shows its title verbatim, since that title is
+        // the thing you are looking for. A split with no title has to
+        // fall back to its position.
+        priv.display = switch (kind) {
+            .window => if (title.len > 0)
+                std.fmt.allocPrintSentinel(alloc, "Window: {s}", .{title}, 0) catch null
+            else
+                alloc.dupeZ(u8, "Window") catch null,
+
+            .tab => if (title.len > 0)
+                std.fmt.allocPrintSentinel(alloc, "Tab: {s}", .{title}, 0) catch null
+            else
+                alloc.dupeZ(u8, "Tab") catch null,
+
+            .split => if (title.len > 0)
+                alloc.dupeZ(u8, title) catch null
+            else
+                std.fmt.allocPrintSentinel(alloc, "Split #{d}", .{index}, 0) catch null,
+        };
+
         return self;
+    }
+
+    /// The composed label for this row: kind-prefixed for windows and
+    /// tabs, the bare title for a split. Borrowed, backed by this item's
+    /// arena -- it dies with the item.
+    pub fn getDisplay(self: *Self) ?[:0]const u8 {
+        return self.private().display;
+    }
+
+    /// Whether the working directory is worth showing beside the title.
+    /// A pane whose title is already its path would otherwise render as
+    /// "~/src (~/src)".
+    pub fn pwdIsRedundant(self: *Self) bool {
+        const priv = self.private();
+        const pwd = priv.pwd orelse return true;
+        const title = priv.title orelse return false;
+        return std.mem.eql(u8, pwd, title);
     }
 
     //---------------------------------------------------------------
@@ -176,8 +225,11 @@ pub const SplitFocusItem = extern struct {
     /// orphaned at the wrong depth.
     pub fn matchesDeep(self: *Self, needle: []const u8) bool {
         const priv = self.private();
+        // Match the composed label, not the raw title: a row shown as
+        // "Split #2" or "Window: build" should be findable by what it
+        // displays.
         if (match.matchesFields(
-            priv.title orelse "",
+            priv.display orelse priv.title orelse "",
             priv.pwd,
             needle,
         )) return true;
@@ -242,13 +294,15 @@ pub const SplitFocusItem = extern struct {
 
         // The binding types this non-optional, but GTK returns NULL for
         // an application with no windows.
+        var win_index: usize = 0;
         var maybe_node: ?*glib.List = app.getWindows();
         while (maybe_node) |node| : (maybe_node = node.f_next) {
             const data = node.f_data orelse continue;
             const widget: *gtk.Widget = @ptrCast(@alignCast(data));
             const win = gobject.ext.cast(Window, widget) orelse continue;
 
-            const win_item = Self.new(.window, windowTitle(win), null);
+            win_index += 1;
+            const win_item = Self.new(.window, windowTitle(win), null, win_index);
             defer win_item.unref();
             win_item.private().window.set(win);
             const tabs = gio.ListStore.new(getGObjectType());
@@ -268,6 +322,7 @@ pub const SplitFocusItem = extern struct {
                     .tab,
                     std.mem.span(page.getTitle()),
                     null,
+                    @intCast(i + 1),
                 );
                 defer tab_item.unref();
                 tab_item.private().window.set(win);
@@ -277,12 +332,15 @@ pub const SplitFocusItem = extern struct {
 
                 if (tab.getSurfaceTree()) |tree| {
                     var it = tree.iterator();
+                    var split_index: usize = 0;
                     while (it.next()) |entry| {
                         const surface = entry.view;
+                        split_index += 1;
                         const split_item = Self.new(
                             .split,
                             surface.getEffectiveTitle() orelse "",
                             surface.getPwd(),
+                            split_index,
                         );
                         defer split_item.unref();
                         split_item.private().window.set(win);
@@ -348,6 +406,8 @@ comptime {
     _ = &SplitFocusItem.getPage;
     _ = &SplitFocusItem.getWindow;
     _ = &SplitFocusItem.matchesDeep;
+    _ = &SplitFocusItem.getDisplay;
+    _ = &SplitFocusItem.pwdIsRedundant;
     _ = &SplitFocusItem.resolveSurface;
     _ = &SplitFocusItem.buildRoot;
     _ = &SplitFocusItem.Class.init;
