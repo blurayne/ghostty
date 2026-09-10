@@ -754,7 +754,13 @@ pub const SplitHeader = extern struct {
         self: *Self,
         _: *gtk.Button,
     ) callconv(.c) void {
-        _ = self.as(gtk.Widget).activateAction("split-tree.zoom", null);
+        // Zoom the split this header belongs to -- see onCloseClicked for
+        // why the parameterless action is wrong for a header button.
+        const priv = self.private();
+        const surface = priv.surface orelse return;
+        const split_tree = priv.split_tree orelse
+            ext.getAncestor(SplitTree, self.as(gtk.Widget)) orelse return;
+        split_tree.toggleZoomFor(surface);
     }
 
     fn onCloseClicked(

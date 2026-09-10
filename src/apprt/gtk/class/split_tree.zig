@@ -979,6 +979,30 @@ pub const SplitTree = extern struct {
         }
     }
 
+    /// Toggle zoom for a specific surface, rather than whichever one
+    /// happens to hold focus.
+    ///
+    /// The `split-tree.zoom` action resolves its target through
+    /// getActiveSurfaceHandle(), which is right for a keybinding -- you
+    /// mean the pane you are typing in -- but wrong for a button on a
+    /// pane's own header, since clicking a GtkButton does not move
+    /// terminal focus.
+    pub fn toggleZoomFor(self: *Self, surface: *Surface) void {
+        const tree = self.getTree() orelse return;
+
+        if (tree.zoomed != null) {
+            // Already zoomed: the button always restores, whichever
+            // header it belongs to. Only one pane can be zoomed, so
+            // there is no ambiguity about what to restore.
+            tree.zoomed = null;
+        } else {
+            const handle = tree.locate(surface) orelse return;
+            tree.zoom(handle);
+        }
+
+        self.as(gobject.Object).notifyByPspec(properties.tree.impl.param_spec);
+    }
+
     pub fn actionZoom(
         _: *gio.SimpleAction,
         _: ?*glib.Variant,
