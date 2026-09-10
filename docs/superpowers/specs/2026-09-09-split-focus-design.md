@@ -22,7 +22,7 @@ One dialog showing **every window, tab and split** as a tree, searchable, where 
 
 | Question | Decision |
 |---|---|
-| Tree | Real `GtkTreeListModel` with expanders |
+| Tree | Real `GtkTreeListModel`, always fully expanded; depth by indentation, no expanders |
 | Search | Keep ancestors of matches, auto-expand, hide non-matching |
 | That behaviour | Toggleable by checkbox, default from config |
 | Highlight | Invert only the matched characters |
@@ -75,7 +75,7 @@ A custom `GtkFilter` subclass instead, with one rule:
 
 Implemented by matching downward from the item — for a window, test the window title and recurse into tabs and splits — so no upward parent pointers are needed and the rule holds regardless of expansion state.
 
-While a search is active, the view auto-expands so matches are visible without clicking. When the search is cleared, the tree returns to the expansion state it had before the search began (captured on the first keystroke of a search).
+The tree is always fully expanded (`autoexpand`), with depth shown by indentation rather than expander triangles. This follows from "always show everything": there is no collapsed state, so there is none to save or restore across a search. The original design called for expanders and restoring pre-search expansion state; that was dropped as machinery serving a state that cannot exist.
 
 The checkbox switches the filter between this rule and pass-through. Highlighting is **independent** of the filter and applies in both modes — that is what makes the unchecked mode useful rather than merely noisy.
 
