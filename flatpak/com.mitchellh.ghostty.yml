@@ -67,7 +67,15 @@ modules:
           - flatpak/.flatpak-builder
           - flatpak/builddir
           - flatpak/repo
+          # Zig renamed its local cache to .zig-cache; the old entry below
+          # stopped matching and every build was splicing the whole cache
+          # into the build dir. It reached 27G here and filled the disk.
+          - .zig-cache
           - zig-cache
           - zig-out
+          # Only the built bundle -- dist/linux/ holds packaging *source*
+          # (desktop file, dbus service, metainfo, shell extensions) that
+          # the build reads.
+          - dist/build
 
       - zig-packages.json
