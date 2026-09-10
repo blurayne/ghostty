@@ -754,7 +754,20 @@ pub const SplitHeader = extern struct {
         self: *Self,
         _: *gtk.Button,
     ) callconv(.c) void {
-        _ = self.as(gtk.Widget).activateAction("split-tree.close-split", null);
+        // Close the split this header belongs to -- NOT the tree's active
+        // surface.
+        //
+        // `split-tree.close-split` takes no parameter and resolves its
+        // target through SplitTree.getActiveSurfaceHandle(), which returns
+        // whichever surface holds keyboard focus (falling back to the last
+        // focused one). Clicking a GtkButton does not move terminal focus,
+        // so going through the action closed the *focused* split rather
+        // than the one whose X was clicked: press X on any split that is
+        // not the focused one and a different split dies.
+        //
+        // The header already knows its own surface. Use it.
+        const surface = self.private().surface orelse return;
+        surface.close();
     }
 
     // Template callbacks use `swapped`, so arg1 = template instance (Self),
