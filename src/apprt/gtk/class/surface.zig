@@ -36,6 +36,7 @@ const TitleDialog = @import("title_dialog.zig").TitleDialog;
 const Window = @import("window.zig").Window;
 const InspectorWindow = @import("inspector_window.zig").InspectorWindow;
 const SplitTree = @import("split_tree.zig").SplitTree;
+const Tab = @import("tab.zig").Tab;
 const split_dnd = @import("split_dnd.zig");
 const i18n = @import("../../../os/i18n.zig");
 const global = @import("../../../global.zig");
@@ -1943,9 +1944,14 @@ pub const Surface = extern struct {
         self.as(gtk.Widget).addController(split_drop.as(gtk.EventController));
 
         // Also have to set up the surface drop target to accept other surfaces
-        // (in particular, their surface IDs)
+        // (in particular, their surface IDs) as well as whole tabs dragged
+        // from the tab bar. libadwaita's tab drag advertises the public
+        // AdwTabPage GType (alongside a private root-window content
+        // provider used only for its own detach-to-new-window path), so we
+        // can receive it here without any custom drag source or payload.
         var surface_drop_target_types = [_]gobject.Type{
             gobject.ext.types.uint64,
+            adw.TabPage.getGObjectType(),
         };
         priv.surface_drop_target.setGtypes(
             &surface_drop_target_types,
@@ -4170,27 +4176,49 @@ pub const Surface = extern struct {
         x: f64,
         y: f64,
         self: *Self,
-    ) callconv(.c) void {
-        const dropped_id = v.getUint64();
-        const dropped = self.core().?.app.findSurfaceByID(dropped_id) orelse return;
-        const from = dropped.rt_surface.gobj();
-
+    ) callconv(.c) c_int {
         const st = ext.getAncestor(
             SplitTree,
             self.as(gtk.Widget),
         ) orelse {
             log.warn("surface is not placed in a split tree", .{});
-            return;
+            return 0;
         };
 
         const dir = self.calcDropDirection(x, y);
 
+        if (ext.gValueHolds(v, adw.TabPage.getGObjectType())) {
+            // A whole tab was dropped onto this pane. Resolve the page to
+            // the source Tab -> its SplitTree widget, graft every terminal
+            // of that tree into ours at the cursor's edge, and defer
+            // closing the now-empty source tab until Adw's own drag
+            // teardown has had a chance to finish.
+            const obj = v.getObject() orelse return 0;
+            const page = gobject.ext.cast(adw.TabPage, obj) orelse return 0;
+            const tab = gobject.ext.cast(Tab, page.getChild()) orelse return 0;
+            const source_tree = tab.getSplitTree();
+
+            // The only error that could happen here is an OOM, and in that
+            // case we're already milliseconds away from crashing, so...
+            st.moveTree(source_tree, self, dir) catch return 0;
+
+            Window.closeEmptiedTabIdle(tab.as(gtk.Widget));
+
+            self.setDropOverlayDirection(null);
+            return 1;
+        }
+
+        const dropped_id = v.getUint64();
+        const dropped = self.core().?.app.findSurfaceByID(dropped_id) orelse return 0;
+        const from = dropped.rt_surface.gobj();
+
         // The only error that could happen here is an OOM,
         // and in that case we're already milliseconds away from crashing, so...
-        st.moveSplit(from, self, dir) catch return;
+        st.moveSplit(from, self, dir) catch return 0;
 
         // Clean up overlay state
         self.setDropOverlayDirection(null);
+        return 1;
     }
 
     fn surfaceDropLeave(
@@ -4218,14 +4246,28 @@ pub const Surface = extern struct {
         _: *gobject.ParamSpec,
         self: *Self,
     ) callconv(.c) void {
-        // Reject the drop if we're dropping a surface onto itself.
-        // Note that we cannot implement this via the `accept` signal,
-        // since the decision of whether to accept or deny a drop is dependent
-        // on the payload (i.e. the surface being dropped). This is
-        // well-documented in GTK docs.
+        // Reject the drop if we're dropping a surface (or a tab) onto
+        // itself/its own tab. Note that we cannot implement this via the
+        // `accept` signal, since the decision of whether to accept or deny
+        // a drop is dependent on the payload (i.e. the surface/tab being
+        // dropped). This is well-documented in GTK docs.
+
+        const value = tgt.getValue() orelse return;
+
+        if (ext.gValueHolds(value, adw.TabPage.getGObjectType())) {
+            const obj = value.getObject() orelse return;
+            const page = gobject.ext.cast(adw.TabPage, obj) orelse return;
+            const tab = gobject.ext.cast(Tab, page.getChild()) orelse return;
+
+            // Reject dropping a tab onto a pane that already lives in
+            // that same tab -- that would be a no-op at best and tree
+            // corruption at worst.
+            const our_tab = ext.getAncestor(Tab, self.as(gtk.Widget)) orelse return;
+            if (tab == our_tab) tgt.reject();
+            return;
+        }
 
         const core_surface = self.core() orelse return;
-        const value = tgt.getValue() orelse return;
         const surface_id = value.getUint64();
         if (core_surface.id == surface_id) tgt.reject();
     }

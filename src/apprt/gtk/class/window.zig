@@ -3040,12 +3040,3 @@ test "Window.addTabWithSurface: compile-time existence" {
     const fn_ptr = Window.addTabWithSurface;
     _ = fn_ptr;
 }
-
-// Canary to force lazy analysis of `Window.closeEmptiedTabIdle` until Task 3
-// wires it up from a real call site (Surface's tab-drop handler). Taking
-// its address also forces analysis of `closeEmptiedTabIdleCb`, since its
-// address is taken inside `closeEmptiedTabIdle`'s body. Remove once that
-// call site exists and reaches this function on its own.
-comptime {
-    _ = &Window.closeEmptiedTabIdle;
-}

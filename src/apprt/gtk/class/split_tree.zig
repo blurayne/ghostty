@@ -1984,10 +1984,3 @@ const SplitTreeSplit = extern struct {
         pub const bindTemplateCallback = C.Class.bindTemplateCallback;
     };
 };
-
-// Canary to force lazy analysis of `SplitTree.moveTree` until Task 3 wires
-// it up from a real call site (Surface's tab-drop handler). Remove once
-// that call site exists and reaches this function on its own.
-comptime {
-    _ = &SplitTree.moveTree;
-}
