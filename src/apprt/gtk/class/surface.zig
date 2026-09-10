@@ -4202,7 +4202,7 @@ pub const Surface = extern struct {
             // case we're already milliseconds away from crashing, so...
             st.moveTree(source_tree, self, dir) catch return 0;
 
-            Window.closeEmptiedTabIdle(tab.as(gtk.Widget));
+            Window.closeEmptiedTabIdle(source_tree.as(gtk.Widget));
 
             self.setDropOverlayDirection(null);
             return 1;
