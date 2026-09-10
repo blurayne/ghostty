@@ -23,6 +23,14 @@ pub const css_path = "src/apprt/gtk/css";
 /// able to error when they don't exist that way.
 pub const icon_sizes: []const comptime_int = &.{ 16, 32, 128, 256, 512, 1024 };
 
+/// Symbolic icons shipped with the app, looked up by name once GTK has
+/// our resource path in its icon theme search path. Files live at
+/// `images/icons/<name>.svg`.
+pub const symbolic_icons: []const []const u8 = &.{
+    "split-maximize-symbolic",
+    "split-restore-symbolic",
+};
+
 /// The blueprint files that we will embed into the gresource file.
 /// We can't look these up at runtime [easily] because we require the
 /// compiled UI files as input. We can refactor this lator to maybe do
@@ -74,13 +82,19 @@ pub const Blueprint = struct {
 /// The list of filepaths that we depend on. Used for the build
 /// system to have proper caching.
 pub const file_inputs = deps: {
-    const total = (icon_sizes.len * 2) + blueprints.len + css.len;
+    const total = (icon_sizes.len * 2) + symbolic_icons.len + blueprints.len + css.len;
     var deps: [total][]const u8 = undefined;
     var index: usize = 0;
     for (icon_sizes) |size| {
         deps[index] = std.fmt.comptimePrint("images/gnome/{d}.png", .{size});
         deps[index + 1] = std.fmt.comptimePrint("images/gnome/{d}.png", .{size * 2});
         index += 2;
+    }
+    // Must stay in step with `total` above -- an unfilled slot leaves
+    // undefined memory that the build system later dereferences as a path.
+    for (symbolic_icons) |name| {
+        deps[index] = std.fmt.comptimePrint("images/icons/{s}.svg", .{name});
+        index += 1;
     }
     for (blueprints) |bp| {
         deps[index] = std.fmt.comptimePrint("{s}/{d}.{d}/{s}.blp", .{
@@ -202,6 +216,19 @@ fn genIcons(io: std.Io, writer: *std.Io.Writer) !void {
                 .{ alias, build_info.base_application_id, source },
             );
         }
+    }
+
+    // Symbolic icons we ship ourselves, under the icon-theme layout that
+    // GtkApplication picks up automatically from resource_base_path/icons.
+    // Adwaita has no icon for maximizing a *split*, and the window-level
+    // ones read wrong on a pane header.
+    inline for (symbolic_icons) |name| {
+        const source = std.fmt.comptimePrint("images/icons/{s}.svg", .{name});
+        try cwd.access(io, source, .{});
+        try writer.print(
+            \\    <file alias="scalable/actions/{s}.svg">{s}</file>
+            \\
+        , .{ name, source });
     }
 
     try writer.writeAll(

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Restore a maximized split: an arrow pulling the pane back down into a
+     smaller frame, with two fragments of the old full-size frame left
+     behind at the top-left and bottom-right. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <g fill="none" stroke="currentColor" stroke-width="1.5"
+     stroke-linecap="round" stroke-linejoin="round">
+    <!-- the restored, smaller pane -->
+    <rect x="1.75" y="8.25" width="6.5" height="6" rx="1.5"/>
+    <!-- arrow pointing down-left, into the pane -->
+    <path d="M14.25 1.75 9.75 6.25"/>
+    <path d="M9.75 2.75v3.5h3.5"/>
+    <!-- what is left of the maximized frame -->
+    <path d="M1.75 1.75v3.25"/>
+    <path d="M11 14.25h3.25"/>
+  </g>
+</svg>

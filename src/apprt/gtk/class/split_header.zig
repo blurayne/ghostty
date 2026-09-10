@@ -603,7 +603,14 @@ pub const SplitHeader = extern struct {
         priv.zoom_button.as(gtk.Widget).setSensitive(@intFromBool(priv.split_count >= 2));
         const tree = priv.split_tree orelse return;
         const zoomed = tree.getIsZoomed();
-        const icon: [*:0]const u8 = if (zoomed) "window-restore-symbolic" else "view-fullscreen-symbolic";
+        // Our own icons rather than the Adwaita window ones: those depict
+        // a *window* being maximized, which reads wrong on a pane header.
+        // Shipped under images/icons/ and found by name via the resource
+        // path GtkApplication adds for us.
+        const icon: [*:0]const u8 = if (zoomed)
+            "split-restore-symbolic"
+        else
+            "split-maximize-symbolic";
         const tooltip: [*:0]const u8 = if (zoomed) "Restore Split" else "Maximize Split";
         priv.zoom_button.setIconName(icon);
         priv.zoom_button.as(gtk.Widget).setTooltipText(tooltip);
