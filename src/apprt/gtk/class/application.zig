@@ -789,7 +789,7 @@ pub const Application = extern struct {
             .toggle_tab_overview => return Action.toggleTabOverview(target),
             .toggle_split_focus,
             .toggle_tab_switcher,
-            => return Action.toggleTabSwitcher(target),
+            => return Action.toggleSplitFocus(target),
             .toggle_window_decorations => return Action.toggleWindowDecorations(target),
             .toggle_command_palette => return Action.toggleCommandPalette(target),
             .toggle_split_zoom => return Action.toggleSplitZoom(target),
@@ -3473,7 +3473,7 @@ const Action = struct {
         }
     }
 
-    pub fn toggleTabSwitcher(target: apprt.Target) bool {
+    pub fn toggleSplitFocus(target: apprt.Target) bool {
         switch (target) {
             .app => return false,
             .surface => |v| {
@@ -3482,7 +3482,7 @@ const Action = struct {
                     Window,
                     surface.as(gtk.Widget),
                 ) orelse return false;
-                window.toggleTabSwitcher();
+                window.toggleSplitFocus();
                 return true;
             },
         }

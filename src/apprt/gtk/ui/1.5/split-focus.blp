@@ -1,0 +1,43 @@
+using Gtk 4.0;
+using Adw 1;
+
+Adw.Dialog dialog {
+  title: _("Split Focus");
+  content-width: 600;
+  content-height: 500;
+  closed => $closed();
+
+  Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      title-widget: Gtk.SearchEntry search {
+        placeholder-text: _("Search windows, tabs and splits");
+        search-changed => $search_changed();
+        activate => $search_activated();
+        stop-search => $search_stopped();
+      };
+
+      [end]
+      Gtk.CheckButton hide_unmatched {
+        label: _("Hide non-matching");
+        toggled => $hide_unmatched_toggled();
+      }
+    }
+
+    Gtk.ScrolledWindow {
+      vexpand: true;
+      hscrollbar-policy: never;
+
+      Gtk.ListView view {
+        single-click-activate: true;
+        activate => $row_activated();
+
+        model: Gtk.SingleSelection model {
+          model: Gtk.FilterListModel filter_model {
+            incremental: true;
+          };
+        };
+      }
+    }
+  }
+}

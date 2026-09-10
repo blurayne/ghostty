@@ -29,7 +29,7 @@ const Surface = @import("surface.zig").Surface;
 const Tab = @import("tab.zig").Tab;
 const DebugWarning = @import("debug_warning.zig").DebugWarning;
 const CommandPalette = @import("command_palette.zig").CommandPalette;
-const TabSwitcher = @import("tab_switcher.zig").TabSwitcher;
+const SplitFocus = @import("split_focus.zig").SplitFocus;
 const WeakRef = @import("../weak_ref.zig").WeakRef;
 const TitleDialog = @import("title_dialog.zig").TitleDialog;
 
@@ -276,8 +276,8 @@ pub const Window = extern struct {
         /// A weak reference to a command palette.
         command_palette: WeakRef(CommandPalette) = .empty,
 
-        /// A weak reference to a tab switcher dialog.
-        tab_switcher: WeakRef(TabSwitcher) = .empty,
+        /// A weak reference to a split focus dialog.
+        split_focus: WeakRef(SplitFocus) = .empty,
 
         /// Tab page that the context menu was opened for.
         /// setup by `setup-menu`.
@@ -625,7 +625,7 @@ pub const Window = extern struct {
             .init("toggle-tab-bar", actionToggleTabBar, null),
             .init("toggle-decoration", actionToggleDecoration, null),
             .init("toggle-tab-overview", actionToggleTabOverview, null),
-            .init("toggle-tab-switcher", actionToggleTabSwitcher, null),
+            .init("toggle-split-focus", actionToggleSplitFocus, null),
         };
 
         ext.actions.add(Self, self, &actions);
@@ -899,20 +899,20 @@ pub const Window = extern struct {
         tab_overview.setOpen(@intFromBool(!is_open));
     }
 
-    /// Toggle the tab switcher dialog for this window.
-    pub fn toggleTabSwitcher(self: *Self) void {
+    /// Toggle the split focus dialog for this window.
+    pub fn toggleSplitFocus(self: *Self) void {
         const priv = self.private();
 
-        // Reuse the stored tab switcher if we still have one, else create it.
-        const tab_switcher = priv.tab_switcher.get() orelse tab_switcher: {
-            const tab_switcher = TabSwitcher.new();
-            priv.tab_switcher.set(tab_switcher);
-            break :tab_switcher tab_switcher;
+        // Reuse the stored dialog if we still have one, else create it.
+        const split_focus = priv.split_focus.get() orelse split_focus: {
+            const split_focus = SplitFocus.new();
+            priv.split_focus.set(split_focus);
+            break :split_focus split_focus;
         };
-        defer tab_switcher.unref();
+        defer split_focus.unref();
 
         // Present (or hide) the dialog modally over this window.
-        tab_switcher.toggle(self);
+        split_focus.toggle(self);
     }
 
     /// Toggle the visible property.
@@ -2892,12 +2892,12 @@ pub const Window = extern struct {
         self.toggleTabOverview();
     }
 
-    fn actionToggleTabSwitcher(
+    fn actionToggleSplitFocus(
         _: *gio.SimpleAction,
         _: ?*glib.Variant,
         self: *Self,
     ) callconv(.c) void {
-        self.toggleTabSwitcher();
+        self.toggleSplitFocus();
     }
 
     const C = Common(Self, Private);
