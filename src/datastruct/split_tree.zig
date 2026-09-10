@@ -104,8 +104,38 @@ pub fn SplitTree(comptime V: type) type {
             left: Node.Handle,
             right: Node.Handle,
 
-            pub const Layout = enum { horizontal, vertical };
-            pub const Direction = enum { left, right, down, up };
+            pub const Layout = enum {
+                horizontal,
+                vertical,
+
+                /// Whether this layout runs along the same axis as the
+                /// given direction. A horizontal layout (a left/right pair)
+                /// runs along the horizontal axis, and so on.
+                pub fn sameAxis(self: Layout, dir: Direction) bool {
+                    return (self == .horizontal) == dir.isHorizontal();
+                }
+            };
+
+            pub const Direction = enum {
+                left,
+                right,
+                down,
+                up,
+
+                /// Whether this direction lies on the horizontal axis.
+                pub fn isHorizontal(self: Direction) bool {
+                    return switch (self) {
+                        .left, .right => true,
+                        .up, .down => false,
+                    };
+                }
+
+                /// Whether two directions lie on the same axis -- left/right
+                /// are the same axis as each other, up/down likewise.
+                pub fn sameAxis(self: Direction, other: Direction) bool {
+                    return self.isHorizontal() == other.isHorizontal();
+                }
+            };
         };
 
         /// Initialize a new tree with a single view.
@@ -579,6 +609,153 @@ pub fn SplitTree(comptime V: type) type {
                 // Splitting always resets zoom state.
                 .zoomed = null,
             };
+        }
+
+        /// Extract the subtree rooted at `handle` as a new, standalone tree.
+        ///
+        /// The nodes of a subtree are not necessarily contiguous in our
+        /// nodes array, so this walks the subtree and writes the nodes into
+        /// the new array in pre-order, rewriting the handles as it goes.
+        ///
+        /// Reference counts for the views are increased accordingly. The
+        /// zoom state is not carried over: a zoomed node may not be part of
+        /// the extracted subtree at all.
+        pub fn subtree(
+            self: *const Self,
+            gpa: Allocator,
+            handle: Node.Handle,
+        ) Allocator.Error!Self {
+            assert(handle.idx() < self.nodes.len);
+
+            // The new arena for our new tree.
+            var arena = ArenaAllocator.init(gpa);
+            errdefer arena.deinit();
+            const alloc = arena.allocator();
+
+            const nodes = try alloc.alloc(Node, self.nodeCount(handle));
+
+            var result: Self = .{
+                .arena = arena,
+                .nodes = nodes,
+                .zoomed = null,
+            };
+
+            assert(self.subtreeNode(&result, 0, handle) == nodes.len);
+
+            // Increase the reference count of all the nodes.
+            try refNodes(gpa, nodes);
+
+            return result;
+        }
+
+        /// Copy the subtree rooted at `current` into `new` starting at
+        /// `new_offset`, returning the number of nodes written.
+        fn subtreeNode(
+            self: *const Self,
+            new: *Self,
+            new_offset: usize,
+            current: Node.Handle,
+        ) usize {
+            // Let's talk about this constCast. Our members are const but we
+            // actually always own their memory. See removeNode for the same
+            // reasoning.
+            const new_nodes: []Node = @constCast(new.nodes);
+
+            switch (self.nodes[current.idx()]) {
+                // Leaf is simple, just copy it over. We don't ref anything
+                // yet; that happens all at once later.
+                .leaf => |view| {
+                    new_nodes[new_offset] = .{ .leaf = view };
+                    return 1;
+                },
+
+                .split => |s| {
+                    const left = self.subtreeNode(new, new_offset + 1, s.left);
+                    assert(left != 0);
+                    const right = self.subtreeNode(new, new_offset + 1 + left, s.right);
+                    assert(right != 0);
+                    new_nodes[new_offset] = .{ .split = .{
+                        .layout = s.layout,
+                        .ratio = s.ratio,
+                        .left = @enumFromInt(new_offset + 1),
+                        .right = @enumFromInt(new_offset + 1 + left),
+                    } };
+                    return left + right + 1;
+                },
+            }
+        }
+
+        /// The number of nodes in the subtree rooted at `current`.
+        fn nodeCount(self: *const Self, current: Node.Handle) usize {
+            return switch (self.nodes[current.idx()]) {
+                .leaf => 1,
+                .split => |s| self.nodeCount(s.left) +
+                    self.nodeCount(s.right) + 1,
+            };
+        }
+
+        /// The maximal subtrees of this tree when taken apart along `axis`,
+        /// in left-to-right / top-to-bottom order.
+        ///
+        /// A split running the same way as `axis` is an arrangement the user
+        /// gets back for free once the pieces are re-inserted along that same
+        /// axis, so it comes apart. A split running the other way is a layout
+        /// they deliberately built, so it stays whole.
+        ///
+        /// The caller owns the returned slice: it must `deinit()` every tree
+        /// in it and then free the slice itself with `gpa`.
+        pub fn flattenAlong(
+            self: *const Self,
+            gpa: Allocator,
+            axis: Split.Direction,
+        ) Allocator.Error![]Self {
+            var out: std.ArrayList(Self) = .empty;
+            errdefer {
+                for (out.items) |*t| t.deinit();
+                out.deinit(gpa);
+            }
+
+            // An empty tree has no nodes at all, so there's nothing to
+            // take apart.
+            if (!self.isEmpty()) try self.flattenNode(gpa, .root, axis, &out);
+            return out.toOwnedSlice(gpa);
+        }
+
+        fn flattenNode(
+            self: *const Self,
+            gpa: Allocator,
+            handle: Node.Handle,
+            axis: Split.Direction,
+            out: *std.ArrayList(Self),
+        ) Allocator.Error!void {
+            const node = self.nodes[handle.idx()];
+            switch (node) {
+                .leaf => try appendSubtree(self, gpa, handle, out),
+                .split => |s| {
+                    // A split across the axis is a layout worth keeping,
+                    // so it goes in whole.
+                    if (!s.layout.sameAxis(axis)) {
+                        try appendSubtree(self, gpa, handle, out);
+                        return;
+                    }
+
+                    try self.flattenNode(gpa, s.left, axis, out);
+                    try self.flattenNode(gpa, s.right, axis, out);
+                },
+            }
+        }
+
+        /// Extract the subtree at `handle` and append it to `out`, cleaning
+        /// up the extracted tree if the append itself fails.
+        fn appendSubtree(
+            self: *const Self,
+            gpa: Allocator,
+            handle: Node.Handle,
+            out: *std.ArrayList(Self),
+        ) Allocator.Error!void {
+            var t = try self.subtree(gpa, handle);
+            errdefer t.deinit();
+            try out.append(gpa, t);
         }
 
         /// Remove a node from the tree.
@@ -2837,4 +3014,101 @@ test "even tiling: 3 horizontal panes get equal ratios" {
     try testing.expect(@abs(width_a - third) < 0.01);
     try testing.expect(@abs(width_b - third) < 0.01);
     try testing.expect(@abs(width_c - third) < 0.01);
+}
+
+test "flattenAlong: a single leaf yields itself" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+
+    const parts = try tA.flattenAlong(alloc, .right);
+    defer {
+        for (parts) |*p| p.deinit();
+        alloc.free(parts);
+    }
+
+    try testing.expectEqual(@as(usize, 1), parts.len);
+}
+
+test "flattenAlong: splits along the same axis come apart" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // A|B dropped along the horizontal axis must yield A and B, so they
+    // become siblings of whatever they are dropped next to.
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+    var vB: TestView = .{ .label = "B" };
+    var tB: TestTree = try .init(alloc, &vB);
+    defer tB.deinit();
+
+    var pair = try tA.split(alloc, .root, .right, 0.5, &tB);
+    defer pair.deinit();
+
+    const parts = try pair.flattenAlong(alloc, .right);
+    defer {
+        for (parts) |*p| p.deinit();
+        alloc.free(parts);
+    }
+
+    try testing.expectEqual(@as(usize, 2), parts.len);
+}
+
+test "flattenAlong: a split across the axis stays whole" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // A/B (stacked) dropped along the horizontal axis must stay one unit:
+    // flattening it would destroy an arrangement the user built.
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+    var vB: TestView = .{ .label = "B" };
+    var tB: TestTree = try .init(alloc, &vB);
+    defer tB.deinit();
+
+    var stacked = try tA.split(alloc, .root, .down, 0.5, &tB);
+    defer stacked.deinit();
+
+    const parts = try stacked.flattenAlong(alloc, .right);
+    defer {
+        for (parts) |*p| p.deinit();
+        alloc.free(parts);
+    }
+
+    try testing.expectEqual(@as(usize, 1), parts.len);
+}
+
+test "flattenAlong: recurses through same-axis splits only" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    // (A|B)|C along the horizontal axis is three siblings: the nesting is
+    // an artifact of how it was built, not a layout worth keeping.
+    var vA: TestView = .{ .label = "A" };
+    var tA: TestTree = try .init(alloc, &vA);
+    defer tA.deinit();
+    var vB: TestView = .{ .label = "B" };
+    var tB: TestTree = try .init(alloc, &vB);
+    defer tB.deinit();
+    var vC: TestView = .{ .label = "C" };
+    var tC: TestTree = try .init(alloc, &vC);
+    defer tC.deinit();
+
+    var ab = try tA.split(alloc, .root, .right, 0.5, &tB);
+    defer ab.deinit();
+    var abc = try ab.split(alloc, .root, .right, 0.5, &tC);
+    defer abc.deinit();
+
+    const parts = try abc.flattenAlong(alloc, .right);
+    defer {
+        for (parts) |*p| p.deinit();
+        alloc.free(parts);
+    }
+
+    try testing.expectEqual(@as(usize, 3), parts.len);
 }

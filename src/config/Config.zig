@@ -1437,6 +1437,22 @@ input: RepeatableReadableIO = .{},
 /// Available since: 1.4.0
 @"split-focus-hide-unmatched": bool = true,
 
+/// How a tab's terminals are arranged when the tab is dropped onto an
+/// existing split.
+///
+///   * `flatten` - the tab's panes become siblings of the pane you dropped
+///     onto, as far as their own arrangement allows. A group split the
+///     other way stays grouped: dropping a tab holding a left/right pair
+///     onto the right edge gives you three panes in a row, but dropping
+///     one holding a top/bottom pair gives you that pair, still stacked,
+///     beside the target.
+///
+///   * `preserve` - the tab's layout is grafted in whole, as a single
+///     unit, whatever its shape.
+///
+/// Available since: 1.4.0
+@"tab-drop-layout": TabDropLayout = .flatten,
+
 /// The number of milliseconds of runtime below which we consider a process exit
 /// to be abnormal. This is used to show an error message when the process exits
 /// too quickly.
@@ -8983,6 +8999,12 @@ pub const MiddleClickAction = enum {
 
     /// No action is taken on middle click.
     ignore,
+};
+
+/// How a dropped tab's layout is merged into the target split tree.
+pub const TabDropLayout = enum {
+    flatten,
+    preserve,
 };
 
 /// Shell integration values
