@@ -471,17 +471,11 @@ pub const SplitFocus = extern struct {
             return;
         };
 
-        // Select the owning tab, raise its window if it is not the
-        // active one, then focus the pane itself.
-        if (item.getPage()) |page| {
-            if (item.getWindow()) |win| {
-                defer win.unref();
-                win.getTabView().setSelectedPage(page);
-                win.as(gtk.Window).present();
-            }
-        }
-
-        surface.grabFocus();
+        // Selects the owning tab, focuses the pane and raises the window,
+        // in that order. The window is found by walking up from the
+        // surface widget rather than from the item, so a tab dragged into
+        // another window since the tree was built still lands correctly.
+        surface.present();
     }
 
     //---------------------------------------------------------------

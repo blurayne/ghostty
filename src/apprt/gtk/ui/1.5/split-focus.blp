@@ -33,9 +33,14 @@ Adw.Dialog dialog {
         activate => $row_activated();
 
         model: Gtk.SingleSelection model {
-          model: Gtk.FilterListModel filter_model {
-            incremental: true;
-          };
+          // Not incremental: the dialog reads this model synchronously
+          // right after invalidating it -- to preselect the current split
+          // on open, and to check the selection survived each keystroke.
+          // Incremental filtering does nothing until an idle callback
+          // runs, so those reads would all see an empty model. The tree is
+          // tens of rows; incremental only pays off in the tens of
+          // thousands.
+          model: Gtk.FilterListModel filter_model {};
         };
       }
     }
