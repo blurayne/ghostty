@@ -1425,6 +1425,35 @@ input: RepeatableReadableIO = .{},
 /// This is primarily useful for scripts or debugging.
 @"wait-after-command": bool = false,
 
+/// If true, keep a split open after the command running in it exits with a
+/// non-zero exit code, instead of closing the split immediately. The split
+/// shows the command, its runtime and its exit code, and stays until you
+/// dismiss it with any keypress or the banner's close button.
+///
+/// This only applies to surfaces that are part of a split, because closing
+/// a split destroys output you can still see the rest of. A lone window or
+/// tab closes on exit as usual.
+///
+/// A shell exiting via `exit` or Ctrl-D inherits its status from whatever
+/// ran last, so closing a pane after a failed command would otherwise hold
+/// the split open for a command that had already finished. When shell
+/// integration is active, Ghostty uses its prompt markers to tell the two
+/// apart and only holds the split open when a command was actually running.
+/// Without shell integration there are no markers to go on -- notably when
+/// the split runs a command directly rather than a shell -- and the exit
+/// code is taken at face value.
+///
+/// `wait-after-command` takes precedence over this option. It keeps every
+/// surface open after *any* exit, zero or not, so when it is true this
+/// option never comes into play and the split shows the shorter "Process
+/// exited" notice rather than the command, runtime and exit code.
+///
+/// This has no effect on macOS, where splits are managed by the Swift
+/// application and libghostty is not told which surfaces are split.
+///
+/// Available since: 1.4.0
+@"wait-after-failed-command": bool = true,
+
 /// Whether the split focus dialog hides rows that do not match the search.
 ///
 /// When true, typing in the search box shows only matching rows and the

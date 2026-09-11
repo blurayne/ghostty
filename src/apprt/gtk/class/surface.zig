@@ -2215,6 +2215,12 @@ pub const Surface = extern struct {
         return self.private().title;
     }
 
+    /// Whether this surface is currently one pane of a split. Mirrors the
+    /// `is-split` property, which is bound from the owning split tree.
+    pub fn getIsSplit(self: *Self) bool {
+        return self.private().is_split;
+    }
+
     /// Returns the effective title: the user-overridden title if set,
     /// otherwise the terminal-set title.
     pub fn getEffectiveTitle(self: *Self) ?[:0]const u8 {

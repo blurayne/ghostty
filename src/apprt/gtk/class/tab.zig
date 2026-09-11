@@ -246,6 +246,11 @@ pub const Tab = extern struct {
         defer single_tree.deinit();
         priv.split_tree.setTree(&single_tree);
 
+        // The surface is still bound to its previous tree's is-split, which
+        // will keep reporting that tree's state (or freeze once it dies).
+        // Re-bind to the tree it actually lives in now.
+        surface.bindIsSplit(priv.split_tree);
+
         return tab;
     }
 

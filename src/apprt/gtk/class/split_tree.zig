@@ -1074,6 +1074,10 @@ pub const SplitTree = extern struct {
             defer final_target_tree.deinit();
             self.setTree(&final_target_tree);
 
+            // Re-bind vital properties like `is-split`. The source surface
+            // came from another tree and is still bound to it.
+            source_surface.bindIsSplit(self);
+
             // Focus the destination tab so the user sees the result.
             const dest_tab_view = ext.getAncestor(
                 adw.TabView,

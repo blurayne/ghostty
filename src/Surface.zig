@@ -175,6 +175,15 @@ readonly: bool = false,
 /// the wall clock time that has elapsed between timestamps.
 command_timer: ?std.Io.Timestamp = null,
 
+/// True once we have seen any OSC 133 semantic prompt marker, i.e. shell
+/// integration is loaded and talking to us. This is what lets us tell
+/// "no command was running" apart from "we have no idea what was running",
+/// which look identical if you only inspect `command_timer`.
+///
+/// It is never reset: integration can start mid-session (a shell sourced
+/// late), but it cannot meaningfully stop.
+shell_integration_seen: bool = false,
+
 /// Search state
 search: ?Search = null,
 
@@ -290,6 +299,37 @@ pub const Keyboard = struct {
     last_trigger: ?u64 = null,
 };
 
+/// Why a child process exit is being reported to the user. This selects the
+/// wording of the message written into the terminal — the two cases look
+/// nothing alike to a user and must not share copy.
+const ExitReason = enum {
+    /// The command exited so quickly we assume it never really started —
+    /// a bad binary path, a missing interpreter, an immediate crash.
+    launch_failure,
+
+    /// The command ran, then exited with a non-zero status. It launched
+    /// fine; it just failed.
+    nonzero_exit,
+
+    /// Headline written above the command in the detail block.
+    fn heading(self: ExitReason) []const u8 {
+        return switch (self) {
+            .launch_failure => "Ghostty failed to launch the requested command:",
+            .nonzero_exit => "Command exited with a non-zero status:",
+        };
+    }
+
+    /// Closing hint written below the exit code. Only a split is kept open
+    /// for `.nonzero_exit`, so that case names the split rather than the
+    /// window.
+    fn dismissHint(self: ExitReason) []const u8 {
+        return switch (self) {
+            .launch_failure => "Press any key to close the window.",
+            .nonzero_exit => "Press any key to close the split.",
+        };
+    }
+};
+
 /// The configuration that a surface has, this is copied from the main
 /// Config struct usually to prevent sharing a single value.
 const DerivedConfig = struct {
@@ -329,6 +369,7 @@ const DerivedConfig = struct {
     selection_word_chars: []const u21,
     vt_kam_allowed: bool,
     wait_after_command: bool,
+    wait_after_failed_command: bool,
     window_padding_top: u32,
     window_padding_bottom: u32,
     window_padding_left: u32,
@@ -417,6 +458,7 @@ const DerivedConfig = struct {
             .selection_word_chars = try alloc.dupe(u21, config.@"selection-word-chars".codepoints),
             .vt_kam_allowed = config.@"vt-kam-allowed",
             .wait_after_command = config.@"wait-after-command",
+            .wait_after_failed_command = config.@"wait-after-failed-command",
             .window_padding_top = config.@"window-padding-y".top_left,
             .window_padding_bottom = config.@"window-padding-y".bottom_right,
             .window_padding_left = config.@"window-padding-x".top_left,
@@ -1181,10 +1223,12 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         },
 
         .start_command => {
+            self.shell_integration_seen = true;
             self.command_timer = .now(global.io(), .awake);
         },
 
         .stop_command => |v| timer: {
+            self.shell_integration_seen = true;
             const end: std.Io.Timestamp = .now(global.io(), .awake);
             const start = self.command_timer orelse break :timer;
             self.command_timer = null;
@@ -1283,6 +1327,24 @@ fn selectionScrollTick(self: *Surface) !void {
     try self.queueRender();
 }
 
+/// Whether the exit code we were just handed actually describes a command
+/// that failed, or is stale shell state.
+///
+/// A shell exiting via `exit` or Ctrl-D inherits `$?` from whatever ran
+/// last, so "run something that fails, then close the pane" reports that
+/// command's status even though nothing failed at the moment of exit.
+/// OSC 133 tells us the difference: if shell integration is loaded and no
+/// command was in flight, we were sitting at a prompt.
+///
+/// Without integration we have no markers at all and must not guess. That
+/// is the `ghostty -e ./deploy.sh` case -- no shell to integrate with, and
+/// exactly the case this feature exists for -- so we treat the code as
+/// meaningful and let the caller act on it.
+fn exitCodeDescribesCommand(self: *const Surface) bool {
+    if (!self.shell_integration_seen) return true;
+    return self.command_timer != null;
+}
+
 fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     // Mark our flag that we exited immediately
     self.child_exited = true;
@@ -1311,7 +1373,7 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
 
         // If a native GUI notification was not shown, update our terminal to
         // note the abnormal exit.
-        self.childExitedAbnormally(info) catch |err| {
+        self.childExitedAbnormally(info, .launch_failure) catch |err| {
             log.err("error handling abnormal child exit err={}", .{err});
             return;
         };
@@ -1358,6 +1420,27 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     // state is updated, and now its up to the user to decide what to do.
     if (self.config.wait_after_command) return;
 
+    // A command that failed in a split keeps the split open so the user can
+    // read what went wrong. Runtime is deliberately not consulted here: the
+    // abnormal branch above is about a command that never got started, this
+    // is about one that ran and then failed, and a build that fails after
+    // four seconds is exactly the case worth keeping on screen.
+    //
+    // The banner was already set above via the show_child_exited action, so
+    // we only need to add the detail block and skip the close.
+    if (self.config.wait_after_failed_command and
+        info.exit_code != 0 and
+        self.exitCodeDescribesCommand() and
+        self.rt_surface.isSplit())
+    {
+        self.childExitedAbnormally(info, .nonzero_exit) catch |err| {
+            // A split held open with no message still beats one that
+            // vanished, so we don't fall through to close() here.
+            log.err("error writing failed command message err={}", .{err});
+        };
+        return;
+    }
+
     // If we aren't waiting after the command, then we exit immediately
     // with no confirmation.
     self.close();
@@ -1367,6 +1450,7 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
 fn childExitedAbnormally(
     self: *Surface,
     info: apprt.surface.Message.ChildExited,
+    reason: ExitReason,
 ) !void {
     var arena = ArenaAllocator.init(self.alloc);
     defer arena.deinit();
@@ -1406,7 +1490,7 @@ fn childExitedAbnormally(
     // Output our error message
     try t.setAttribute(.{ .@"8_fg" = .bright_red });
     try t.setAttribute(.{ .bold = {} });
-    try t.printString("Ghostty failed to launch the requested command:");
+    try t.printString(reason.heading());
     try t.setAttribute(.{ .unset = {} });
 
     t.carriageReturn();
@@ -1438,7 +1522,7 @@ fn childExitedAbnormally(
     t.carriageReturn();
     try t.linefeed();
     try t.linefeed();
-    try t.printString("Press any key to close the window.");
+    try t.printString(reason.dismissHint());
 
     // Hide the cursor
     t.modes.set(.cursor_visible, false);
@@ -6763,4 +6847,69 @@ test "queueIo frees allocated writes in readonly mode" {
         .alloc = testing.allocator,
         .data = data,
     } }, .unlocked);
+}
+
+test "ExitReason: heading distinguishes launch failure from non-zero exit" {
+    const testing = std.testing;
+
+    try testing.expectEqualStrings(
+        "Ghostty failed to launch the requested command:",
+        ExitReason.launch_failure.heading(),
+    );
+    try testing.expectEqualStrings(
+        "Command exited with a non-zero status:",
+        ExitReason.nonzero_exit.heading(),
+    );
+}
+
+test "ExitReason: dismiss hint names the thing that will close" {
+    const testing = std.testing;
+
+    try testing.expectEqualStrings(
+        "Press any key to close the window.",
+        ExitReason.launch_failure.dismissHint(),
+    );
+    try testing.expectEqualStrings(
+        "Press any key to close the split.",
+        ExitReason.nonzero_exit.dismissHint(),
+    );
+}
+
+test "exitCodeDescribesCommand: without shell integration we cannot tell, so trust the code" {
+    const testing = std.testing;
+
+    // `ghostty -e ./deploy.sh` -- no shell, so no OSC 133 will ever arrive.
+    // Suppressing here would disable the feature exactly where it matters.
+    const surface = try testing.allocator.create(Surface);
+    defer testing.allocator.destroy(surface);
+    surface.shell_integration_seen = false;
+    surface.command_timer = null;
+
+    try testing.expect(surface.exitCodeDescribesCommand());
+}
+
+test "exitCodeDescribesCommand: at a prompt the code is stale shell state" {
+    const testing = std.testing;
+
+    // Shell integration is loaded and no command is in flight: the child is
+    // a shell exiting via `exit`/Ctrl-D, carrying $? from whatever ran last.
+    const surface = try testing.allocator.create(Surface);
+    defer testing.allocator.destroy(surface);
+    surface.shell_integration_seen = true;
+    surface.command_timer = null;
+
+    try testing.expect(!surface.exitCodeDescribesCommand());
+}
+
+test "exitCodeDescribesCommand: a command in flight owns the exit code" {
+    const testing = std.testing;
+
+    // Integration loaded and a command was running when the child died --
+    // e.g. `exec ./deploy.sh`, or the shell killed mid-command.
+    const surface = try testing.allocator.create(Surface);
+    defer testing.allocator.destroy(surface);
+    surface.shell_integration_seen = true;
+    surface.command_timer = .now(global.io(), .awake);
+
+    try testing.expect(surface.exitCodeDescribesCommand());
 }

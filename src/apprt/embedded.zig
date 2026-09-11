@@ -697,6 +697,15 @@ pub const Surface = struct {
         return self.title;
     }
 
+    /// macOS manages splits on the Swift side and libghostty is not told
+    /// about them, so we always report false. The practical effect is that
+    /// `wait-after-failed-command` is a no-op on macOS. See the spec's
+    /// follow-ups section.
+    pub fn isSplit(self: *Surface) bool {
+        _ = self;
+        return false;
+    }
+
     pub fn supportsClipboard(
         self: *const Surface,
         clipboard_type: apprt.Clipboard,
