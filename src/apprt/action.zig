@@ -123,6 +123,12 @@ pub const Action = union(Key) {
     /// Only implemented on Linux (GTK).
     toggle_tab_switcher,
 
+    /// Show the about dialog: the version, the build date and the commit
+    /// this build came from.
+    ///
+    /// Only implemented on Linux (GTK). macOS has this in its app menu.
+    about,
+
     /// Toggle whether window directions are shown.
     toggle_window_decorations,
 
@@ -405,6 +411,7 @@ pub const Action = union(Key) {
         toggle_tab_overview,
         toggle_split_focus,
         toggle_tab_switcher,
+        about,
         toggle_window_decorations,
         toggle_quick_terminal,
         toggle_command_palette,

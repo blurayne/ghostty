@@ -2582,6 +2582,12 @@ pub const Window = extern struct {
         _: ?*glib.Variant,
         self: *Self,
     ) callconv(.c) void {
+        self.showAbout();
+    }
+
+    /// Show the about dialog. Reached from the menu via `win.about` and
+    /// from the `about` keybind action.
+    pub fn showAbout(self: *Self) void {
         const name = "Ghostty";
         const icon = "com.mitchellh.ghostty";
         const website = "https://ghostty.org";

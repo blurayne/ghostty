@@ -469,6 +469,12 @@ fn actionCommands(action: Action.Key) []const Command {
         // and only the current name gets advertised.
         .toggle_tab_switcher => comptime &.{},
 
+        .about => comptime &.{.{
+            .action = .about,
+            .title = i18n.N_("About Ghostty"),
+            .description = i18n.N_("Show the version, build date and commit of this build."),
+        }},
+
         .prompt_surface_title => comptime &.{.{
             .action = .prompt_surface_title,
             .title = i18n.N_("Change Terminal Title…"),

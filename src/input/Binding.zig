@@ -611,6 +611,12 @@ pub const Action = union(enum) {
     /// Only implemented on Linux (GTK).
     toggle_split_focus,
 
+    /// Show the about dialog: the version, the build date and the commit
+    /// this build came from.
+    ///
+    /// Only implemented on Linux (GTK). macOS has this in its app menu.
+    about,
+
     /// Open a keyboard-navigable tab switcher for the current window.
     ///
     /// WARNING: This action has been deprecated and is an alias for
@@ -1497,6 +1503,7 @@ pub const Action = union(enum) {
             .toggle_tab_overview,
             .toggle_split_focus,
             .toggle_tab_switcher,
+            .about,
             .new_split,
             .goto_split,
             .goto_window,
