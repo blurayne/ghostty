@@ -41,6 +41,10 @@ const page_step: c_uint = 10;
 const indent_px: c_uint = 16;
 const margin_px: c_uint = 8;
 
+/// Width of the row's kind column, in characters. Wide enough for the
+/// longest kind ("Window") plus a little air before the title.
+const kind_column_chars: c_int = 8;
+
 pub const SplitFocus = extern struct {
     const Self = @This();
     parent_instance: Parent,
@@ -496,13 +500,30 @@ pub const SplitFocus = extern struct {
         const box = gtk.Box.new(.horizontal, 8);
         box.as(gtk.Widget).setMarginTop(2);
         box.as(gtk.Widget).setMarginBottom(2);
+        box.as(gtk.Widget).setMarginStart(margin_px);
         box.as(gtk.Widget).setMarginEnd(margin_px);
+
+        // The kind, in a column of its own. It sits outside the indented
+        // box below so it stays aligned at every depth -- indenting it
+        // along with the title would make a ragged edge, not a column.
+        const kind = gtk.Label.new("");
+        kind.as(gtk.Widget).setHalign(.start);
+        kind.setXalign(0);
+        kind.setWidthChars(kind_column_chars);
+        kind.as(gtk.Widget).addCssClass("dim-label");
+        box.append(kind.as(gtk.Widget));
+
+        // Everything that describes the row itself is indented by depth;
+        // there are no expanders, so this indent is what shows the tree.
+        const content = gtk.Box.new(.horizontal, 8);
+        content.as(gtk.Widget).setHexpand(1);
+        box.append(content.as(gtk.Widget));
 
         const title = gtk.Label.new("");
         title.as(gtk.Widget).setHalign(.start);
         title.setXalign(0);
         title.setEllipsize(.end);
-        box.append(title.as(gtk.Widget));
+        content.append(title.as(gtk.Widget));
 
         // Ellipsized at the *start*: the interesting end of a path is the
         // last component.
@@ -512,7 +533,7 @@ pub const SplitFocus = extern struct {
         pwd.setXalign(0);
         pwd.setEllipsize(.start);
         pwd.as(gtk.Widget).addCssClass("dim-label");
-        box.append(pwd.as(gtk.Widget));
+        content.append(pwd.as(gtk.Widget));
 
         list_item.setChild(box.as(gtk.Widget));
     }
@@ -532,22 +553,35 @@ pub const SplitFocus = extern struct {
         defer inner.unref();
         const item = gobject.ext.cast(SplitFocusItem, inner) orelse return;
 
+        // Row layout: [kind][content: title, pwd]. See `setupItem`.
         const child = list_item.getChild() orelse return;
         const box = gobject.ext.cast(gtk.Box, child) orelse return;
-        const title_label = gobject.ext.cast(
+        const kind_label = gobject.ext.cast(
             gtk.Label,
             box.as(gtk.Widget).getFirstChild() orelse return,
         ) orelse return;
+        const content = gobject.ext.cast(
+            gtk.Box,
+            box.as(gtk.Widget).getLastChild() orelse return,
+        ) orelse return;
+        const title_label = gobject.ext.cast(
+            gtk.Label,
+            content.as(gtk.Widget).getFirstChild() orelse return,
+        ) orelse return;
         const pwd_label = gobject.ext.cast(
             gtk.Label,
-            box.as(gtk.Widget).getLastChild() orelse return,
+            content.as(gtk.Widget).getLastChild() orelse return,
         ) orelse return;
 
         // Depth is what shows the tree; there are no expanders because
-        // every row is always expanded.
-        box.as(gtk.Widget).setMarginStart(
-            @intCast(margin_px + (row.getDepth() * indent_px)),
+        // every row is always expanded. Only the content is indented --
+        // the kind column to its left stays put, which is what makes it
+        // a column.
+        content.as(gtk.Widget).setMarginStart(
+            @intCast(row.getDepth() * indent_px),
         );
+
+        kind_label.setText(item.getKind().label().ptr);
 
         // Borrowed from the filter, and invalidated by the next
         // `setNeedle` -- used here and not kept.

@@ -28,7 +28,21 @@ const log = std.log.scoped(.gtk_ghostty_split_focus_item);
 /// What a row stands for. Windows and tabs are containers; only splits
 /// are terminals. All three are activatable -- a container resolves to
 /// its currently-active split.
-pub const Kind = enum(c_int) { window, tab, split };
+pub const Kind = enum(c_int) {
+    window,
+    tab,
+    split,
+
+    /// The word shown in the row's type column, and the word a search has
+    /// to match for a type term like "split" to select rows by kind.
+    pub fn label(self: Kind) [:0]const u8 {
+        return switch (self) {
+            .window => "Window",
+            .tab => "Tab",
+            .split => "Split",
+        };
+    }
+};
 
 /// A single row of the split focus tree.
 ///
@@ -94,34 +108,27 @@ pub const SplitFocusItem = extern struct {
         priv.title = alloc.dupeZ(u8, title) catch null;
         priv.pwd = if (pwd) |v| alloc.dupeZ(u8, v) catch null else null;
 
-        // The label the row actually shows. Windows and tabs are named
-        // by kind because their titles alone read as just more terminal
-        // titles; a split shows its title verbatim, since that title is
-        // the thing you are looking for. A split with no title has to
-        // fall back to its position.
+        // The label the row actually shows. The kind has its own column
+        // now, so it is not repeated here: every row shows its title
+        // verbatim, which is the thing you are looking for. Only an
+        // untitled split needs a fallback, and its position is the one
+        // thing that still tells it apart; an untitled window or tab is
+        // left blank, named by its column alone.
         priv.display = switch (kind) {
-            .window => if (title.len > 0)
-                std.fmt.allocPrintSentinel(alloc, "Window: {s}", .{title}, 0) catch null
-            else
-                alloc.dupeZ(u8, "Window") catch null,
-
-            .tab => if (title.len > 0)
-                std.fmt.allocPrintSentinel(alloc, "Tab: {s}", .{title}, 0) catch null
-            else
-                alloc.dupeZ(u8, "Tab") catch null,
+            .window, .tab => alloc.dupeZ(u8, title) catch null,
 
             .split => if (title.len > 0)
                 alloc.dupeZ(u8, title) catch null
             else
-                std.fmt.allocPrintSentinel(alloc, "Split #{d}", .{index}, 0) catch null,
+                std.fmt.allocPrintSentinel(alloc, "#{d}", .{index}, 0) catch null,
         };
 
         return self;
     }
 
-    /// The composed label for this row: kind-prefixed for windows and
-    /// tabs, the bare title for a split. Borrowed, backed by this item's
-    /// arena -- it dies with the item.
+    /// The label for this row: its title, or "#n" for a split that has
+    /// none. The kind is not in here -- it has its own column. Borrowed,
+    /// backed by this item's arena -- it dies with the item.
     pub fn getDisplay(self: *Self) ?[:0]const u8 {
         return self.private().display;
     }
@@ -226,13 +233,17 @@ pub const SplitFocusItem = extern struct {
     pub fn matchesDeep(self: *Self, needle: []const u8) bool {
         const priv = self.private();
         // Match the composed label, not the raw title: a row shown as
-        // "Split #2" or "Window: build" should be findable by what it
-        // displays.
+        // "#2" should be findable by what it displays.
         if (match.matchesFields(
             priv.display orelse priv.title orelse "",
             priv.pwd,
             needle,
         )) return true;
+
+        // The kind moved out of the label and into its own column, but it
+        // is still text the row shows, so it stays searchable: typing
+        // "split" selects the terminals, "window" the windows.
+        if (match.find(priv.kind.label(), needle) != null) return true;
 
         const children = priv.children orelse return false;
         const model = children.as(gio.ListModel);
