@@ -1222,6 +1222,11 @@ pub const SplitTree = extern struct {
                 surface.as(gtk.Widget),
             ) orelse continue;
             const header = ssw.getHeader();
+            // Hand the header its tree. It cannot find us on its own: its
+            // surface is a construct property, so it is still unparented
+            // when that property lands. This also re-points a header whose
+            // pane was moved here from another tree.
+            header.setSplitTree(self);
             header.setSplitCount(count);
             header.setHeaderMode(effective_mode);
             header.setPaneNumber(pane_number);

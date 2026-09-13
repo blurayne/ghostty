@@ -568,9 +568,35 @@ pub const SplitHeader = extern struct {
             priv.title_label.as(gtk.Widget).setVisible(@intFromBool(false));
         }
 
-        // Subscribe to zoom-state changes on the ancestor SplitTree
-        if (ext.getAncestor(SplitTree, self.as(gtk.Widget))) |tree| {
-            priv.split_tree = tree;
+        // The zoom subscription is *not* set up here: at this point we are
+        // usually still unparented, because the surface arrives as a
+        // construct property (see `SplitTree.buildTree`), so there is no
+        // ancestor tree to find yet. The tree hands itself to us via
+        // `setSplitTree` once we are in it.
+    }
+
+    /// Attach this header to the split tree that contains it, so the zoom
+    /// button can follow the tree's zoom state.
+    ///
+    /// The tree pushes itself down rather than us walking up to find it:
+    /// a header's surface is set as a construct property, before the
+    /// widget is parented, so an ancestor lookup at that point finds
+    /// nothing. Pushing also re-binds when a pane moves between trees,
+    /// which a one-shot lookup would leave pointing at the old tree.
+    pub fn setSplitTree(self: *Self, tree_: ?*SplitTree) void {
+        const priv = self.private();
+        if (tree_ == priv.split_tree) return;
+
+        if (priv.split_tree) |old| {
+            if (priv.zoom_notify_id != 0) {
+                gobject.signalHandlerDisconnect(old.as(gobject.Object), priv.zoom_notify_id);
+                priv.zoom_notify_id = 0;
+            }
+        }
+
+        priv.split_tree = tree_;
+
+        if (tree_) |tree| {
             priv.zoom_notify_id = gobject.Object.signals.notify.connect(
                 tree,
                 *Self,
@@ -578,8 +604,9 @@ pub const SplitHeader = extern struct {
                 self,
                 .{ .detail = "is-zoomed" },
             );
-            self.syncZoomButton();
         }
+
+        self.syncZoomButton();
     }
 
     fn onSurfaceTitleNotify(
