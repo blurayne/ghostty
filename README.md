@@ -117,6 +117,16 @@ For more details, see [About Ghostty](https://ghostty.org/docs/about).
 
 See the [download page](https://ghostty.org/download) on the Ghostty website.
 
+### Linux packaging in this fork
+
+**TL;DR: Flatpak only. There is no `.deb`, and none is planned.**
+
+Build with `mise run build`, install with `mise run install`. The container setup is described in [CLAUDE.md](CLAUDE.md).
+
+The reason is the GTK frontend's dependency floor. Our code calls libadwaita APIs gated as high as 1.5, and the GObject bindings are generated against a 2026 GNOME. Ubuntu 22.04 ships GTK 4.6.9 and libadwaita 1.1.7, roughly four years short of that, so a native jammy build will not link no matter how the package is assembled. Ubuntu 24.04 is new enough to compile (GTK 4.14.5, libadwaita 1.5.0), but a `.deb` built there would pin the app to whatever GNOME that release froze, and every later distro release would add another package to build and test.
+
+Flatpak avoids the whole problem. The GNOME 50 runtime is identical on every host, so one artifact runs on 22.04, on 24.04, and on whatever ships next, and the terminal's GNOME dependencies stop being the distro's problem.
+
 ## Documentation
 
 See the [documentation](https://ghostty.org/docs) on the Ghostty website.
